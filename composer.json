@@ -1,0 +1,15 @@
+{
+  "name": "juren/leavesync",
+  "description": "Secure Enterprise Leave Management System with Device Fingerprinting, Digital Signatures, and MFA",
+  "type": "project",
+  "license": "MIT",
+  "require": {
+    "php": "^7.4"
+  },
+  "autoload": {
+    "files": ["autoload.php"]
+  },
+  "scripts": {
+    "serve": "php -S localhost:8000 -t public/ index.php"
+  }
+}

@@ -1,0 +1,190 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Settings - Leave Management System</title>
+    <link rel="stylesheet" href="/public/css/style.css">
+</head>
+<body>
+    <nav class="navbar">
+        <div class="container">
+            <div class="navbar-content">
+                <div class="navbar-brand">LeaveSync</div>
+                <ul class="navbar-menu">
+                    <li><a href="/views/dashboard.html">Dashboard</a></li>
+                    <li><a href="/views/my_requests.html">My Requests</a></li>
+                    <li><a href="/views/new_request.html">New Request</a></li>
+                    <li><a href="/views/settings.html">Settings</a></li>
+                    <li><a href="#" onclick="logout()">Logout</a></li>
+                </ul>
+            </div>
+        </div>
+    </nav>
+
+    <div class="container" style="max-width: 700px; padding: 2rem 0;">
+        <h1>Account Settings</h1>
+
+        <div id="alert-container"></div>
+
+        <!-- Two-Factor Authentication -->
+        <div class="card">
+            <div class="card-header">
+                <h2>Two-Factor Authentication (2FA)</h2>
+            </div>
+            <div class="card-body">
+                <p id="mfa-status">Loading MFA status...</p>
+                <button id="mfa-btn" class="btn btn-primary" onclick="setupMFA()">Enable 2FA</button>
+            </div>
+        </div>
+
+        <!-- Trusted Devices -->
+        <div class="card">
+            <div class="card-header">
+                <h2>Trusted Devices</h2>
+            </div>
+            <div class="card-body">
+                <p>Manage devices that have access to your account</p>
+                <table class="table" id="devices-table">
+                    <thead>
+                        <tr>
+                            <th>Browser</th>
+                            <th>IP Address</th>
+                            <th>Last Used</th>
+                            <th>Action</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <tr>
+                            <td colspan="4" class="text-center">Loading...</td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+        </div>
+
+        <!-- Security Audit Log -->
+        <div class="card">
+            <div class="card-header">
+                <h2>Security Information</h2>
+            </div>
+            <div class="card-body">
+                <p><strong>Account Security Tips:</strong></p>
+                <ul style="padding-left: 1.5rem;">
+                    <li>Enable two-factor authentication for enhanced security</li>
+                    <li>Review your trusted devices regularly</li>
+                    <li>Use a strong, unique password</li>
+                    <li>Log out of untrusted devices</li>
+                    <li>Keep your system and browser up to date</li>
+                </ul>
+            </div>
+        </div>
+    </div>
+
+    <!-- MFA Setup Modal -->
+    <div id="mfa-modal" class="modal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h2>Setup Two-Factor Authentication</h2>
+                <span class="modal-close" onclick="document.getElementById('mfa-modal').classList.remove('active')">&times;</span>
+            </div>
+            <div class="modal-body">
+                <p>Scan this QR code with your authenticator app (Google Authenticator, Microsoft Authenticator, etc.):</p>
+                <div id="qr-container" style="text-align: center; margin: 1rem 0;"></div>
+                <p>Or enter this code manually: <strong id="mfa-secret"></strong></p>
+                
+                <div class="form-group">
+                    <label for="mfa-code">Enter 6-digit code from your authenticator:</label>
+                    <input type="text" id="mfa-code" maxlength="6" placeholder="000000">
+                </div>
+
+                <div style="display: flex; gap: 1rem;">
+                    <button class="btn btn-secondary" onclick="document.getElementById('mfa-modal').classList.remove('active')">Cancel</button>
+                    <button class="btn btn-primary" onclick="verifyMFA()">Verify & Enable</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script src="/public/js/app.js"></script>
+    <script>
+        // Check authentication
+        checkAuth();
+
+        // Load settings
+        loadSettings();
+
+        async function loadSettings() {
+            // Check MFA status
+            const profile = await AuthManager.getProfile();
+            
+            // Load trusted devices
+            const devicesResult = await AuthManager.getTrustedDevices();
+            if (devicesResult.success) {
+                const tbody = document.querySelector('#devices-table tbody');
+                tbody.innerHTML = '';
+
+                if (devicesResult.data.length === 0) {
+                    tbody.innerHTML = '<tr><td colspan="4" class="text-center">No trusted devices</td></tr>';
+                } else {
+                    devicesResult.data.forEach(device => {
+                        const row = document.createElement('tr');
+                        row.innerHTML = `
+                            <td>${device.browser_info}</td>
+                            <td>${device.ip_address}</td>
+                            <td>${UIManager.formatDate(device.last_used)}</td>
+                            <td><button class="btn btn-small btn-danger" onclick="removeDevice(${device.id})">Remove</button></td>
+                        `;
+                        tbody.appendChild(row);
+                    });
+                }
+            }
+        }
+
+        async function setupMFA() {
+            const result = await AuthManager.setupMFA();
+            if (result.success) {
+                document.getElementById('mfa-secret').textContent = result.secret;
+                
+                // Generate QR code URL
+                const qrUrl = `https://api.qrserver.com/v1/create-qr-code/?size=300x300&data=${encodeURIComponent(result.qr_url)}`;
+                document.getElementById('qr-container').innerHTML = `<img src="${qrUrl}" alt="QR Code" style="max-width: 300px;">`;
+                
+                document.getElementById('mfa-modal').classList.add('active');
+            } else {
+                UIManager.showAlert(result.message || 'Failed to setup MFA', 'danger');
+            }
+        }
+
+        async function verifyMFA() {
+            const code = document.getElementById('mfa-code').value;
+            if (!code || code.length !== 6) {
+                UIManager.showAlert('Please enter a valid 6-digit code', 'danger');
+                return;
+            }
+
+            const result = await AuthManager.enableMFA(code);
+            if (result.success) {
+                UIManager.showAlert('Two-factor authentication enabled!', 'success');
+                document.getElementById('mfa-modal').classList.remove('active');
+                document.getElementById('mfa-btn').textContent = 'Disable 2FA';
+                loadSettings();
+            } else {
+                UIManager.showAlert(result.message || 'Invalid code', 'danger');
+            }
+        }
+
+        async function removeDevice(deviceId) {
+            if (confirm('Are you sure you want to remove this device?')) {
+                const result = await AuthManager.removeDevice(deviceId);
+                if (result.success) {
+                    UIManager.showAlert('Device removed', 'success');
+                    loadSettings();
+                } else {
+                    UIManager.showAlert(result.message || 'Failed to remove device', 'danger');
+                }
+            }
+        }
+    </script>
+</body>
+</html>

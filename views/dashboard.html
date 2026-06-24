@@ -1,0 +1,123 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Dashboard - Leave Management System</title>
+    <link rel="stylesheet" href="/public/css/style.css">
+</head>
+<body>
+    <nav class="navbar">
+        <div class="container">
+            <div class="navbar-content">
+                <div class="navbar-brand">LeaveSync</div>
+                <ul class="navbar-menu">
+                    <li><a href="/views/dashboard.html">Dashboard</a></li>
+                    <li><a href="/views/my_requests.html">My Requests</a></li>
+                    <li><a href="/views/new_request.html">New Request</a></li>
+                    <li id="admin-menu" style="display: none;"><a href="/views/admin.html">Admin</a></li>
+                    <li><a href="/views/settings.html">Settings</a></li>
+                    <li><a href="#" onclick="logout()">Logout</a></li>
+                </ul>
+            </div>
+        </div>
+    </nav>
+
+    <div class="container" style="padding: 2rem 0;">
+        <h1>Dashboard</h1>
+
+        <div class="dashboard-grid">
+            <div class="stat-card">
+                <h3>Total Leave Days</h3>
+                <div class="stat-value" id="total-days">0</div>
+            </div>
+            <div class="stat-card">
+                <h3>Used Days</h3>
+                <div class="stat-value" id="used-days">0</div>
+            </div>
+            <div class="stat-card">
+                <h3>Pending Days</h3>
+                <div class="stat-value" id="pending-days">0</div>
+            </div>
+            <div class="stat-card">
+                <h3>Available Days</h3>
+                <div class="stat-value" id="available-days">0</div>
+            </div>
+        </div>
+
+        <div class="card">
+            <div class="card-header">
+                <h2>Recent Leave Requests</h2>
+            </div>
+            <div class="card-body">
+                <table class="table">
+                    <thead>
+                        <tr>
+                            <th>Type</th>
+                            <th>From Date</th>
+                            <th>To Date</th>
+                            <th>Days</th>
+                            <th>Status</th>
+                            <th>Action</th>
+                        </tr>
+                    </thead>
+                    <tbody id="requests-table">
+                        <tr>
+                            <td colspan="6" class="text-center">Loading...</td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+
+    <script src="/public/js/app.js"></script>
+    <script>
+        async function initDashboard() {
+            // Check authentication
+            const user = await checkAuth();
+
+            // Show admin menu if admin
+            if (user.role === 'admin') {
+                document.getElementById('admin-menu').style.display = 'block';
+            }
+
+            // Load leave balance
+            const balanceResult = await LeaveRequestManager.getLeaveBalance();
+            if (balanceResult.success && balanceResult.data.length > 0) {
+                const balance = balanceResult.data[0];
+                document.getElementById('total-days').textContent = balance.total_days;
+                document.getElementById('used-days').textContent = balance.used_days;
+                document.getElementById('pending-days').textContent = balance.pending_days;
+                document.getElementById('available-days').textContent = balance.balance;
+            }
+
+            // Load recent requests
+            const requestResult = await LeaveRequestManager.listRequests();
+            if (requestResult.success) {
+                const tbody = document.getElementById('requests-table');
+                tbody.innerHTML = '';
+
+                if (requestResult.data.length === 0) {
+                    tbody.innerHTML = '<tr><td colspan="6" class="text-center">No leave requests found</td></tr>';
+                } else {
+                    requestResult.data.slice(0, 5).forEach(req => {
+                        const row = document.createElement('tr');
+                        row.innerHTML = `
+                            <td>${req.leave_type_name}</td>
+                            <td>${UIManager.formatDate(req.start_date)}</td>
+                            <td>${UIManager.formatDate(req.end_date)}</td>
+                            <td>${req.number_of_days}</td>
+                            <td>${UIManager.getStatusBadge(req.status)}</td>
+                            <td><a href="/views/request_details.html?id=${req.id}" class="btn btn-small btn-secondary">View</a></td>
+                        `;
+                        tbody.appendChild(row);
+                    });
+                }
+            }
+        }
+
+        initDashboard();
+    </script>
+</body>
+</html>

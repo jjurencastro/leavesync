@@ -1,0 +1,183 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>My Leave Requests - Leave Management System</title>
+    <link rel="stylesheet" href="/public/css/style.css">
+</head>
+<body>
+    <nav class="navbar">
+        <div class="container">
+            <div class="navbar-content">
+                <div class="navbar-brand">LeaveSync</div>
+                <ul class="navbar-menu">
+                    <li><a href="/views/dashboard.html">Dashboard</a></li>
+                    <li><a href="/views/my_requests.html">My Requests</a></li>
+                    <li><a href="/views/new_request.html">New Request</a></li>
+                    <li id="admin-menu" style="display: none;"><a href="/views/admin.html">Admin</a></li>
+                    <li><a href="/views/settings.html">Settings</a></li>
+                    <li><a href="#" onclick="logout()">Logout</a></li>
+                </ul>
+            </div>
+        </div>
+    </nav>
+
+    <div class="container" style="padding: 2rem 0;">
+        <div class="flex-between">
+            <h1>My Leave Requests</h1>
+            <a href="/views/new_request.html" class="btn btn-primary">New Request</a>
+        </div>
+
+        <div class="card">
+            <div class="card-body">
+                <div style="display: flex; gap: 1rem; margin-bottom: 1.5rem;">
+                    <button class="btn btn-secondary" onclick="filterRequests('all')">All</button>
+                    <button class="btn btn-secondary" onclick="filterRequests('pending')">Pending</button>
+                    <button class="btn btn-secondary" onclick="filterRequests('approved')">Approved</button>
+                    <button class="btn btn-secondary" onclick="filterRequests('rejected')">Rejected</button>
+                </div>
+
+                <table class="table">
+                    <thead>
+                        <tr>
+                            <th>Type</th>
+                            <th>From Date</th>
+                            <th>To Date</th>
+                            <th>Days</th>
+                            <th>Reason</th>
+                            <th>Status</th>
+                            <th>Action</th>
+                        </tr>
+                    </thead>
+                    <tbody id="requests-table">
+                        <tr>
+                            <td colspan="7" class="text-center">Loading...</td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+
+    <script src="/public/js/app.js"></script>
+    <script>
+        let allRequests = [];
+        let currentFilter = 'all';
+
+        // Check authentication
+        checkAuth();
+
+        // Load requests
+        loadRequests();
+
+        async function loadRequests() {
+            const result = await LeaveRequestManager.listRequests();
+            if (result.success) {
+                allRequests = result.data || [];
+                displayRequests();
+            }
+        }
+
+        function displayRequests() {
+            const tbody = document.getElementById('requests-table');
+            tbody.innerHTML = '';
+
+            let filtered = allRequests;
+            if (currentFilter !== 'all') {
+                filtered = allRequests.filter(req => req.status === currentFilter);
+            }
+
+            if (filtered.length === 0) {
+                tbody.innerHTML = '<tr><td colspan="7" class="text-center">No leave requests found</td></tr>';
+            } else {
+                filtered.forEach(req => {
+                    const row = document.createElement('tr');
+                    row.innerHTML = `
+                        <td>${req.leave_type_name}</td>
+                        <td>${UIManager.formatDate(req.start_date)}</td>
+                        <td>${UIManager.formatDate(req.end_date)}</td>
+                        <td>${req.number_of_days}</td>
+                        <td>${req.reason.substring(0, 30)}...</td>
+                        <td>${UIManager.getStatusBadge(req.status)}</td>
+                        <td>
+                            <button class="btn btn-small btn-secondary" onclick="viewRequest(${req.id})">View</button>
+                            ${req.status === 'pending' ? `<button class="btn btn-small btn-warning" onclick="editRequest(${req.id})">Edit</button>` : ''}
+                        </td>
+                    `;
+                    tbody.appendChild(row);
+                });
+            }
+        }
+
+        function filterRequests(status) {
+            currentFilter = status;
+            displayRequests();
+        }
+
+        async function viewRequest(id) {
+            const result = await LeaveRequestManager.getRequest(id);
+            if (result.success) {
+                const req = result.data;
+                let signatureInfo = '';
+                if (req.signature_info) {
+                    signatureInfo = `
+                        <div class="alert alert-info mt-2">
+                            <strong>Digitally Signed by:</strong> ${req.signature_info.full_name}<br>
+                            <strong>Timestamp:</strong> ${UIManager.formatDate(req.signature_info.timestamp)}
+                        </div>
+                    `;
+                }
+                
+                const content = `
+                    <table class="table" style="width: 100%;">
+                        <tr>
+                            <th>Leave Type</th>
+                            <td>${req.leave_type_name}</td>
+                        </tr>
+                        <tr>
+                            <th>From Date</th>
+                            <td>${UIManager.formatDate(req.start_date)}</td>
+                        </tr>
+                        <tr>
+                            <th>To Date</th>
+                            <td>${UIManager.formatDate(req.end_date)}</td>
+                        </tr>
+                        <tr>
+                            <th>Number of Days</th>
+                            <td>${req.number_of_days}</td>
+                        </tr>
+                        <tr>
+                            <th>Reason</th>
+                            <td>${req.reason}</td>
+                        </tr>
+                        <tr>
+                            <th>Status</th>
+                            <td>${UIManager.getStatusBadge(req.status)}</td>
+                        </tr>
+                        ${req.manager_name ? `
+                        <tr>
+                            <th>Handled by</th>
+                            <td>${req.manager_name}</td>
+                        </tr>
+                        ` : ''}
+                        ${req.manager_comments ? `
+                        <tr>
+                            <th>Comments</th>
+                            <td>${req.manager_comments}</td>
+                        </tr>
+                        ` : ''}
+                    </table>
+                    ${signatureInfo}
+                `;
+                UIManager.showModal(content, 'Leave Request Details');
+            }
+        }
+
+        function editRequest(id) {
+            // Redirect to edit form
+            window.location.href = `/views/edit_request.html?id=${id}`;
+        }
+    </script>
+</body>
+</html>

@@ -1,0 +1,13 @@
+.env
+*.log
+*.swp
+.DS_Store
+node_modules/
+vendor/
+.vscode/
+.idea/
+*.pem
+*.key
+config/local.php
+session/
+cache/

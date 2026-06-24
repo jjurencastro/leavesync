@@ -1,0 +1,118 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>New Leave Request - Leave Management System</title>
+    <link rel="stylesheet" href="/public/css/style.css">
+</head>
+<body>
+    <nav class="navbar">
+        <div class="container">
+            <div class="navbar-content">
+                <div class="navbar-brand">LeaveSync</div>
+                <ul class="navbar-menu">
+                    <li><a href="/views/dashboard.html">Dashboard</a></li>
+                    <li><a href="/views/my_requests.html">My Requests</a></li>
+                    <li><a href="/views/new_request.html">New Request</a></li>
+                    <li><a href="/views/settings.html">Settings</a></li>
+                    <li><a href="#" onclick="logout()">Logout</a></li>
+                </ul>
+            </div>
+        </div>
+    </nav>
+
+    <div class="container" style="max-width: 600px; padding: 2rem 0;">
+        <div class="card">
+            <div class="card-header">
+                <h2>Submit New Leave Request</h2>
+            </div>
+            
+            <form id="leave-form" class="card-body">
+                <div id="alert-container"></div>
+
+                <div class="form-group">
+                    <label for="leave-type">Leave Type</label>
+                    <select id="leave-type" name="leave_type_id" required>
+                        <option value="">Select a leave type</option>
+                        <option value="1">Sick Leave</option>
+                        <option value="2">Annual Leave</option>
+                        <option value="3">Unpaid Leave</option>
+                        <option value="4">Maternity Leave</option>
+                        <option value="5">Paternity Leave</option>
+                        <option value="6">Casual Leave</option>
+                    </select>
+                </div>
+
+                <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 1rem;">
+                    <div class="form-group">
+                        <label for="start-date">Start Date</label>
+                        <input type="date" id="start-date" name="start_date" required>
+                    </div>
+
+                    <div class="form-group">
+                        <label for="end-date">End Date</label>
+                        <input type="date" id="end-date" name="end_date" required>
+                    </div>
+                </div>
+
+                <div class="form-group">
+                    <label for="days-display">Number of Days</label>
+                    <input type="text" id="days-display" disabled placeholder="0 days" style="background-color: var(--light-bg);">
+                </div>
+
+                <div class="form-group">
+                    <label for="reason">Reason for Leave</label>
+                    <textarea id="reason" name="reason" required placeholder="Please provide a reason for your leave request..."></textarea>
+                </div>
+
+                <div class="card-footer" style="justify-content: flex-end;">
+                    <a href="/views/dashboard.html" class="btn btn-secondary">Cancel</a>
+                    <button type="submit" class="btn btn-primary">Submit Request</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <script src="/public/js/app.js"></script>
+    <script>
+        // Check authentication
+        checkAuth();
+
+        // Calculate days
+        document.getElementById('start-date').addEventListener('change', calculateDays);
+        document.getElementById('end-date').addEventListener('change', calculateDays);
+
+        function calculateDays() {
+            const startDate = new Date(document.getElementById('start-date').value);
+            const endDate = new Date(document.getElementById('end-date').value);
+
+            if (startDate && endDate && endDate >= startDate) {
+                const days = Math.floor((endDate - startDate) / (1000 * 60 * 60 * 24)) + 1;
+                document.getElementById('days-display').value = days + ' day' + (days > 1 ? 's' : '');
+            }
+        }
+
+        // Submit form
+        document.getElementById('leave-form').addEventListener('submit', async (e) => {
+            e.preventDefault();
+
+            const leaveTypeId = document.getElementById('leave-type').value;
+            const startDate = document.getElementById('start-date').value;
+            const endDate = document.getElementById('end-date').value;
+            const reason = document.getElementById('reason').value;
+
+            const result = await LeaveRequestManager.createRequest(leaveTypeId, startDate, endDate, reason);
+
+            if (result.success) {
+                UIManager.showAlert('Leave request submitted successfully!', 'success');
+                setTimeout(() => {
+                    window.location.href = '/views/my_requests.html';
+                }, 1500);
+            } else {
+                UIManager.showAlert(result.message || 'Failed to submit request', 'danger');
+            }
+        });
+    </script>
+</body>
+</html>
