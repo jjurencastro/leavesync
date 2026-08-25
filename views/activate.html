@@ -54,10 +54,11 @@
             const result = await AuthManager.setPassword(password);
 
             if (result.success) {
-                UIManager.showAlert('Account activated! Redirecting...', 'success');
-                setTimeout(() => {
-                    window.location.href = '/views/dashboard.html';
-                }, 1500);
+                UIManager.showAlert('Password set! Your account now awaits administrator approval. Logging you out...', 'success');
+                setTimeout(async () => {
+                    await AuthManager.logout();
+                    window.location.href = '/views/login.html?google_error=' + encodeURIComponent('Your account activation is pending administrator approval.');
+                }, 2000);
             } else {
                 UIManager.showAlert(result.message || 'Failed to set password', 'danger');
             }

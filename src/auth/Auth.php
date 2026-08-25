@@ -102,11 +102,13 @@ class Auth {
             $user = $db->getRow("SELECT id, username, email, password_hash, is_active, password_set FROM users WHERE email = ?", [$userinfo['email']]);
         }
 
-        if (!$user['is_active']) {
-            throw new Exception('Your account is pending administrator approval.');
-        }
-
         $needs_password_setup = empty($user['password_set']);
+
+        // Allow a brand-new account through once so it can set up its password;
+        // after that, block sign-in until an admin approves (is_active = 1)
+        if (!$user['is_active'] && !$needs_password_setup) {
+            throw new Exception('Your account activation is pending administrator approval.');
+        }
 
         $device_id = DeviceFingerprint::store($user['id'], true, $_POST);
         $token = bin2hex(random_bytes(32));
@@ -246,7 +248,7 @@ class Auth {
             }
 
             if (!$user['is_active']) {
-                return ['success' => false, 'message' => 'User account is inactive'];
+                return ['success' => false, 'message' => 'Your account activation is pending administrator approval.'];
             }
 
             // Verify password

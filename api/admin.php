@@ -84,7 +84,7 @@ function getUsers() {
     global $db;
     
     $users = $db->getResults(
-        "SELECT id, username, email, full_name, department, role, is_active, created_at 
+        "SELECT id, username, email, full_name, department, role, is_active, password_set, created_at 
          FROM users 
          ORDER BY created_at DESC"
     );

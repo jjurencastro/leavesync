@@ -131,7 +131,8 @@
                 return;
             }
 
-            const pendingUsers = (result.data || []).filter(u => !u.is_active);
+            // Only show accounts that finished setting up their password (i.e. actually requested activation)
+            const pendingUsers = (result.data || []).filter(u => !u.is_active && u.password_set);
 
             if (pendingUsers.length === 0) {
                 tbody.innerHTML = '<tr><td colspan="5" class="text-center">No pending approvals</td></tr>';
