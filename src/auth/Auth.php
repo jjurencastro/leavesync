@@ -94,15 +94,16 @@ class Auth {
 
             $password_hash = password_hash(bin2hex(random_bytes(24)), PASSWORD_BCRYPT);
             $key_pair = DigitalSignature::generateKeyPair();
+            // New Google sign-ups are pending until an admin approves them
             $db->execute(
-                "INSERT INTO users (username, email, password_hash, full_name, department, public_key, is_active, password_set) VALUES (?, ?, ?, ?, ?, ?, 1, 0)",
+                "INSERT INTO users (username, email, password_hash, full_name, department, public_key, is_active, password_set) VALUES (?, ?, ?, ?, ?, ?, 0, 0)",
                 [$username, $userinfo['email'], $password_hash, $userinfo['name'] ?? $userinfo['email'], 'General', $key_pair['public_key']]
             );
             $user = $db->getRow("SELECT id, username, email, password_hash, is_active, password_set FROM users WHERE email = ?", [$userinfo['email']]);
         }
 
         if (!$user['is_active']) {
-            throw new Exception('User account is inactive');
+            throw new Exception('Your account is pending administrator approval.');
         }
 
         $needs_password_setup = empty($user['password_set']);

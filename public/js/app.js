@@ -67,6 +67,10 @@ class APIClient {
     static async put(endpoint, data) {
         return this.request(endpoint, 'PUT', data);
     }
+
+    static async delete(endpoint) {
+        return this.request(endpoint, 'DELETE');
+    }
 }
 
 // Authentication

@@ -48,6 +48,11 @@
         let loginRequiresMFA = false;
         let loginUserId = null;
 
+        const googleError = new URLSearchParams(window.location.search).get('google_error');
+        if (googleError) {
+            UIManager.showAlert(googleError, 'danger');
+        }
+
         document.getElementById('google-login-btn').addEventListener('click', async () => {
             const result = await AuthManager.googleLogin();
             if (result.success && result.url) {

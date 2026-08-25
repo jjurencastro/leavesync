@@ -26,6 +26,30 @@
 
         <div class="card">
             <div class="card-header">
+                <h2>Pending User Approvals</h2>
+            </div>
+            <div class="card-body">
+                <table class="table">
+                    <thead>
+                        <tr>
+                            <th>Full Name</th>
+                            <th>Username</th>
+                            <th>Email</th>
+                            <th>Requested</th>
+                            <th>Action</th>
+                        </tr>
+                    </thead>
+                    <tbody id="pending-users-table">
+                        <tr>
+                            <td colspan="5" class="text-center">Loading...</td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+        </div>
+
+        <div class="card">
+            <div class="card-header">
                 <h2>Pending Leave Requests</h2>
             </div>
             <div class="card-body">
@@ -93,7 +117,65 @@
                 window.location.href = '/views/dashboard.html';
             }
             
+            loadPendingUsers();
             loadAllRequests();
+        }
+
+        async function loadPendingUsers() {
+            const result = await APIClient.get('admin.php?action=users');
+            const tbody = document.getElementById('pending-users-table');
+            tbody.innerHTML = '';
+
+            if (!result.success) {
+                tbody.innerHTML = '<tr><td colspan="5" class="text-center">Failed to load users</td></tr>';
+                return;
+            }
+
+            const pendingUsers = (result.data || []).filter(u => !u.is_active);
+
+            if (pendingUsers.length === 0) {
+                tbody.innerHTML = '<tr><td colspan="5" class="text-center">No pending approvals</td></tr>';
+                return;
+            }
+
+            pendingUsers.forEach(u => {
+                const row = document.createElement('tr');
+                row.innerHTML = `
+                    <td>${u.full_name}</td>
+                    <td>${u.username}</td>
+                    <td>${u.email}</td>
+                    <td>${UIManager.formatDate(u.created_at)}</td>
+                    <td>
+                        <button class="btn btn-small btn-success" onclick="approveUser(${u.id})">Approve</button>
+                        <button class="btn btn-small btn-danger" onclick="rejectUser(${u.id})">Reject</button>
+                    </td>
+                `;
+                tbody.appendChild(row);
+            });
+        }
+
+        async function approveUser(id) {
+            if (!confirm('Approve this user account?')) return;
+
+            const result = await APIClient.put(`admin.php?action=update_user&id=${id}`, { is_active: 1 });
+            if (result.success) {
+                UIManager.showAlert('User approved', 'success');
+                loadPendingUsers();
+            } else {
+                UIManager.showAlert(result.message || 'Failed to approve user', 'danger');
+            }
+        }
+
+        async function rejectUser(id) {
+            if (!confirm('Reject and delete this pending user account?')) return;
+
+            const result = await APIClient.delete(`admin.php?action=delete_user&id=${id}`);
+            if (result.success) {
+                UIManager.showAlert('User rejected', 'success');
+                loadPendingUsers();
+            } else {
+                UIManager.showAlert(result.message || 'Failed to reject user', 'danger');
+            }
         }
 
         async function loadAllRequests() {

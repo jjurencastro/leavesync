@@ -38,7 +38,12 @@ try {
             }
             // Must exactly match the redirect_uri used to obtain the auth code
             $redirectUri = currentOrigin() . '/api/auth.php?action=google_callback';
-            $result = Auth::handleGoogleCallback($_GET['code'], $redirectUri);
+            try {
+                $result = Auth::handleGoogleCallback($_GET['code'], $redirectUri);
+            } catch (Exception $e) {
+                header('Location: ' . rtrim(APP_URL, '/') . '/views/login.html?google_error=' . urlencode($e->getMessage()));
+                exit;
+            }
             $destination = !empty($result['needs_password_setup']) ? '/views/activate.html' : '/views/dashboard.html';
             header('Location: ' . rtrim(APP_URL, '/') . $destination);
             exit;
