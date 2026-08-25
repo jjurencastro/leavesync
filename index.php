@@ -7,6 +7,8 @@ require_once __DIR__ . '/config/config.php';
 
 // Simple router
 $request_uri = parse_url($_SERVER['REQUEST_URI'], PHP_URL_PATH);
+// Collapse accidental double slashes (e.g. from a trailing slash in APP_URL)
+$request_uri = preg_replace('#/+#', '/', $request_uri);
 $request_method = $_SERVER['REQUEST_METHOD'];
 
 // Reject path traversal attempts before they're used to build filesystem paths

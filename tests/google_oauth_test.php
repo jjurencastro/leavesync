@@ -13,3 +13,4 @@ assertContains($redirectUrl, 'response_type=code', 'Google auth URL should reque
 assertContains($redirectUrl, 'scope=openid+email+profile', 'Google auth URL should request the email and profile scopes');
 
 echo "PASS: Google OAuth URL generation works\n";
+i w

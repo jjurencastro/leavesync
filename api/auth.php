@@ -44,7 +44,7 @@ try {
             // Must exactly match the redirect_uri used to obtain the auth code
             $redirectUri = currentOrigin() . '/api/auth.php?action=google_callback';
             $result = Auth::handleGoogleCallback($_GET['code'], $redirectUri);
-            header('Location: ' . APP_URL . '/views/dashboard.html');
+            header('Location: ' . rtrim(APP_URL, '/') . '/views/dashboard.html');
             exit;
 
         case 'logout':
