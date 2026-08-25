@@ -3,9 +3,148 @@
  * Authentication Handler
  */
 
+require_once __DIR__ . '/../security/DigitalSignature.php';
+require_once __DIR__ . '/../security/DeviceFingerprint.php';
+require_once __DIR__ . '/MFA.php';
+
 class Auth {
 
     private static $current_user = null;
+
+    /**
+     * Check whether an email address belongs to the allowed institutional domain
+     * @param string $email
+     * @return bool
+     */
+    public static function isAllowedEmailDomain($email) {
+        if (empty(ALLOWED_EMAIL_DOMAIN)) {
+            return true;
+        }
+        $domain = strtolower(substr(strrchr($email, '@'), 1));
+        return $domain === strtolower(ALLOWED_EMAIL_DOMAIN);
+    }
+
+    public static function buildGoogleAuthUrl($redirectUri) {
+        $clientId = getenv('GOOGLE_CLIENT_ID') ?: ($GLOBALS['env']['GOOGLE_CLIENT_ID'] ?? '');
+        if (empty($clientId)) {
+            throw new Exception('Google OAuth is not configured. Set GOOGLE_CLIENT_ID in your environment.');
+        }
+
+        $scope = 'openid email profile';
+        $params = [
+            'client_id' => $clientId,
+            'redirect_uri' => $redirectUri,
+            'response_type' => 'code',
+            'scope' => $scope,
+            'access_type' => 'offline',
+            'prompt' => 'select_account'
+        ];
+
+        return 'https://accounts.google.com/o/oauth2/v2/auth?' . http_build_query($params);
+    }
+
+    public static function handleGoogleCallback($code, $redirectUri) {
+        $clientId = getenv('GOOGLE_CLIENT_ID') ?: ($GLOBALS['env']['GOOGLE_CLIENT_ID'] ?? '');
+        $clientSecret = getenv('GOOGLE_CLIENT_SECRET') ?: ($GLOBALS['env']['GOOGLE_CLIENT_SECRET'] ?? '');
+
+        if (empty($clientId) || empty($clientSecret)) {
+            throw new Exception('Google OAuth is not configured');
+        }
+
+        $tokenUrl = 'https://oauth2.googleapis.com/token';
+        $tokenResponse = self::postJson($tokenUrl, [
+            'code' => $code,
+            'client_id' => $clientId,
+            'client_secret' => $clientSecret,
+            'redirect_uri' => $redirectUri,
+            'grant_type' => 'authorization_code'
+        ]);
+
+        if (empty($tokenResponse['access_token'])) {
+            throw new Exception('Google OAuth token exchange failed');
+        }
+
+        $userinfo = self::getJson('https://www.googleapis.com/oauth2/v3/userinfo', [
+            'access_token' => $tokenResponse['access_token']
+        ]);
+
+        if (empty($userinfo['email'])) {
+            throw new Exception('Google account email was not returned');
+        }
+
+        if (!self::isAllowedEmailDomain($userinfo['email'])) {
+            throw new Exception('Only @' . ALLOWED_EMAIL_DOMAIN . ' accounts may sign in');
+        }
+
+        $db = Database::getInstance();
+        $user = $db->getRow("SELECT id, username, email, password_hash, is_active FROM users WHERE email = ?", [$userinfo['email']]);
+
+        if (!$user) {
+            $username = strtolower(str_replace(' ', '', $userinfo['name'] ?? $userinfo['email']));
+            $baseUsername = $username;
+            $counter = 1;
+            while ($db->getRow("SELECT id FROM users WHERE username = ?", [$username])) {
+                $username = $baseUsername . $counter;
+                $counter++;
+            }
+
+            $password_hash = password_hash(bin2hex(random_bytes(24)), PASSWORD_BCRYPT);
+            $key_pair = DigitalSignature::generateKeyPair();
+            $db->execute(
+                "INSERT INTO users (username, email, password_hash, full_name, department, public_key, is_active) VALUES (?, ?, ?, ?, ?, ?, 1)",
+                [$username, $userinfo['email'], $password_hash, $userinfo['name'] ?? $userinfo['email'], 'General', $key_pair['public_key']]
+            );
+            $user = $db->getRow("SELECT id, username, email, password_hash, is_active FROM users WHERE email = ?", [$userinfo['email']]);
+        }
+
+        if (!$user['is_active']) {
+            throw new Exception('User account is inactive');
+        }
+
+        $device_id = DeviceFingerprint::store($user['id'], true, $_POST);
+        $token = bin2hex(random_bytes(32));
+        $token_hash = hash('sha256', $token);
+        $expires_at = date('Y-m-d H:i:s', time() + SESSION_LIFETIME);
+
+        $db->execute(
+            "INSERT INTO sessions (user_id, token_hash, device_id, ip_address, expires_at) VALUES (?, ?, ?, ?, ?)",
+            [$user['id'], $token_hash, $device_id, DeviceFingerprint::getDeviceInfo()['ip_address'], $expires_at]
+        );
+
+        setcookie('auth_token', $token, [
+            'expires' => time() + SESSION_LIFETIME,
+            'path' => '/',
+            'domain' => parse_url(APP_URL, PHP_URL_HOST),
+            'secure' => SESSION_SECURE,
+            'httponly' => SESSION_HTTPONLY,
+            'samesite' => 'Strict'
+        ]);
+
+        self::auditLog($user['id'], 'login_success_google', 'user', $user['id']);
+
+        return ['success' => true, 'message' => 'Google login successful', 'token' => $token, 'user_id' => $user['id']];
+    }
+
+    private static function postJson($url, array $data) {
+        $ch = curl_init($url);
+        curl_setopt($ch, CURLOPT_POST, true);
+        curl_setopt($ch, CURLOPT_POSTFIELDS, http_build_query($data));
+        curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
+        curl_setopt($ch, CURLOPT_SSL_VERIFYPEER, false);
+        $response = curl_exec($ch);
+        curl_close($ch);
+        return json_decode($response, true) ?: [];
+    }
+
+    private static function getJson($url, array $params = []) {
+        $fullUrl = $url . (strpos($url, '?') === false ? '?' : '&') . http_build_query($params);
+        $ch = curl_init($fullUrl);
+        curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
+        curl_setopt($ch, CURLOPT_SSL_VERIFYPEER, false);
+        $response = curl_exec($ch);
+        curl_close($ch);
+        return json_decode($response, true) ?: [];
+    }
 
     /**
      * Register new user
@@ -53,6 +192,7 @@ class Auth {
             ]);
 
             $user_id = $db->lastInsertId();
+            self::initializeLeaveBalances($user_id);
 
             // Store private key securely (in real environment, use encrypted storage)
             // For now, we're only storing public key in DB
@@ -78,6 +218,7 @@ class Auth {
      */
     public static function login($email, $password, $totp_code = null) {
         try {
+            session_start();
             $db = Database::getInstance();
 
             // Find user
@@ -123,8 +264,8 @@ class Auth {
                 }
             }
 
-            // Get or create device fingerprint
-            $device_id = DeviceFingerprint::store($user['id']);
+            // Get or create a trusted device fingerprint for this session
+            $device_id = DeviceFingerprint::store($user['id'], true, $_POST);
 
             // Create session token
             $token = bin2hex(random_bytes(32));
@@ -152,6 +293,9 @@ class Auth {
                 'samesite' => 'Strict'
             ]);
 
+            $_SESSION['auth_token'] = $token;
+            $_SESSION['user_id'] = $user['id'];
+
             self::auditLog($user['id'], 'login_success', 'user', $user['id']);
 
             return [
@@ -173,11 +317,12 @@ class Auth {
      */
     public static function logout() {
         try {
-            if (!isset($_COOKIE['auth_token'])) {
+            session_start();
+            if (!isset($_COOKIE['auth_token']) && empty($_SESSION['auth_token'])) {
                 return false;
             }
 
-            $token = $_COOKIE['auth_token'];
+            $token = $_COOKIE['auth_token'] ?? $_SESSION['auth_token'] ?? '';
             $token_hash = hash('sha256', $token);
 
             $db = Database::getInstance();
@@ -189,6 +334,9 @@ class Auth {
                 'secure' => SESSION_SECURE,
                 'httponly' => SESSION_HTTPONLY
             ]);
+            unset($_SESSION['auth_token']);
+            unset($_SESSION['user_id']);
+            session_destroy();
 
             return true;
         } catch (Exception $e) {
@@ -207,11 +355,13 @@ class Auth {
                 return self::$current_user;
             }
 
-            if (!isset($_COOKIE['auth_token'])) {
+            session_start();
+
+            if (!isset($_COOKIE['auth_token']) && empty($_SESSION['auth_token'])) {
                 return null;
             }
 
-            $token = $_COOKIE['auth_token'];
+            $token = $_COOKIE['auth_token'] ?? $_SESSION['auth_token'] ?? '';
             $token_hash = hash('sha256', $token);
 
             $db = Database::getInstance();
@@ -219,7 +369,7 @@ class Auth {
                 "SELECT s.*, u.id, u.username, u.email, u.full_name, u.department, u.role, u.device_fingerprint 
                  FROM sessions s
                  JOIN users u ON s.user_id = u.id
-                 WHERE s.token_hash = ? AND s.expires_at > NOW()",
+                 WHERE s.token_hash = ? AND s.expires_at > CURRENT_TIMESTAMP",
                 [$token_hash]
             );
 
@@ -263,6 +413,31 @@ class Auth {
      * @param array $changes Changes made
      * @return void
      */
+    private static function initializeLeaveBalances($user_id) {
+        try {
+            $db = Database::getInstance();
+            $leaveTypes = $db->getResults('SELECT id, days_per_year FROM leave_types');
+
+            foreach ($leaveTypes as $leaveType) {
+                $existing = $db->getRow(
+                    'SELECT id FROM leave_balances WHERE user_id = ? AND leave_type_id = ?',
+                    [$user_id, $leaveType['id']]
+                );
+
+                if ($existing) {
+                    continue;
+                }
+
+                $db->execute(
+                    'INSERT INTO leave_balances (user_id, leave_type_id, total_days, used_days, pending_days, balance, fiscal_year) VALUES (?, ?, ?, 0, 0, ?, ?)',
+                    [$user_id, $leaveType['id'], $leaveType['days_per_year'], $leaveType['days_per_year'], date('Y')]
+                );
+            }
+        } catch (Exception $e) {
+            error_log('Leave balance initialization error: ' . $e->getMessage());
+        }
+    }
+
     public static function auditLog($user_id, $action, $entity_type, $entity_id = null, $changes = []) {
         try {
             $device_info = DeviceFingerprint::getDeviceInfo();
@@ -300,6 +475,8 @@ class Auth {
 
         if (empty($data['email']) || !filter_var($data['email'], FILTER_VALIDATE_EMAIL)) {
             $errors[] = 'Valid email is required';
+        } elseif (!self::isAllowedEmailDomain($data['email'])) {
+            $errors[] = 'Email must be a @' . ALLOWED_EMAIL_DOMAIN . ' address';
         }
 
         if (empty($data['password']) || strlen($data['password']) < 8) {

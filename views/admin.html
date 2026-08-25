@@ -4,7 +4,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Admin Dashboard - Leave Management System</title>
-    <link rel="stylesheet" href="/public/css/style.css">
+    <link rel="stylesheet" href="/css/style.css">
 </head>
 <body>
     <nav class="navbar">
@@ -82,7 +82,7 @@
         </div>
     </div>
 
-    <script src="/public/js/app.js"></script>
+    <script src="/js/app.js"></script>
     <script>
         let allRequests = [];
 
@@ -166,7 +166,13 @@
 
         async function approveRequest(id) {
             if (confirm('Approve this leave request?')) {
-                const result = await LeaveRequestManager.approveRequest(id);
+                const privateKey = prompt('Paste the approver private key (PEM) to cryptographically sign this approval:');
+                if (!privateKey) {
+                    UIManager.showAlert('A private key is required for digital approval', 'danger');
+                    return;
+                }
+
+                const result = await LeaveRequestManager.approveRequest(id, '', privateKey);
                 if (result.success) {
                     UIManager.showAlert('Request approved', 'success');
                     loadAllRequests();

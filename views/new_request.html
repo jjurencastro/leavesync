@@ -4,7 +4,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>New Leave Request - Leave Management System</title>
-    <link rel="stylesheet" href="/public/css/style.css">
+    <link rel="stylesheet" href="/css/style.css">
 </head>
 <body>
     <nav class="navbar">
@@ -74,7 +74,7 @@
         </div>
     </div>
 
-    <script src="/public/js/app.js"></script>
+    <script src="/js/app.js"></script>
     <script>
         // Check authentication
         checkAuth();
@@ -102,6 +102,10 @@
             const endDate = document.getElementById('end-date').value;
             const reason = document.getElementById('reason').value;
 
+            const submitButton = document.querySelector('#leave-form button[type="submit"]');
+            submitButton.disabled = true;
+            submitButton.textContent = 'Submitting...';
+
             const result = await LeaveRequestManager.createRequest(leaveTypeId, startDate, endDate, reason);
 
             if (result.success) {
@@ -112,6 +116,9 @@
             } else {
                 UIManager.showAlert(result.message || 'Failed to submit request', 'danger');
             }
+
+            submitButton.disabled = false;
+            submitButton.textContent = 'Submit Request';
         });
     </script>
 </body>

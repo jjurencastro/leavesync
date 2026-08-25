@@ -13,19 +13,38 @@ header('Content-Type: application/json');
 
 $method = $_SERVER['REQUEST_METHOD'];
 $action = $_GET['action'] ?? '';
+$data = parseRequestPayload();
 
 try {
     switch ($action) {
         case 'register':
             if ($method !== 'POST') throw new Exception('Method not allowed');
-            echo json_encode(Auth::register($_POST));
+            echo json_encode(Auth::register($data));
             break;
 
         case 'login':
             if ($method !== 'POST') throw new Exception('Method not allowed');
-            $totp = $_POST['totp_code'] ?? null;
-            echo json_encode(Auth::login($_POST['email'] ?? '', $_POST['password'] ?? '', $totp));
+            $totp = $data['totp_code'] ?? null;
+            echo json_encode(Auth::login($data['email'] ?? '', $data['password'] ?? '', $totp));
             break;
+
+        case 'google_login':
+            $redirectUri = ($data['redirect_uri'] ?? '') ?: (APP_URL . '/api/auth.php?action=google_callback');
+            try {
+                echo json_encode(['success' => true, 'url' => Auth::buildGoogleAuthUrl($redirectUri)]);
+            } catch (Exception $e) {
+                echo json_encode(['success' => false, 'message' => $e->getMessage()]);
+            }
+            break;
+
+        case 'google_callback':
+            if (empty($_GET['code'])) {
+                throw new Exception('Google authorization code missing');
+            }
+            $redirectUri = APP_URL . '/api/auth.php?action=google_callback';
+            $result = Auth::handleGoogleCallback($_GET['code'], $redirectUri);
+            header('Location: ' . APP_URL . '/views/dashboard.html');
+            exit;
 
         case 'logout':
             Auth::logout();

@@ -4,7 +4,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Dashboard - Leave Management System</title>
-    <link rel="stylesheet" href="/public/css/style.css">
+    <link rel="stylesheet" href="/css/style.css">
 </head>
 <body>
     <nav class="navbar">
@@ -71,7 +71,7 @@
         </div>
     </div>
 
-    <script src="/public/js/app.js"></script>
+    <script src="/js/app.js"></script>
     <script>
         async function initDashboard() {
             // Check authentication
@@ -85,11 +85,16 @@
             // Load leave balance
             const balanceResult = await LeaveRequestManager.getLeaveBalance();
             if (balanceResult.success && balanceResult.data.length > 0) {
-                const balance = balanceResult.data[0];
-                document.getElementById('total-days').textContent = balance.total_days;
-                document.getElementById('used-days').textContent = balance.used_days;
-                document.getElementById('pending-days').textContent = balance.pending_days;
-                document.getElementById('available-days').textContent = balance.balance;
+                const balance = balanceResult.data[0] || {};
+                document.getElementById('total-days').textContent = balance.total_days ?? '0';
+                document.getElementById('used-days').textContent = balance.used_days ?? '0';
+                document.getElementById('pending-days').textContent = balance.pending_days ?? '0';
+                document.getElementById('available-days').textContent = balance.balance ?? '0';
+            } else {
+                document.getElementById('total-days').textContent = '0';
+                document.getElementById('used-days').textContent = '0';
+                document.getElementById('pending-days').textContent = '0';
+                document.getElementById('available-days').textContent = '0';
             }
 
             // Load recent requests

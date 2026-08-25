@@ -33,9 +33,9 @@ $fileEnv = file_exists($envFile) ? parse_ini_file($envFile) : [];
 $fileEnv = is_array($fileEnv) ? $fileEnv : [];
 
 $envKeys = [
-    'DB_HOST', 'DB_USER', 'DB_PASSWORD', 'DB_NAME',
+    'DB_HOST', 'DB_USER', 'DB_PASSWORD', 'DB_NAME', 'DB_PORT',
     'APP_ENV', 'APP_DEBUG', 'APP_URL', 'APP_SECRET',
-    'ENCRYPTION_KEY', 'JWT_SECRET',
+    'ENCRYPTION_KEY', 'JWT_SECRET', 'ALLOWED_EMAIL_DOMAIN',
     'SESSION_LIFETIME', 'SESSION_SECURE', 'SESSION_HTTPONLY',
     'MFA_ENABLED', 'MFA_WINDOW',
     'RATE_LIMIT_REQUESTS', 'RATE_LIMIT_WINDOW',
@@ -55,13 +55,16 @@ define('DB_HOST', $env['DB_HOST'] ?? 'localhost');
 define('DB_USER', $env['DB_USER'] ?? 'root');
 define('DB_PASSWORD', $env['DB_PASSWORD'] ?? '');
 define('DB_NAME', $env['DB_NAME'] ?? 'leavesync');
-define('DB_PORT', 3306);
+define('DB_PORT', (int)($env['DB_PORT'] ?? 3306));
 
 // Application Configuration
 define('APP_ENV', $env['APP_ENV'] ?? 'development');
 define('APP_DEBUG', ($env['APP_DEBUG'] ?? 'true') === 'true');
 define('APP_URL', $env['APP_URL'] ?? 'http://127.0.0.1:8000');
 define('APP_SECRET', $env['APP_SECRET'] ?? '');
+
+// Restrict account registration/creation to this email domain (blank disables the check)
+define('ALLOWED_EMAIL_DOMAIN', $env['ALLOWED_EMAIL_DOMAIN'] ?? 'thelewiscollege.edu.ph');
 
 // Security Keys
 define('ENCRYPTION_KEY', $env['ENCRYPTION_KEY'] ?? '');

@@ -3,9 +3,10 @@
  * API - Admin Functions
  */
 
-require_once __DIR__ . '/../../config/config.php';
-require_once __DIR__ . '/../../src/database/Database.php';
-require_once __DIR__ . '/../../src/auth/Auth.php';
+require_once __DIR__ . '/../config/config.php';
+require_once __DIR__ . '/../src/database/Database.php';
+require_once __DIR__ . '/../src/auth/Auth.php';
+require_once __DIR__ . '/../src/security/DigitalSignature.php';
 
 header('Content-Type: application/json');
 
@@ -119,6 +120,10 @@ function createUser($data) {
         }
     }
 
+    if (!filter_var($data['email'], FILTER_VALIDATE_EMAIL) || !Auth::isAllowedEmailDomain($data['email'])) {
+        throw new Exception('Email must be a @' . ALLOWED_EMAIL_DOMAIN . ' address');
+    }
+
     // Check if user exists
     $existing = $db->getRow(
         "SELECT id FROM users WHERE email = ? OR username = ?",
@@ -132,9 +137,12 @@ function createUser($data) {
     // Hash password
     $password_hash = password_hash($data['password'], PASSWORD_BCRYPT);
 
+    // Generate RSA key pair so the user can digitally sign approvals
+    $key_pair = DigitalSignature::generateKeyPair();
+
     // Insert user
-    $sql = "INSERT INTO users (username, email, password_hash, full_name, department, role, is_active) 
-            VALUES (?, ?, ?, ?, ?, ?, 1)";
+    $sql = "INSERT INTO users (username, email, password_hash, full_name, department, role, public_key, is_active) 
+            VALUES (?, ?, ?, ?, ?, ?, ?, 1)";
 
     $db->execute($sql, [
         $data['username'],
@@ -142,7 +150,8 @@ function createUser($data) {
         $password_hash,
         $data['full_name'],
         $data['department'] ?? 'General',
-        $data['role'] ?? 'employee'
+        $data['role'] ?? 'employee',
+        $key_pair['public_key']
     ]);
 
     Auth::auditLog($_SESSION['user_id'], 'create_user', 'user', $db->lastInsertId());

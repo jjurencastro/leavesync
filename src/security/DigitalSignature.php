@@ -126,9 +126,9 @@ class DigitalSignature {
         // Create document content to sign
         $document_content = self::createLeaveRequestDocument($leave_request);
 
-        // Sign the document
+        // Sign the document (the base64 signature itself must be stored,
+        // not a hash of it, so it can later be verified with openssl_verify)
         $signature = self::sign($document_content, $approver_private_key);
-        $signature_hash = hash('sha256', $signature);
 
         // Store digital signature
         $sql = "INSERT INTO digital_signatures 
@@ -139,16 +139,16 @@ class DigitalSignature {
             $leave_request_id,
             'leave_request',
             $approver_id,
-            $signature_hash
+            $signature
         ]);
 
         // Update leave request with signature
         $update_sql = "UPDATE leave_requests 
                       SET digital_signature = ?, signature_timestamp = NOW() 
                       WHERE id = ?";
-        $db->execute($update_sql, [$signature_hash, $leave_request_id]);
+        $db->execute($update_sql, [$signature, $leave_request_id]);
 
-        return $signature_hash;
+        return $signature;
     }
 
     /**
@@ -173,7 +173,8 @@ class DigitalSignature {
         }
 
         $document_content = self::createLeaveRequestDocument($leave_request);
-        
+
+        // signature_hash column holds the actual base64-encoded signature
         return self::verify(
             $document_content,
             $leave_request['signature_hash'],

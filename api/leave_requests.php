@@ -3,15 +3,17 @@
  * API - Leave Requests Management
  */
 
-require_once __DIR__ . '/../../config/config.php';
-require_once __DIR__ . '/../../src/database/Database.php';
-require_once __DIR__ . '/../../src/auth/Auth.php';
-require_once __DIR__ . '/../../src/security/DigitalSignature.php';
+require_once __DIR__ . '/../config/config.php';
+require_once __DIR__ . '/../src/database/Database.php';
+require_once __DIR__ . '/../src/auth/Auth.php';
+require_once __DIR__ . '/../src/security/DeviceFingerprint.php';
+require_once __DIR__ . '/../src/security/DigitalSignature.php';
 
 header('Content-Type: application/json');
 
 $method = $_SERVER['REQUEST_METHOD'];
 $action = $_GET['action'] ?? '';
+$data = parseRequestPayload();
 
 // Check authentication
 if (!Auth::isAuthenticated()) {
@@ -27,7 +29,7 @@ try {
     switch ($action) {
         case 'create':
             if ($method !== 'POST') throw new Exception('Method not allowed');
-            echo json_encode(createLeaveRequest($_POST, $user));
+            echo json_encode(createLeaveRequest($data, $user));
             break;
 
         case 'list':
@@ -47,12 +49,12 @@ try {
 
         case 'approve':
             if ($method !== 'POST') throw new Exception('Method not allowed');
-            echo json_encode(approveLeaveRequest($_POST, $user));
+            echo json_encode(approveLeaveRequest($data, $user));
             break;
 
         case 'reject':
             if ($method !== 'POST') throw new Exception('Method not allowed');
-            echo json_encode(rejectLeaveRequest($_POST, $user));
+            echo json_encode(rejectLeaveRequest($data, $user));
             break;
 
         case 'balance':
@@ -95,6 +97,10 @@ function createLeaveRequest($data, $user) {
 
     if (!$balance || $balance['balance'] < $days) {
         throw new Exception('Insufficient leave balance');
+    }
+
+    if (!DeviceFingerprint::verifyTrustedDevice($user['id'], $data)) {
+        throw new Exception('Only registered and trusted devices can submit leave requests.');
     }
 
     // Create leave request
@@ -259,9 +265,16 @@ function approveLeaveRequest($data, $user) {
         throw new Exception('Invalid leave request');
     }
 
+    if (empty($data['private_key'])) {
+        throw new Exception('A private key is required to cryptographically approve this request.');
+    }
+
     // Sign the request digitally
-    // Note: In production, manager's private key would be securely provided
-    DigitalSignature::signLeaveRequest($data['id'], $data['private_key'] ?? '', $user['id']);
+    try {
+        DigitalSignature::signLeaveRequest($data['id'], $data['private_key'], $user['id']);
+    } catch (Exception $e) {
+        throw new Exception('Invalid private key provided for digital approval.');
+    }
 
     // Update request status
     $sql = "UPDATE leave_requests 

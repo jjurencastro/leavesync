@@ -91,6 +91,10 @@ class AuthManager {
         return APIClient.get('auth.php?action=logout');
     }
 
+    static async googleLogin() {
+        return APIClient.post('auth.php?action=google_login', { redirect_uri: `${window.location.origin}/api/auth.php?action=google_callback` });
+    }
+
     static async getProfile() {
         return APIClient.get('auth.php?action=profile');
     }
@@ -119,11 +123,13 @@ class AuthManager {
 // Leave Requests
 class LeaveRequestManager {
     static async createRequest(leaveTypeId, startDate, endDate, reason) {
+        const fingerprint = await DeviceFingerprintManager.getFingerprint();
         return APIClient.post('leave_requests.php?action=create', {
             leave_type_id: leaveTypeId,
             start_date: startDate,
             end_date: endDate,
-            reason: reason
+            reason: reason,
+            ...fingerprint
         });
     }
 
@@ -139,10 +145,13 @@ class LeaveRequestManager {
         return APIClient.put(`leave_requests.php?action=update&id=${id}`, { reason });
     }
 
-    static async approveRequest(id, comments = '') {
+    static async approveRequest(id, comments = '', privateKey = '') {
+        const fingerprint = await DeviceFingerprintManager.getFingerprint();
         return APIClient.post('leave_requests.php?action=approve', {
             id: id,
-            comments: comments
+            comments: comments,
+            private_key: privateKey,
+            ...fingerprint
         });
     }
 

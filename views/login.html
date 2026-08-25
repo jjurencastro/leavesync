@@ -4,7 +4,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Leave Management System - Login</title>
-    <link rel="stylesheet" href="/public/css/style.css">
+    <link rel="stylesheet" href="/css/style.css">
 </head>
 <body>
     <div class="container" style="max-width: 400px; margin: 5rem auto;">
@@ -38,6 +38,8 @@
                     <button type="submit" class="btn btn-primary" style="width: 100%;">Login</button>
                 </form>
 
+                <button type="button" class="btn btn-secondary" style="width: 100%; margin-top: 0.75rem;" id="google-login-btn">Continue with Google</button>
+
                 <p class="text-center mt-3">
                     Don't have an account? <a href="/views/register.html" style="color: var(--primary-color);">Register here</a>
                 </p>
@@ -45,10 +47,19 @@
         </div>
     </div>
 
-    <script src="/public/js/app.js"></script>
+    <script src="/js/app.js"></script>
     <script>
         let loginRequiresMFA = false;
         let loginUserId = null;
+
+        document.getElementById('google-login-btn').addEventListener('click', async () => {
+            const result = await AuthManager.googleLogin();
+            if (result.success && result.url) {
+                window.location.href = result.url;
+            } else {
+                UIManager.showAlert(result.message || 'Google login is unavailable', 'danger');
+            }
+        });
 
         document.getElementById('login-form').addEventListener('submit', async (e) => {
             e.preventDefault();

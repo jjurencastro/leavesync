@@ -4,41 +4,28 @@
  */
 
 class DeviceFingerprint {
-    
+
     /**
      * Generate a device fingerprint based on browser and system characteristics
+     * @param array $data Optional browser/device data supplied by the client
      * @return string Device fingerprint hash
      */
-    public static function generate() {
-        $fingerprint_data = [
-            'user_agent' => $_SERVER['HTTP_USER_AGENT'] ?? '',
-            'accept_language' => $_SERVER['HTTP_ACCEPT_LANGUAGE'] ?? '',
-            'accept_encoding' => $_SERVER['HTTP_ACCEPT_ENCODING'] ?? '',
-            'ip_address' => self::getClientIP(),
-            'browser' => self::getBrowserInfo(),
-            'os' => self::getOSInfo(),
-            'screen_resolution' => $_POST['screen_resolution'] ?? 'unknown',
-            'timezone' => $_POST['timezone'] ?? date_default_timezone_get(),
-            'timestamp' => time()
-        ];
-
+    public static function generateFromData(array $data = []) {
+        $fingerprint_data = self::buildFingerprintData($data);
         return hash('sha256', json_encode($fingerprint_data));
+    }
+
+    public static function generate() {
+        return self::generateFromData();
     }
 
     /**
      * Get device fingerprint details
+     * @param array $data Optional browser/device data supplied by the client
      * @return array Device information
      */
-    public static function getDeviceInfo() {
-        return [
-            'user_agent' => $_SERVER['HTTP_USER_AGENT'] ?? '',
-            'accept_language' => $_SERVER['HTTP_ACCEPT_LANGUAGE'] ?? '',
-            'ip_address' => self::getClientIP(),
-            'browser' => self::getBrowserInfo(),
-            'os' => self::getOSInfo(),
-            'screen_resolution' => $_POST['screen_resolution'] ?? 'unknown',
-            'timezone' => $_POST['timezone'] ?? date_default_timezone_get()
-        ];
+    public static function getDeviceInfo(array $data = []) {
+        return self::buildFingerprintData($data);
     }
 
     /**
@@ -68,7 +55,7 @@ class DeviceFingerprint {
      */
     private static function getBrowserInfo() {
         $ua = $_SERVER['HTTP_USER_AGENT'] ?? '';
-        
+
         if (strpos($ua, 'Chrome') !== false) {
             preg_match('/Chrome\/(\d+)/', $ua, $matches);
             return 'Chrome ' . ($matches[1] ?? 'unknown');
@@ -92,7 +79,7 @@ class DeviceFingerprint {
      */
     private static function getOSInfo() {
         $ua = $_SERVER['HTTP_USER_AGENT'] ?? '';
-        
+
         if (strpos($ua, 'Windows NT 10.0') !== false) {
             return 'Windows 10';
         } elseif (strpos($ua, 'Windows NT 6.3') !== false) {
@@ -109,6 +96,24 @@ class DeviceFingerprint {
         }
     }
 
+    private static function buildFingerprintData(array $data = []) {
+        return [
+            'user_agent' => $_SERVER['HTTP_USER_AGENT'] ?? '',
+            'accept_language' => $_SERVER['HTTP_ACCEPT_LANGUAGE'] ?? '',
+            'accept_encoding' => $_SERVER['HTTP_ACCEPT_ENCODING'] ?? '',
+            'ip_address' => self::getClientIP(),
+            'browser' => self::getBrowserInfo(),
+            'os' => self::getOSInfo(),
+            'screen_resolution' => $data['screen_resolution'] ?? $_POST['screen_resolution'] ?? 'unknown',
+            'timezone' => $data['timezone'] ?? $_POST['timezone'] ?? date_default_timezone_get(),
+            'language' => $data['language'] ?? $_POST['language'] ?? '',
+            'platform' => $data['platform'] ?? $_POST['platform'] ?? '',
+            'hardware_concurrency' => $data['hardware_concurrency'] ?? $_POST['hardware_concurrency'] ?? 'unknown',
+            'device_memory' => $data['device_memory'] ?? $_POST['device_memory'] ?? 'unknown',
+            'timestamp' => time()
+        ];
+    }
+
     /**
      * Verify device fingerprint against stored fingerprint
      * @param string $stored_fingerprint Stored fingerprint hash
@@ -120,29 +125,56 @@ class DeviceFingerprint {
     }
 
     /**
-     * Store device fingerprint in database
+     * Store device fingerprint in database and mark as trusted if requested
      * @param int $user_id User ID
      * @param bool $is_trusted Mark as trusted device
+     * @param array $data Optional browser/device data supplied by the client
      * @return int Device fingerprint ID
      */
-    public static function store($user_id, $is_trusted = false) {
-        $db = Database::getInstance()->getConnection();
-        $fingerprint_hash = self::generate();
-        $device_info = json_encode(self::getDeviceInfo());
+    public static function store($user_id, $is_trusted = true, array $data = []) {
+        $db = Database::getInstance();
+        $fingerprint_hash = self::generateFromData($data);
+        $device_info = json_encode(self::getDeviceInfo($data));
         $ip_address = self::getClientIP();
         $browser_info = self::getBrowserInfo();
 
-        $sql = "INSERT INTO device_fingerprints 
-                (user_id, fingerprint_hash, device_info, ip_address, browser_info, is_trusted) 
-                VALUES (?, ?, ?, ?, ?, ?)";
-        
-        $stmt = $db->prepare($sql);
-        $stmt->bind_param('isssis', $user_id, $fingerprint_hash, $device_info, $ip_address, $browser_info, $is_trusted);
-        
-        if ($stmt->execute()) {
-            return $db->insert_id;
+        $existing = $db->getRow(
+            "SELECT id FROM device_fingerprints WHERE user_id = ? AND fingerprint_hash = ?",
+            [$user_id, $fingerprint_hash]
+        );
+
+        if ($existing) {
+            $db->execute(
+                "UPDATE device_fingerprints SET is_trusted = ?, last_used = NOW(), device_info = ?, ip_address = ?, browser_info = ? WHERE id = ?",
+                [$is_trusted ? 1 : 0, $device_info, $ip_address, $browser_info, $existing['id']]
+            );
+            return $existing['id'];
         }
-        return 0;
+
+        $db->execute(
+            "INSERT INTO device_fingerprints (user_id, fingerprint_hash, device_info, ip_address, browser_info, is_trusted) VALUES (?, ?, ?, ?, ?, ?)",
+            [$user_id, $fingerprint_hash, $device_info, $ip_address, $browser_info, $is_trusted ? 1 : 0]
+        );
+
+        return $db->lastInsertId();
+    }
+
+    /**
+     * Determine whether the current device is trusted for a user.
+     * @param int $user_id User ID
+     * @param array $data Optional browser/device data supplied by the client
+     * @return bool True when the current device exists and is marked trusted
+     */
+    public static function verifyTrustedDevice($user_id, array $data = []) {
+        $db = Database::getInstance();
+        $fingerprint_hash = self::generateFromData($data);
+
+        $device = $db->getRow(
+            "SELECT id FROM device_fingerprints WHERE user_id = ? AND fingerprint_hash = ? AND is_trusted = 1 LIMIT 1",
+            [$user_id, $fingerprint_hash]
+        );
+
+        return !empty($device);
     }
 
     /**
@@ -155,7 +187,7 @@ class DeviceFingerprint {
                 FROM device_fingerprints 
                 WHERE user_id = ? AND is_trusted = 1
                 ORDER BY last_used DESC";
-        
+
         $db = Database::getInstance();
         return $db->getResults($sql, [$user_id]);
     }
