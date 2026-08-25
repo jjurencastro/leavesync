@@ -267,10 +267,6 @@
                 UIManager.showAlert(result.message || 'Failed to reject device request', 'danger');
             }
         }
-            } else {
-                UIManager.showAlert(result.message || 'Failed to reject user', 'danger');
-            }
-        }
 
         async function loadAllRequests() {
             const result = await LeaveRequestManager.listRequests();
