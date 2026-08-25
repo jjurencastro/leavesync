@@ -70,79 +70,19 @@
                 </table>
             </div>
         </div>
-
-        <div class="card">
-            <div class="card-header">
-                <h2>Pending Leave Requests</h2>
-            </div>
-            <div class="card-body">
-                <table class="table">
-                    <thead>
-                        <tr>
-                            <th>Employee</th>
-                            <th>Type</th>
-                            <th>From</th>
-                            <th>To</th>
-                            <th>Days</th>
-                            <th>Status</th>
-                            <th>Action</th>
-                        </tr>
-                    </thead>
-                    <tbody id="pending-table">
-                        <tr>
-                            <td colspan="7" class="text-center">Loading...</td>
-                        </tr>
-                    </tbody>
-                </table>
-            </div>
-        </div>
-
-        <div class="card">
-            <div class="card-header">
-                <h2>All Leave Requests</h2>
-            </div>
-            <div class="card-body">
-                <div style="display: flex; gap: 1rem; margin-bottom: 1.5rem;">
-                    <input type="text" id="search-input" placeholder="Search by employee name" style="flex: 1;">
-                    <button class="btn btn-secondary" onclick="loadAllRequests()">Refresh</button>
-                </div>
-
-                <table class="table">
-                    <thead>
-                        <tr>
-                            <th>Employee</th>
-                            <th>Type</th>
-                            <th>From</th>
-                            <th>To</th>
-                            <th>Days</th>
-                            <th>Status</th>
-                            <th>Action</th>
-                        </tr>
-                    </thead>
-                    <tbody id="all-table">
-                        <tr>
-                            <td colspan="7" class="text-center">Loading...</td>
-                        </tr>
-                    </tbody>
-                </table>
-            </div>
-        </div>
     </div>
 
     <script src="/js/app.js"></script>
     <script>
-        let allRequests = [];
-
         // Check authentication and verify admin role
         async function initAdmin() {
             const user = await checkAuth();
             if (user.role !== 'admin') {
                 window.location.href = '/views/dashboard.html';
             }
-            
+
             loadPendingUsers();
             loadPendingDeviceRequests();
-            loadAllRequests();
         }
 
         async function loadPendingUsers() {
@@ -267,127 +207,6 @@
                 UIManager.showAlert(result.message || 'Failed to reject device request', 'danger');
             }
         }
-
-        async function loadAllRequests() {
-            const result = await LeaveRequestManager.listRequests();
-            if (result.success) {
-                allRequests = result.data || [];
-                displayPendingRequests();
-                displayAllRequests();
-            }
-        }
-
-        function displayPendingRequests() {
-            const pending = allRequests.filter(req => req.status === 'pending');
-            const tbody = document.getElementById('pending-table');
-            tbody.innerHTML = '';
-
-            if (pending.length === 0) {
-                tbody.innerHTML = '<tr><td colspan="7" class="text-center">No pending requests</td></tr>';
-            } else {
-                pending.forEach(req => {
-                    const row = document.createElement('tr');
-                    row.innerHTML = `
-                        <td>${req.full_name}</td>
-                        <td>${req.leave_type_name}</td>
-                        <td>${UIManager.formatDate(req.start_date)}</td>
-                        <td>${UIManager.formatDate(req.end_date)}</td>
-                        <td>${req.number_of_days}</td>
-                        <td>${UIManager.getStatusBadge(req.status)}</td>
-                        <td>
-                            <button class="btn btn-small btn-success" onclick="approveRequest(${req.id})">Approve</button>
-                            <button class="btn btn-small btn-danger" onclick="rejectRequest(${req.id})">Reject</button>
-                        </td>
-                    `;
-                    tbody.appendChild(row);
-                });
-            }
-        }
-
-        function displayAllRequests() {
-            const search = document.getElementById('search-input').value.toLowerCase();
-            let filtered = allRequests;
-            
-            if (search) {
-                filtered = allRequests.filter(req => 
-                    req.full_name.toLowerCase().includes(search)
-                );
-            }
-
-            const tbody = document.getElementById('all-table');
-            tbody.innerHTML = '';
-
-            if (filtered.length === 0) {
-                tbody.innerHTML = '<tr><td colspan="7" class="text-center">No requests found</td></tr>';
-            } else {
-                filtered.forEach(req => {
-                    const row = document.createElement('tr');
-                    row.innerHTML = `
-                        <td>${req.full_name}</td>
-                        <td>${req.leave_type_name}</td>
-                        <td>${UIManager.formatDate(req.start_date)}</td>
-                        <td>${UIManager.formatDate(req.end_date)}</td>
-                        <td>${req.number_of_days}</td>
-                        <td>${UIManager.getStatusBadge(req.status)}</td>
-                        <td><button class="btn btn-small btn-secondary" onclick="viewRequest(${req.id})">View</button></td>
-                    `;
-                    tbody.appendChild(row);
-                });
-            }
-        }
-
-        async function approveRequest(id) {
-            if (confirm('Approve this leave request?')) {
-                const privateKey = prompt('Paste the approver private key (PEM) to cryptographically sign this approval:');
-                if (!privateKey) {
-                    UIManager.showAlert('A private key is required for digital approval', 'danger');
-                    return;
-                }
-
-                const result = await LeaveRequestManager.approveRequest(id, '', privateKey);
-                if (result.success) {
-                    UIManager.showAlert('Request approved', 'success');
-                    loadAllRequests();
-                } else {
-                    UIManager.showAlert(result.message || 'Failed to approve', 'danger');
-                }
-            }
-        }
-
-        async function rejectRequest(id) {
-            const comments = prompt('Enter rejection reason:');
-            if (comments !== null) {
-                const result = await LeaveRequestManager.rejectRequest(id, comments);
-                if (result.success) {
-                    UIManager.showAlert('Request rejected', 'success');
-                    loadAllRequests();
-                } else {
-                    UIManager.showAlert(result.message || 'Failed to reject', 'danger');
-                }
-            }
-        }
-
-        async function viewRequest(id) {
-            const result = await LeaveRequestManager.getRequest(id);
-            if (result.success) {
-                const req = result.data;
-                const content = `
-                    <table class="table" style="width: 100%;">
-                        <tr><th>Employee</th><td>${req.full_name}</td></tr>
-                        <tr><th>Email</th><td>${req.email}</td></tr>
-                        <tr><th>Leave Type</th><td>${req.leave_type_name}</td></tr>
-                        <tr><th>From Date</th><td>${UIManager.formatDate(req.start_date)}</td></tr>
-                        <tr><th>To Date</th><td>${UIManager.formatDate(req.end_date)}</td></tr>
-                        <tr><th>Days</th><td>${req.number_of_days}</td></tr>
-                        <tr><th>Reason</th><td>${req.reason}</td></tr>
-                        <tr><th>Status</th><td>${UIManager.getStatusBadge(req.status)}</td></tr>
-                    </table>
-                `;
-                UIManager.showModal(content, 'Leave Request Details');
-            }
-        }
-
-        document.getElementById('search-input').addEventListener('input', displayAllRequests);
 
         initAdmin();
     </script>
