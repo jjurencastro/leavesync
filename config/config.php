@@ -3,8 +3,52 @@
  * Application Configuration
  */
 
-// Load environment variables
-$env = parse_ini_file(__DIR__ . '/../.env');
+function parseRequestPayload($rawBody = null) {
+    if (!empty($_POST)) {
+        return $_POST;
+    }
+
+    if ($rawBody === null) {
+        $rawBody = file_get_contents('php://input');
+    }
+
+    if (!is_string($rawBody) || trim($rawBody) === '') {
+        return [];
+    }
+
+    $decoded = json_decode($rawBody, true);
+    if (is_array($decoded)) {
+        return $decoded;
+    }
+
+    $data = [];
+    parse_str($rawBody, $data);
+    return $data;
+}
+
+// Load environment variables: .env file (local dev), falling back to real
+// process environment variables (e.g. Railway "Variables" tab in production)
+$envFile = __DIR__ . '/../.env';
+$fileEnv = file_exists($envFile) ? parse_ini_file($envFile) : [];
+$fileEnv = is_array($fileEnv) ? $fileEnv : [];
+
+$envKeys = [
+    'DB_HOST', 'DB_USER', 'DB_PASSWORD', 'DB_NAME',
+    'APP_ENV', 'APP_DEBUG', 'APP_URL', 'APP_SECRET',
+    'ENCRYPTION_KEY', 'JWT_SECRET',
+    'SESSION_LIFETIME', 'SESSION_SECURE', 'SESSION_HTTPONLY',
+    'MFA_ENABLED', 'MFA_WINDOW',
+    'RATE_LIMIT_REQUESTS', 'RATE_LIMIT_WINDOW',
+];
+
+$env = $fileEnv;
+foreach ($envKeys as $key) {
+    $value = getenv($key);
+    if ($value !== false) {
+        $env[$key] = $value;
+    }
+}
+$GLOBALS['env'] = $env;
 
 // Database Configuration
 define('DB_HOST', $env['DB_HOST'] ?? 'localhost');
@@ -14,9 +58,9 @@ define('DB_NAME', $env['DB_NAME'] ?? 'leavesync');
 define('DB_PORT', 3306);
 
 // Application Configuration
-define('APP_ENV', $env['APP_ENV'] ?? 'production');
-define('APP_DEBUG', $env['APP_DEBUG'] === 'true' ?? false);
-define('APP_URL', $env['APP_URL'] ?? 'https://localhost:8443');
+define('APP_ENV', $env['APP_ENV'] ?? 'development');
+define('APP_DEBUG', ($env['APP_DEBUG'] ?? 'true') === 'true');
+define('APP_URL', $env['APP_URL'] ?? 'http://127.0.0.1:8000');
 define('APP_SECRET', $env['APP_SECRET'] ?? '');
 
 // Security Keys
@@ -25,11 +69,11 @@ define('JWT_SECRET', $env['JWT_SECRET'] ?? '');
 
 // Session Configuration
 define('SESSION_LIFETIME', (int)($env['SESSION_LIFETIME'] ?? 3600));
-define('SESSION_SECURE', $env['SESSION_SECURE'] === 'true' ?? true);
-define('SESSION_HTTPONLY', $env['SESSION_HTTPONLY'] === 'true' ?? true);
+define('SESSION_SECURE', (isset($env['SESSION_SECURE']) ? $env['SESSION_SECURE'] : (APP_ENV === 'production' ? 'true' : 'false')) === 'true');
+define('SESSION_HTTPONLY', (isset($env['SESSION_HTTPONLY']) ? $env['SESSION_HTTPONLY'] : 'true') === 'true');
 
 // MFA Configuration
-define('MFA_ENABLED', $env['MFA_ENABLED'] === 'true' ?? true);
+define('MFA_ENABLED', (isset($env['MFA_ENABLED']) ? $env['MFA_ENABLED'] : 'true') === 'true');
 define('MFA_WINDOW', (int)($env['MFA_WINDOW'] ?? 30));
 
 // API Rate Limiting
@@ -68,7 +112,7 @@ header('Access-Control-Allow-Methods: GET, POST, PUT, DELETE, OPTIONS');
 header('Access-Control-Allow-Headers: Content-Type, Authorization');
 header('Access-Control-Allow-Credentials: true');
 
-// Enable HTTPS enforcement
+// Enable HTTPS enforcement only in non-local production-like environments
 if (!APP_DEBUG && empty($_SERVER['HTTPS'])) {
     header('Location: https://' . $_SERVER['HTTP_HOST'] . $_SERVER['REQUEST_URI']);
     exit;
