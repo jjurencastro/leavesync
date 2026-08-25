@@ -71,20 +71,16 @@ class APIClient {
 
 // Authentication
 class AuthManager {
-    static async register(username, email, password, fullName, department) {
-        const fingerprint = await DeviceFingerprintManager.getFingerprint();
-        return APIClient.post('auth.php?action=register', {
-            username, email, password, full_name: fullName, department,
-            ...fingerprint
-        });
-    }
-
     static async login(username, password, totpCode = null) {
         const fingerprint = await DeviceFingerprintManager.getFingerprint();
         return APIClient.post('auth.php?action=login', {
             username, password, totp_code: totpCode,
             ...fingerprint
         });
+    }
+
+    static async setPassword(password) {
+        return APIClient.post('auth.php?action=set_password', { password });
     }
 
     static async logout() {

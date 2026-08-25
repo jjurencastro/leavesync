@@ -17,11 +17,6 @@ $data = parseRequestPayload();
 
 try {
     switch ($action) {
-        case 'register':
-            if ($method !== 'POST') throw new Exception('Method not allowed');
-            echo json_encode(Auth::register($data));
-            break;
-
         case 'login':
             if ($method !== 'POST') throw new Exception('Method not allowed');
             $totp = $data['totp_code'] ?? null;
@@ -44,8 +39,19 @@ try {
             // Must exactly match the redirect_uri used to obtain the auth code
             $redirectUri = currentOrigin() . '/api/auth.php?action=google_callback';
             $result = Auth::handleGoogleCallback($_GET['code'], $redirectUri);
-            header('Location: ' . rtrim(APP_URL, '/') . '/views/dashboard.html');
+            $destination = !empty($result['needs_password_setup']) ? '/views/activate.html' : '/views/dashboard.html';
+            header('Location: ' . rtrim(APP_URL, '/') . $destination);
             exit;
+
+        case 'set_password':
+            if ($method !== 'POST') throw new Exception('Method not allowed');
+            if (!Auth::isAuthenticated()) {
+                http_response_code(401);
+                throw new Exception('Unauthorized');
+            }
+            $user = Auth::getCurrentUser();
+            echo json_encode(Auth::setPassword($user['id'], $data['password'] ?? ''));
+            break;
 
         case 'logout':
             Auth::logout();

@@ -77,10 +77,14 @@ class Auth {
         }
 
         $db = Database::getInstance();
-        $user = $db->getRow("SELECT id, username, email, password_hash, is_active FROM users WHERE email = ?", [$userinfo['email']]);
+        $user = $db->getRow("SELECT id, username, email, password_hash, is_active, password_set FROM users WHERE email = ?", [$userinfo['email']]);
 
         if (!$user) {
-            $username = strtolower(str_replace(' ', '', $userinfo['name'] ?? $userinfo['email']));
+            // Derive the username from the email's local part (before the @)
+            $username = preg_replace('/[^a-z0-9._-]/', '', strtolower(strstr($userinfo['email'], '@', true)));
+            if ($username === '') {
+                $username = 'user';
+            }
             $baseUsername = $username;
             $counter = 1;
             while ($db->getRow("SELECT id FROM users WHERE username = ?", [$username])) {
@@ -91,15 +95,17 @@ class Auth {
             $password_hash = password_hash(bin2hex(random_bytes(24)), PASSWORD_BCRYPT);
             $key_pair = DigitalSignature::generateKeyPair();
             $db->execute(
-                "INSERT INTO users (username, email, password_hash, full_name, department, public_key, is_active) VALUES (?, ?, ?, ?, ?, ?, 1)",
+                "INSERT INTO users (username, email, password_hash, full_name, department, public_key, is_active, password_set) VALUES (?, ?, ?, ?, ?, ?, 1, 0)",
                 [$username, $userinfo['email'], $password_hash, $userinfo['name'] ?? $userinfo['email'], 'General', $key_pair['public_key']]
             );
-            $user = $db->getRow("SELECT id, username, email, password_hash, is_active FROM users WHERE email = ?", [$userinfo['email']]);
+            $user = $db->getRow("SELECT id, username, email, password_hash, is_active, password_set FROM users WHERE email = ?", [$userinfo['email']]);
         }
 
         if (!$user['is_active']) {
             throw new Exception('User account is inactive');
         }
+
+        $needs_password_setup = empty($user['password_set']);
 
         $device_id = DeviceFingerprint::store($user['id'], true, $_POST);
         $token = bin2hex(random_bytes(32));
@@ -122,7 +128,13 @@ class Auth {
 
         self::auditLog($user['id'], 'login_success_google', 'user', $user['id']);
 
-        return ['success' => true, 'message' => 'Google login successful', 'token' => $token, 'user_id' => $user['id']];
+        return [
+            'success' => true,
+            'message' => 'Google login successful',
+            'token' => $token,
+            'user_id' => $user['id'],
+            'needs_password_setup' => $needs_password_setup
+        ];
     }
 
     private static function postJson($url, array $data) {
@@ -366,7 +378,7 @@ class Auth {
 
             $db = Database::getInstance();
             $session = $db->getRow(
-                "SELECT s.*, u.id, u.username, u.email, u.full_name, u.department, u.role, u.device_fingerprint 
+                "SELECT s.*, u.id, u.username, u.email, u.full_name, u.department, u.role, u.device_fingerprint, u.password_set
                  FROM sessions s
                  JOIN users u ON s.user_id = u.id
                  WHERE s.token_hash = ? AND s.expires_at > CURRENT_TIMESTAMP",
@@ -392,6 +404,30 @@ class Auth {
      */
     public static function isAuthenticated() {
         return self::getCurrentUser() !== null;
+    }
+
+    /**
+     * Set the password for the currently authenticated user, activating
+     * full username/password login for accounts created via Google sign-in.
+     * @param int $user_id
+     * @param string $password
+     * @return array ['success' => bool, 'message' => string]
+     */
+    public static function setPassword($user_id, $password) {
+        if (empty($password) || strlen($password) < 8) {
+            return ['success' => false, 'message' => 'Password must be at least 8 characters'];
+        }
+
+        $db = Database::getInstance();
+        $password_hash = password_hash($password, PASSWORD_BCRYPT);
+        $db->execute(
+            "UPDATE users SET password_hash = ?, password_set = 1 WHERE id = ?",
+            [$password_hash, $user_id]
+        );
+
+        self::auditLog($user_id, 'password_set', 'user', $user_id);
+
+        return ['success' => true, 'message' => 'Password set successfully'];
     }
 
     /**

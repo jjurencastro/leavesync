@@ -30,7 +30,7 @@ if (strpos($request_uri, '/api/') === 0) {
     }
 }
 // View routes (checked before generic static handling since these live outside public/)
-elseif (in_array($request_uri, ['/views/login.html', '/views/register.html', '/views/dashboard.html', '/views/new_request.html', '/views/settings.html', '/views/my_requests.html', '/views/admin.html'])) {
+elseif (in_array($request_uri, ['/views/login.html', '/views/activate.html', '/views/dashboard.html', '/views/new_request.html', '/views/settings.html', '/views/my_requests.html', '/views/admin.html'])) {
     $file_path = __DIR__ . $request_uri;
     if (file_exists($file_path)) {
         header('Content-Type: text/html');

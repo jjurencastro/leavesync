@@ -34,11 +34,13 @@ class SQLiteDatabase {
                 is_active INTEGER DEFAULT 1,
                 device_fingerprint TEXT,
                 public_key TEXT,
+                password_set INTEGER DEFAULT 1,
                 created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
                 updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
             )
         ");
         $this->ensureColumnExists('users', 'device_fingerprint', 'TEXT');
+        $this->ensureColumnExists('users', 'password_set', 'INTEGER DEFAULT 1');
 
         $this->ensureTableExists('sessions', "
             CREATE TABLE sessions (
