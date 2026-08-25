@@ -75,12 +75,17 @@ class APIClient {
 
 // Authentication
 class AuthManager {
-    static async login(username, password, totpCode = null) {
+    static async login(username, password, totpCode = null, deviceCode = null) {
         const fingerprint = await DeviceFingerprintManager.getFingerprint();
         return APIClient.post('auth.php?action=login', {
-            username, password, totp_code: totpCode,
+            username, password, totp_code: totpCode, device_code: deviceCode,
             ...fingerprint
         });
+    }
+
+    static async verifyDevice(code) {
+        const fingerprint = await DeviceFingerprintManager.getFingerprint();
+        return APIClient.post('auth.php?action=verify_device', { code, ...fingerprint });
     }
 
     static async setPassword(password) {

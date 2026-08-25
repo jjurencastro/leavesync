@@ -5,6 +5,7 @@
 
 require_once __DIR__ . '/../security/DigitalSignature.php';
 require_once __DIR__ . '/../security/DeviceFingerprint.php';
+require_once __DIR__ . '/../email/Mailer.php';
 require_once __DIR__ . '/MFA.php';
 
 class Auth {
@@ -112,29 +113,20 @@ class Auth {
 
         // Once a user has a registered trusted device, only that device may sign in
         $trustedDevices = DeviceFingerprint::getTrustedDevices($user['id']);
-        if (!empty($trustedDevices) && !DeviceFingerprint::verifyTrustedDevice($user['id'], $_POST)) {
-            self::auditLog($user['id'], 'login_failed_untrusted_device', 'user', $user['id']);
-            throw new Exception('This device is not recognized. Please sign in from your registered device.');
+        if (!empty($trustedDevices) && !DeviceFingerprint::verifyTrustedDevice($user['id'], parseRequestPayload())) {
+            self::requestDeviceVerification($user);
+            session_start();
+            $_SESSION['pending_device_verification_user_id'] = $user['id'];
+            self::auditLog($user['id'], 'login_untrusted_device_challenge', 'user', $user['id']);
+
+            return [
+                'success' => true,
+                'requires_device_verification' => true,
+                'user_id' => $user['id']
+            ];
         }
 
-        $device_id = DeviceFingerprint::store($user['id'], true, $_POST);
-        $token = bin2hex(random_bytes(32));
-        $token_hash = hash('sha256', $token);
-        $expires_at = date('Y-m-d H:i:s', time() + SESSION_LIFETIME);
-
-        $db->execute(
-            "INSERT INTO sessions (user_id, token_hash, device_id, ip_address, expires_at) VALUES (?, ?, ?, ?, ?)",
-            [$user['id'], $token_hash, $device_id, DeviceFingerprint::getDeviceInfo()['ip_address'], $expires_at]
-        );
-
-        setcookie('auth_token', $token, [
-            'expires' => time() + SESSION_LIFETIME,
-            'path' => '/',
-            'domain' => parse_url(APP_URL, PHP_URL_HOST),
-            'secure' => SESSION_SECURE,
-            'httponly' => SESSION_HTTPONLY,
-            'samesite' => 'Strict'
-        ]);
+        $token = self::createSessionForUser($user['id']);
 
         self::auditLog($user['id'], 'login_success_google', 'user', $user['id']);
 
@@ -166,6 +158,123 @@ class Auth {
         $response = curl_exec($ch);
         curl_close($ch);
         return json_decode($response, true) ?: [];
+    }
+
+    /**
+     * Create the auth session/cookie for a user who has completed all login checks.
+     * @return string The plaintext session token
+     */
+    private static function createSessionForUser($user_id, $setNativeSession = false) {
+        $db = Database::getInstance();
+        $device_id = DeviceFingerprint::store($user_id, true, parseRequestPayload());
+        $token = bin2hex(random_bytes(32));
+        $token_hash = hash('sha256', $token);
+        $expires_at = date('Y-m-d H:i:s', time() + SESSION_LIFETIME);
+
+        $db->execute(
+            "INSERT INTO sessions (user_id, token_hash, device_id, ip_address, expires_at) VALUES (?, ?, ?, ?, ?)",
+            [$user_id, $token_hash, $device_id, DeviceFingerprint::getDeviceInfo()['ip_address'], $expires_at]
+        );
+
+        setcookie('auth_token', $token, [
+            'expires' => time() + SESSION_LIFETIME,
+            'path' => '/',
+            'domain' => parse_url(APP_URL, PHP_URL_HOST),
+            'secure' => SESSION_SECURE,
+            'httponly' => SESSION_HTTPONLY,
+            'samesite' => 'Strict'
+        ]);
+
+        if ($setNativeSession) {
+            $_SESSION['auth_token'] = $token;
+            $_SESSION['user_id'] = $user_id;
+        }
+
+        return $token;
+    }
+
+    /**
+     * Email a 6-digit one-time code to confirm an unrecognized device/network,
+     * mirroring the "new device detected" step-up verification used by banking apps.
+     */
+    private static function requestDeviceVerification($user) {
+        $db = Database::getInstance();
+        $fingerprint_hash = DeviceFingerprint::generateFromData(parseRequestPayload());
+        $code = str_pad((string) random_int(0, 999999), 6, '0', STR_PAD_LEFT);
+        $code_hash = password_hash($code, PASSWORD_BCRYPT);
+        $expires_at = date('Y-m-d H:i:s', time() + 600);
+
+        // Replace any previous outstanding code for this exact device attempt
+        $db->execute("DELETE FROM device_verifications WHERE user_id = ? AND fingerprint_hash = ?", [$user['id'], $fingerprint_hash]);
+        $db->execute(
+            "INSERT INTO device_verifications (user_id, fingerprint_hash, code_hash, expires_at) VALUES (?, ?, ?, ?)",
+            [$user['id'], $fingerprint_hash, $code_hash, $expires_at]
+        );
+
+        $body = "Hi {$user['username']},\n\n" .
+            "We noticed a login attempt to your LeaveSync account from a new or unrecognized device/network.\n\n" .
+            "If this was you, enter this verification code to continue:\n\n    {$code}\n\n" .
+            "This code expires in 10 minutes. If you did not attempt to sign in, you can ignore this email.\n";
+
+        Mailer::send($user['email'], 'LeaveSync - Verify your new device', $body);
+        self::auditLog($user['id'], 'device_verification_sent', 'user', $user['id']);
+    }
+
+    /**
+     * Verify a device-verification code entered by the user for the current request's fingerprint.
+     */
+    private static function verifyDeviceCode($user_id, $code) {
+        if (empty($code)) {
+            return false;
+        }
+
+        $db = Database::getInstance();
+        $fingerprint_hash = DeviceFingerprint::generateFromData(parseRequestPayload());
+
+        $record = $db->getRow(
+            "SELECT * FROM device_verifications WHERE user_id = ? AND fingerprint_hash = ? AND consumed = 0 AND expires_at > CURRENT_TIMESTAMP ORDER BY id DESC LIMIT 1",
+            [$user_id, $fingerprint_hash]
+        );
+
+        if (!$record || !password_verify((string) $code, $record['code_hash'])) {
+            return false;
+        }
+
+        $db->execute("UPDATE device_verifications SET consumed = 1 WHERE id = ?", [$record['id']]);
+        return true;
+    }
+
+    /**
+     * Complete a Google-login device verification (submitted from a follow-up page,
+     * since the OAuth callback itself can't collect the code interactively).
+     */
+    public static function completeDeviceVerification($code) {
+        session_start();
+        $user_id = $_SESSION['pending_device_verification_user_id'] ?? null;
+
+        if (!$user_id) {
+            return ['success' => false, 'message' => 'No pending verification. Please log in again.'];
+        }
+
+        if (!self::verifyDeviceCode($user_id, $code)) {
+            self::auditLog($user_id, 'login_failed_device_code', 'user', $user_id);
+            return ['success' => false, 'message' => 'Invalid or expired verification code'];
+        }
+
+        unset($_SESSION['pending_device_verification_user_id']);
+
+        $db = Database::getInstance();
+        $user = $db->getRow("SELECT id, password_set FROM users WHERE id = ?", [$user_id]);
+
+        self::createSessionForUser($user_id);
+        self::auditLog($user_id, 'device_verified_google', 'user', $user_id);
+
+        return [
+            'success' => true,
+            'message' => 'Device verified',
+            'user_id' => $user_id,
+            'needs_password_setup' => empty($user['password_set'])
+        ];
     }
 
     /**
@@ -236,9 +345,10 @@ class Auth {
      * @param string $username Username
      * @param string $password User password
      * @param string $totp_code Optional TOTP code for MFA
+     * @param string $device_code Optional email verification code for an unrecognized device
      * @return array ['success' => bool, 'message' => string, 'requires_mfa' => bool, 'token' => string]
      */
-    public static function login($username, $password, $totp_code = null) {
+    public static function login($username, $password, $totp_code = null, $device_code = null) {
         try {
             session_start();
             $db = Database::getInstance();
@@ -288,42 +398,29 @@ class Auth {
 
             // Once a user has a registered trusted device, only that device may log in
             $trustedDevices = DeviceFingerprint::getTrustedDevices($user['id']);
-            if (!empty($trustedDevices) && !DeviceFingerprint::verifyTrustedDevice($user['id'], $_POST)) {
-                self::auditLog($user['id'], 'login_failed_untrusted_device', 'user', $user['id']);
-                return ['success' => false, 'message' => 'This device is not recognized. Please sign in from your registered device.'];
+            $isKnownDevice = empty($trustedDevices) || DeviceFingerprint::verifyTrustedDevice($user['id'], parseRequestPayload());
+
+            if (!$isKnownDevice) {
+                if ($device_code === null) {
+                    self::requestDeviceVerification($user);
+                    return [
+                        'success' => false,
+                        'requires_device_verification' => true,
+                        'user_id' => $user['id'],
+                        'message' => 'A verification code has been sent to your email to confirm this new device.'
+                    ];
+                }
+
+                if (!self::verifyDeviceCode($user['id'], $device_code)) {
+                    self::auditLog($user['id'], 'login_failed_device_code', 'user', $user['id']);
+                    return ['success' => false, 'message' => 'Invalid or expired verification code'];
+                }
+
+                self::auditLog($user['id'], 'device_verified', 'user', $user['id']);
             }
 
-            // Get or create a trusted device fingerprint for this session
-            $device_id = DeviceFingerprint::store($user['id'], true, $_POST);
-
             // Create session token
-            $token = bin2hex(random_bytes(32));
-            $token_hash = hash('sha256', $token);
-            $expires_at = date('Y-m-d H:i:s', time() + SESSION_LIFETIME);
-
-            $sql = "INSERT INTO sessions (user_id, token_hash, device_id, ip_address, expires_at) 
-                    VALUES (?, ?, ?, ?, ?)";
-
-            $db->execute($sql, [
-                $user['id'],
-                $token_hash,
-                $device_id,
-                DeviceFingerprint::getDeviceInfo()['ip_address'],
-                $expires_at
-            ]);
-
-            // Set session cookie
-            setcookie('auth_token', $token, [
-                'expires' => time() + SESSION_LIFETIME,
-                'path' => '/',
-                'domain' => parse_url(APP_URL, PHP_URL_HOST),
-                'secure' => SESSION_SECURE,
-                'httponly' => SESSION_HTTPONLY,
-                'samesite' => 'Strict'
-            ]);
-
-            $_SESSION['auth_token'] = $token;
-            $_SESSION['user_id'] = $user['id'];
+            $token = self::createSessionForUser($user['id'], true);
 
             self::auditLog($user['id'], 'login_success', 'user', $user['id']);
 

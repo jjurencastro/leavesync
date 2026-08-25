@@ -140,6 +140,19 @@ CREATE TABLE IF NOT EXISTS digital_signatures (
     INDEX idx_signer_id (signer_id)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
+-- Device Verification Codes (email OTP for unrecognized device/IP logins)
+CREATE TABLE IF NOT EXISTS device_verifications (
+    id INT PRIMARY KEY AUTO_INCREMENT,
+    user_id INT NOT NULL,
+    fingerprint_hash VARCHAR(64) NOT NULL,
+    code_hash VARCHAR(255) NOT NULL,
+    expires_at TIMESTAMP NOT NULL,
+    consumed BOOLEAN DEFAULT FALSE,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
+    INDEX idx_user_id (user_id)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
 -- Leave Balances
 CREATE TABLE IF NOT EXISTS leave_balances (
     id INT PRIMARY KEY AUTO_INCREMENT,

@@ -35,6 +35,13 @@
                         </div>
                     </div>
 
+                    <div id="device-code-section" style="display: none;">
+                        <div class="form-group">
+                            <label for="device_code">Device Verification Code</label>
+                            <input type="text" id="device_code" name="device_code" placeholder="000000" maxlength="6">
+                        </div>
+                    </div>
+
                     <button type="submit" class="btn btn-primary" style="width: 100%;">Login</button>
                 </form>
 
@@ -68,8 +75,9 @@
             const username = document.getElementById('username').value;
             const password = document.getElementById('password').value;
             const totp = document.getElementById('totp').value;
+            const deviceCode = document.getElementById('device_code').value;
 
-            const result = await AuthManager.login(username, password, totp || null);
+            const result = await AuthManager.login(username, password, totp || null, deviceCode || null);
 
             if (result.success) {
                 UIManager.showAlert('Login successful! Redirecting...', 'success');
@@ -81,6 +89,9 @@
                 loginUserId = result.user_id;
                 document.getElementById('mfa-section').style.display = 'block';
                 UIManager.showAlert('Please enter your authenticator code', 'info');
+            } else if (result.requires_device_verification) {
+                document.getElementById('device-code-section').style.display = 'block';
+                UIManager.showAlert(result.message || 'A verification code has been sent to your email', 'info');
             } else {
                 UIManager.showAlert(result.message || 'Login failed', 'danger');
             }

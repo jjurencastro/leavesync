@@ -172,6 +172,18 @@ class SQLiteDatabase {
             )
         ");
 
+        $this->ensureTableExists('device_verifications', "
+            CREATE TABLE device_verifications (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                user_id INTEGER NOT NULL,
+                fingerprint_hash TEXT NOT NULL,
+                code_hash TEXT NOT NULL,
+                expires_at DATETIME NOT NULL,
+                consumed INTEGER DEFAULT 0,
+                created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+            )
+        ");
+
         $this->seedLeaveTypes();
     }
 
