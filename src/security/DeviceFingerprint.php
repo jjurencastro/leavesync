@@ -6,12 +6,16 @@
 class DeviceFingerprint {
 
     /**
-     * Generate a device fingerprint based on browser and system characteristics
+     * Generate a device fingerprint based on browser and system characteristics.
+     * Only uses fields reliably available from server-side request headers
+     * (user agent, browser, OS, IP) so the hash is consistent whether the
+     * login came through a direct form POST (with JS-supplied extras) or a
+     * Google OAuth redirect (a plain GET with no JS payload at all).
      * @param array $data Optional browser/device data supplied by the client
      * @return string Device fingerprint hash
      */
     public static function generateFromData(array $data = []) {
-        $fingerprint_data = self::buildFingerprintData($data);
+        $fingerprint_data = self::buildHashData($data);
         return hash('sha256', json_encode($fingerprint_data));
     }
 
@@ -144,6 +148,24 @@ class DeviceFingerprint {
             'platform' => $data['platform'] ?? $_POST['platform'] ?? '',
             'hardware_concurrency' => $data['hardware_concurrency'] ?? $_POST['hardware_concurrency'] ?? 'unknown',
             'device_memory' => $data['device_memory'] ?? $_POST['device_memory'] ?? 'unknown',
+        ];
+    }
+
+    /**
+     * Subset of buildFingerprintData() used specifically for the trust hash:
+     * only fields derivable from server-side request headers, so a Google
+     * OAuth redirect (no JS payload) and a direct form login (with JS extras)
+     * produce the same fingerprint for the same actual browser/device.
+     */
+    private static function buildHashData(array $data = []) {
+        $full = self::buildFingerprintData($data);
+        return [
+            'user_agent' => $full['user_agent'],
+            'accept_language' => $full['accept_language'],
+            'accept_encoding' => $full['accept_encoding'],
+            'ip_address' => $full['ip_address'],
+            'browser' => $full['browser'],
+            'os' => $full['os'],
         ];
     }
 
