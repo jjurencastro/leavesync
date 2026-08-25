@@ -564,16 +564,16 @@ class Auth {
         $department = trim($data['department'] ?? '');
         $supervisor_id = (int) ($data['supervisor_id'] ?? 0);
 
-        $allowedGenders = ['male', 'female', 'non_binary', 'prefer_not_to_say'];
+        $allowedGenders = ['male', 'female'];
         if (!in_array($gender, $allowedGenders, true)) {
             return ['success' => false, 'message' => 'Please select a valid gender option'];
         }
-        if ($department === '' || strlen($department) > 50) {
-            return ['success' => false, 'message' => 'Department is required and must be 50 characters or fewer'];
+        if (!in_array($department, ['ADMIN', 'HED', 'BED'], true)) {
+            return ['success' => false, 'message' => 'Please select a valid department'];
         }
 
         $supervisor = $db->getRow(
-            "SELECT id FROM users WHERE id = ? AND id <> ? AND is_active = 1 AND role IN ('manager', 'admin')",
+            "SELECT id FROM users WHERE id = ? AND id <> ? AND is_active = 1 AND role = 'admin'",
             [$supervisor_id, $user_id]
         );
         if (!$supervisor) {
@@ -599,7 +599,7 @@ class Auth {
         );
         $supervisors = $db->getResults(
             "SELECT id, username, full_name, department, role FROM users
-             WHERE id <> ? AND is_active = 1 AND role IN ('manager', 'admin')
+             WHERE id <> ? AND is_active = 1 AND role = 'admin'
              ORDER BY full_name, username",
             [$user_id]
         );

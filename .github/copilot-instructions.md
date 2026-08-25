@@ -5,8 +5,8 @@ A secure, enterprise-grade leave management system built with PHP and MySQL, fea
 
 ## Technology Stack
 - **Frontend**: HTML5, CSS3, JavaScript (Vanilla)
-- **Backend**: PHP 8.2+
-- **Database**: Railway MySQL 9+
+- **Backend**: PHP 7.4+
+- **Database**: MySQL 5.7+ / PostgreSQL
 - **Security**: OpenSSL, RSA-4096, SHA-256, TOTP
 
 ## Key Features Implemented
