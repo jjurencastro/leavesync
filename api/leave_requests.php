@@ -43,8 +43,7 @@ try {
 
         case 'update':
             if ($method !== 'PUT') throw new Exception('Method not allowed');
-            parse_str(file_get_contents('php://input'), $_PUT);
-            echo json_encode(updateLeaveRequest($_GET['id'] ?? null, $_PUT, $user));
+            echo json_encode(updateLeaveRequest($_GET['id'] ?? null, parseRequestPayload(), $user));
             break;
 
         case 'approve':

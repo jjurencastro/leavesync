@@ -116,7 +116,7 @@ try {
                 throw new Exception('Unauthorized');
             }
 
-            if (empty($_POST['totp_code'])) {
+            if (empty($data['totp_code'])) {
                 throw new Exception('TOTP code required');
             }
 
@@ -125,7 +125,7 @@ try {
                 throw new Exception('No pending MFA setup');
             }
 
-            if (!MFA::verifyTOTP($secret, $_POST['totp_code'])) {
+            if (!MFA::verifyTOTP($secret, $data['totp_code'])) {
                 throw new Exception('Invalid TOTP code');
             }
 
@@ -166,11 +166,11 @@ try {
                 throw new Exception('Unauthorized');
             }
 
-            if (empty($_POST['device_id'])) {
+            if (empty($data['device_id'])) {
                 throw new Exception('Device ID required');
             }
 
-            DeviceFingerprint::removeTrustedDevice($_POST['device_id']);
+            DeviceFingerprint::removeTrustedDevice($data['device_id']);
 
             echo json_encode(['success' => true, 'message' => 'Device removed']);
             break;
