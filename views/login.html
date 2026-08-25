@@ -79,11 +79,20 @@
         document.getElementById('login-form').addEventListener('submit', async (e) => {
             e.preventDefault();
 
+            const submitBtn = e.target.querySelector('button[type="submit"]');
+            if (submitBtn.disabled) return;
+            submitBtn.disabled = true;
+
             const username = document.getElementById('username').value;
             const password = document.getElementById('password').value;
             const totp = document.getElementById('totp').value;
 
-            const result = await AuthManager.login(username, password, totp || null);
+            let result;
+            try {
+                result = await AuthManager.login(username, password, totp || null);
+            } finally {
+                submitBtn.disabled = false;
+            }
 
             if (result.success) {
                 UIManager.showAlert('Login successful! Redirecting...', 'success');

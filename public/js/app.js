@@ -170,14 +170,19 @@ class LeaveRequestManager {
 // UI Utilities
 class UIManager {
     static showAlert(message, type = 'info') {
+        const container = document.getElementById('alert-container') || document.querySelector('.container') || document.body;
+
+        // Replace any existing alert instead of stacking duplicates on top of each other
+        container.querySelectorAll(':scope > .alert').forEach(el => el.remove());
+        clearTimeout(UIManager._alertTimeout);
+
         const alertDiv = document.createElement('div');
         alertDiv.className = `alert alert-${type}`;
         alertDiv.textContent = message;
-        
-        const container = document.querySelector('.container') || document.body;
+
         container.insertBefore(alertDiv, container.firstChild);
 
-        setTimeout(() => alertDiv.remove(), 5000);
+        UIManager._alertTimeout = setTimeout(() => alertDiv.remove(), 5000);
     }
 
     static showModal(content, title = 'Modal') {
