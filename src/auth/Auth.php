@@ -211,24 +211,24 @@ class Auth {
 
     /**
      * Login user
-     * @param string $email User email
+     * @param string $username Username
      * @param string $password User password
      * @param string $totp_code Optional TOTP code for MFA
      * @return array ['success' => bool, 'message' => string, 'requires_mfa' => bool, 'token' => string]
      */
-    public static function login($email, $password, $totp_code = null) {
+    public static function login($username, $password, $totp_code = null) {
         try {
             session_start();
             $db = Database::getInstance();
 
             // Find user
             $user = $db->getRow(
-                "SELECT id, username, email, password_hash, is_active FROM users WHERE email = ?",
-                [$email]
+                "SELECT id, username, email, password_hash, is_active FROM users WHERE username = ?",
+                [$username]
             );
 
             if (!$user) {
-                self::auditLog(null, 'login_failed', 'user', null, ['email' => $email]);
+                self::auditLog(null, 'login_failed', 'user', null, ['username' => $username]);
                 return ['success' => false, 'message' => 'Invalid credentials'];
             }
 

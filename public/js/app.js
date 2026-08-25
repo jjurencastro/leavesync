@@ -79,10 +79,10 @@ class AuthManager {
         });
     }
 
-    static async login(email, password, totpCode = null) {
+    static async login(username, password, totpCode = null) {
         const fingerprint = await DeviceFingerprintManager.getFingerprint();
         return APIClient.post('auth.php?action=login', {
-            email, password, totp_code: totpCode,
+            username, password, totp_code: totpCode,
             ...fingerprint
         });
     }

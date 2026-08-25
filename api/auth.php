@@ -25,7 +25,7 @@ try {
         case 'login':
             if ($method !== 'POST') throw new Exception('Method not allowed');
             $totp = $data['totp_code'] ?? null;
-            echo json_encode(Auth::login($data['email'] ?? '', $data['password'] ?? '', $totp));
+            echo json_encode(Auth::login($data['username'] ?? '', $data['password'] ?? '', $totp));
             break;
 
         case 'google_login':

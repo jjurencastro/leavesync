@@ -19,8 +19,8 @@
 
                 <form id="login-form">
                     <div class="form-group">
-                        <label for="email">Email Address</label>
-                        <input type="email" id="email" name="email" required>
+                        <label for="username">Username</label>
+                        <input type="text" id="username" name="username" required autocomplete="username">
                     </div>
 
                     <div class="form-group">
@@ -64,11 +64,11 @@
         document.getElementById('login-form').addEventListener('submit', async (e) => {
             e.preventDefault();
 
-            const email = document.getElementById('email').value;
+            const username = document.getElementById('username').value;
             const password = document.getElementById('password').value;
             const totp = document.getElementById('totp').value;
 
-            const result = await AuthManager.login(email, password, totp || null);
+            const result = await AuthManager.login(username, password, totp || null);
 
             if (result.success) {
                 UIManager.showAlert('Login successful! Redirecting...', 'success');
