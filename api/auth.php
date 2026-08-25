@@ -49,6 +49,10 @@ try {
                 header('Location: ' . rtrim(APP_URL, '/') . '/views/confirm_device_change.html');
                 exit;
             }
+            if (($result['role'] ?? null) === 'admin') {
+                header('Location: ' . rtrim(APP_URL, '/') . '/views/admin.html');
+                exit;
+            }
             $destination = !empty($result['needs_password_setup']) ? '/views/activate.html' : '/views/dashboard.html';
             header('Location: ' . rtrim(APP_URL, '/') . $destination);
             exit;

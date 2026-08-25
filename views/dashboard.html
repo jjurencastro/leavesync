@@ -76,10 +76,12 @@
         async function initDashboard() {
             // Check authentication
             const user = await checkAuth();
+            if (!user) return;
 
-            // Show admin menu if admin
+            // Admins use the Administration Dashboard instead
             if (user.role === 'admin') {
-                document.getElementById('admin-menu').style.display = 'block';
+                window.location.href = '/views/admin.html';
+                return;
             }
 
             // Load leave balance

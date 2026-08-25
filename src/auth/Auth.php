@@ -140,6 +140,7 @@ class Auth {
             'message' => 'Google login successful',
             'token' => $token,
             'user_id' => $user['id'],
+            'role' => $user['role'],
             'needs_password_setup' => $needs_password_setup
         ];
     }

@@ -77,7 +77,12 @@
     <script src="/js/app.js"></script>
     <script>
         // Check authentication
-        checkAuth();
+        (async () => {
+            const user = await checkAuth();
+            if (user && user.role === 'admin') {
+                window.location.href = '/views/admin.html';
+            }
+        })();
 
         // Calculate days
         document.getElementById('start-date').addEventListener('change', calculateDays);
