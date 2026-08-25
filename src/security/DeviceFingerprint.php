@@ -162,16 +162,17 @@ class DeviceFingerprint {
      * @param int $user_id User ID
      * @param bool $is_trusted Mark as trusted device
      * @param array $data Optional browser/device data supplied by the client
+     * @param bool $enforceSingleDevice Revoke trust from the user's other devices (set false to exempt, e.g. admin testing)
      * @return int Device fingerprint ID
      */
-    public static function store($user_id, $is_trusted = true, array $data = []) {
+    public static function store($user_id, $is_trusted = true, array $data = [], $enforceSingleDevice = true) {
         $db = Database::getInstance();
         $fingerprint_hash = self::generateFromData($data);
         $device_info = json_encode(self::getDeviceInfo($data));
         $ip_address = self::getClientIP();
         $browser_info = self::getBrowserInfo();
 
-        if ($is_trusted) {
+        if ($is_trusted && $enforceSingleDevice) {
             self::untrustOtherDevices($user_id, $fingerprint_hash);
         }
 

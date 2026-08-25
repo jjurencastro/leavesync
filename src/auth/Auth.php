@@ -77,7 +77,7 @@ class Auth {
         }
 
         $db = Database::getInstance();
-        $user = $db->getRow("SELECT id, username, email, password_hash, is_active, password_set FROM users WHERE email = ?", [$userinfo['email']]);
+        $user = $db->getRow("SELECT id, username, email, password_hash, is_active, password_set, role FROM users WHERE email = ?", [$userinfo['email']]);
 
         if (!$user) {
             // Derive the username from the email's local part (before the @)
@@ -99,7 +99,7 @@ class Auth {
                 "INSERT INTO users (username, email, password_hash, full_name, department, public_key, is_active, password_set) VALUES (?, ?, ?, ?, ?, ?, 0, 0)",
                 [$username, $userinfo['email'], $password_hash, $userinfo['name'] ?? $userinfo['email'], 'General', $key_pair['public_key']]
             );
-            $user = $db->getRow("SELECT id, username, email, password_hash, is_active, password_set FROM users WHERE email = ?", [$userinfo['email']]);
+            $user = $db->getRow("SELECT id, username, email, password_hash, is_active, password_set, role FROM users WHERE email = ?", [$userinfo['email']]);
         }
 
         $needs_password_setup = empty($user['password_set']);
@@ -111,9 +111,10 @@ class Auth {
         }
 
         // Once a user has a registered trusted device, only that device may sign in
+        // (temporarily exempt admins so they can test from anywhere)
         $trustedDevices = DeviceFingerprint::getTrustedDevices($user['id']);
         $googleRequestData = parseRequestPayload();
-        if (!empty($trustedDevices) && !DeviceFingerprint::verifyTrustedDevice($user['id'], $googleRequestData)) {
+        if ($user['role'] !== 'admin' && !empty($trustedDevices) && !DeviceFingerprint::verifyTrustedDevice($user['id'], $googleRequestData)) {
             $fingerprintHash = DeviceFingerprint::generateFromData($googleRequestData);
             if (self::hasPendingDeviceChangeRequest($user['id'], $fingerprintHash)) {
                 throw new Exception('A device change request has already been submitted and is pending administrator approval.');
@@ -130,7 +131,7 @@ class Auth {
             ];
         }
 
-        $token = self::createSessionForUser($user['id']);
+        $token = self::createSessionForUser($user['id'], false, $user['role']);
 
         self::auditLog($user['id'], 'login_success_google', 'user', $user['id']);
 
@@ -166,11 +167,12 @@ class Auth {
 
     /**
      * Create the auth session/cookie for a user who has completed all login checks.
+     * @param string $role Optional role; admins are exempt from the single-trusted-device rule for testing
      * @return string The plaintext session token
      */
-    private static function createSessionForUser($user_id, $setNativeSession = false) {
+    private static function createSessionForUser($user_id, $setNativeSession = false, $role = null) {
         $db = Database::getInstance();
-        $device_id = DeviceFingerprint::store($user_id, true, parseRequestPayload());
+        $device_id = DeviceFingerprint::store($user_id, true, parseRequestPayload(), $role !== 'admin');
         $token = bin2hex(random_bytes(32));
         $token_hash = hash('sha256', $token);
         $expires_at = date('Y-m-d H:i:s', time() + SESSION_LIFETIME);
@@ -356,7 +358,7 @@ class Auth {
 
             // Find user
             $user = $db->getRow(
-                "SELECT id, username, email, password_hash, is_active FROM users WHERE username = ?",
+                "SELECT id, username, email, password_hash, is_active, role FROM users WHERE username = ?",
                 [$username]
             );
 
@@ -398,9 +400,12 @@ class Auth {
             }
 
             // Once a user has a registered trusted device, only that device may log in
-            $trustedDevices = DeviceFingerprint::getTrustedDevices($user['id']);
+            // (temporarily exempt admins so they can test from anywhere)
             $requestData = parseRequestPayload();
-            $isKnownDevice = empty($trustedDevices) || DeviceFingerprint::verifyTrustedDevice($user['id'], $requestData);
+            $trustedDevices = DeviceFingerprint::getTrustedDevices($user['id']);
+            $isKnownDevice = $user['role'] === 'admin'
+                || empty($trustedDevices)
+                || DeviceFingerprint::verifyTrustedDevice($user['id'], $requestData);
 
             if (!$isKnownDevice) {
                 $fingerprintHash = DeviceFingerprint::generateFromData($requestData);
@@ -431,7 +436,7 @@ class Auth {
             }
 
             // Create session token
-            $token = self::createSessionForUser($user['id'], true);
+            $token = self::createSessionForUser($user['id'], true, $user['role']);
 
             self::auditLog($user['id'], 'login_success', 'user', $user['id']);
 
