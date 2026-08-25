@@ -110,7 +110,6 @@ class DeviceFingerprint {
             'platform' => $data['platform'] ?? $_POST['platform'] ?? '',
             'hardware_concurrency' => $data['hardware_concurrency'] ?? $_POST['hardware_concurrency'] ?? 'unknown',
             'device_memory' => $data['device_memory'] ?? $_POST['device_memory'] ?? 'unknown',
-            'timestamp' => time()
         ];
     }
 
