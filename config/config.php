@@ -26,6 +26,23 @@ function parseRequestPayload($rawBody = null) {
     return $data;
 }
 
+/**
+ * Determine the scheme+host the current request came in on (mirrors
+ * window.location.origin), honoring reverse-proxy headers like Railway's.
+ */
+function currentOrigin() {
+    $scheme = 'http';
+    if (!empty($_SERVER['HTTP_X_FORWARDED_PROTO'])) {
+        $scheme = strtolower(explode(',', $_SERVER['HTTP_X_FORWARDED_PROTO'])[0]);
+    } elseif (!empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off') {
+        $scheme = 'https';
+    }
+
+    $host = $_SERVER['HTTP_HOST'] ?? parse_url(APP_URL, PHP_URL_HOST);
+
+    return $scheme . '://' . $host;
+}
+
 // Load environment variables: .env file (local dev), falling back to real
 // process environment variables (e.g. Railway "Variables" tab in production)
 $envFile = __DIR__ . '/../.env';

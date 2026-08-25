@@ -29,7 +29,7 @@ try {
             break;
 
         case 'google_login':
-            $redirectUri = ($data['redirect_uri'] ?? '') ?: (APP_URL . '/api/auth.php?action=google_callback');
+            $redirectUri = ($data['redirect_uri'] ?? '') ?: (currentOrigin() . '/api/auth.php?action=google_callback');
             try {
                 echo json_encode(['success' => true, 'url' => Auth::buildGoogleAuthUrl($redirectUri)]);
             } catch (Exception $e) {
@@ -41,7 +41,8 @@ try {
             if (empty($_GET['code'])) {
                 throw new Exception('Google authorization code missing');
             }
-            $redirectUri = APP_URL . '/api/auth.php?action=google_callback';
+            // Must exactly match the redirect_uri used to obtain the auth code
+            $redirectUri = currentOrigin() . '/api/auth.php?action=google_callback';
             $result = Auth::handleGoogleCallback($_GET['code'], $redirectUri);
             header('Location: ' . APP_URL . '/views/dashboard.html');
             exit;
