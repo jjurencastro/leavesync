@@ -238,7 +238,22 @@ async function checkAuth() {
     const result = await AuthManager.getProfile();
     if (!result.success) {
         window.location.href = '/views/login.html';
+        return null;
     }
+
+    // Periodically re-validate the session so it auto-logs-out (without needing
+    // a manual reload) if the device/network changes or a device-change request
+    // gets approved elsewhere and invalidates this session server-side.
+    if (!window.__sessionWatcherStarted) {
+        window.__sessionWatcherStarted = true;
+        setInterval(async () => {
+            const check = await AuthManager.getProfile();
+            if (!check.success) {
+                window.location.href = '/views/login.html';
+            }
+        }, 15000);
+    }
+
     return result.data;
 }
 

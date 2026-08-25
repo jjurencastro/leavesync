@@ -519,6 +519,14 @@ class Auth {
                 return null;
             }
 
+            // Continuously verify the device/network hasn't changed mid-session
+            // (e.g. switching Wi-Fi networks, or the device being replaced via an
+            // approved device-change request) instead of only checking at login.
+            if ($session['role'] !== 'admin' && !DeviceFingerprint::verifyTrustedDevice($session['user_id'], parseRequestPayload())) {
+                $db->execute("DELETE FROM sessions WHERE token_hash = ?", [$token_hash]);
+                return null;
+            }
+
             self::$current_user = $session;
             return $session;
 
