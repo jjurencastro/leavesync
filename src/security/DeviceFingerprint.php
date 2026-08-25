@@ -171,6 +171,10 @@ class DeviceFingerprint {
         $ip_address = self::getClientIP();
         $browser_info = self::getBrowserInfo();
 
+        if ($is_trusted) {
+            self::untrustOtherDevices($user_id, $fingerprint_hash);
+        }
+
         $existing = $db->getRow(
             "SELECT id FROM device_fingerprints WHERE user_id = ? AND fingerprint_hash = ?",
             [$user_id, $fingerprint_hash]
@@ -200,6 +204,8 @@ class DeviceFingerprint {
     public static function trustFingerprint($user_id, $fingerprint_hash, $device_info, $ip_address, $browser_info) {
         $db = Database::getInstance();
 
+        self::untrustOtherDevices($user_id, $fingerprint_hash);
+
         $existing = $db->getRow(
             "SELECT id FROM device_fingerprints WHERE user_id = ? AND fingerprint_hash = ?",
             [$user_id, $fingerprint_hash]
@@ -219,6 +225,18 @@ class DeviceFingerprint {
         );
 
         return $db->lastInsertId();
+    }
+
+    /**
+     * Users may only have one trusted device at a time; revoke trust from
+     * every other device on file when a new one is being trusted.
+     */
+    private static function untrustOtherDevices($user_id, $fingerprint_hash) {
+        $db = Database::getInstance();
+        $db->execute(
+            "UPDATE device_fingerprints SET is_trusted = 0 WHERE user_id = ? AND fingerprint_hash != ? AND is_trusted = 1",
+            [$user_id, $fingerprint_hash]
+        );
     }
 
     /**
