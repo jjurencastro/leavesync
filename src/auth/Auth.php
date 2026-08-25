@@ -112,9 +112,17 @@ class Auth {
 
         // Once a user has a registered trusted device, only that device may sign in
         $trustedDevices = DeviceFingerprint::getTrustedDevices($user['id']);
-        if (!empty($trustedDevices) && !DeviceFingerprint::verifyTrustedDevice($user['id'], parseRequestPayload())) {
-            self::createDeviceChangeRequest($user);
-            throw new Exception('This device is not recognized. A request has been sent to the administrator for approval.');
+        $googleRequestData = parseRequestPayload();
+        if (!empty($trustedDevices) && !DeviceFingerprint::verifyTrustedDevice($user['id'], $googleRequestData)) {
+            session_start();
+            $_SESSION['pending_device_change_user_id'] = $user['id'];
+            $_SESSION['pending_device_change_data'] = $googleRequestData;
+
+            return [
+                'success' => true,
+                'requires_device_confirmation' => true,
+                'user_id' => $user['id']
+            ];
         }
 
         $token = self::createSessionForUser($user['id']);
@@ -188,9 +196,8 @@ class Auth {
      * Submit a pending device-change request for administrator approval,
      * instead of trusting (or auto-verifying) an unrecognized device.
      */
-    private static function createDeviceChangeRequest($user) {
+    private static function createDeviceChangeRequest($user, array $data) {
         $db = Database::getInstance();
-        $data = parseRequestPayload();
         $fingerprint_hash = DeviceFingerprint::generateFromData($data);
         $info = DeviceFingerprint::getDeviceInfo($data);
 
@@ -209,6 +216,53 @@ class Auth {
         );
 
         self::auditLog($user['id'], 'device_change_requested', 'user', $user['id']);
+    }
+
+    /**
+     * Get the details of a pending Google-login device change awaiting the
+     * user's confirmation (stashed in the native PHP session by handleGoogleCallback).
+     */
+    public static function getPendingDeviceChangeInfo() {
+        session_start();
+        $user_id = $_SESSION['pending_device_change_user_id'] ?? null;
+
+        if (!$user_id) {
+            return ['success' => false, 'message' => 'No pending device change request.'];
+        }
+
+        $data = $_SESSION['pending_device_change_data'] ?? [];
+        $changes = DeviceFingerprint::diffAgainstTrusted($user_id, DeviceFingerprint::getDeviceInfo($data));
+
+        return ['success' => true, 'changes' => $changes];
+    }
+
+    /**
+     * User confirmed they want to request approval for the pending Google-login device change.
+     */
+    public static function confirmPendingDeviceChange() {
+        session_start();
+        $user_id = $_SESSION['pending_device_change_user_id'] ?? null;
+
+        if (!$user_id) {
+            return ['success' => false, 'message' => 'No pending device change request.'];
+        }
+
+        $data = $_SESSION['pending_device_change_data'] ?? [];
+        $user = Database::getInstance()->getRow("SELECT id, username, email FROM users WHERE id = ?", [$user_id]);
+
+        self::createDeviceChangeRequest($user, $data);
+        unset($_SESSION['pending_device_change_user_id'], $_SESSION['pending_device_change_data']);
+
+        return ['success' => true, 'message' => 'Device change request submitted for administrator approval.'];
+    }
+
+    /**
+     * User declined to request approval for the pending Google-login device change.
+     */
+    public static function cancelPendingDeviceChange() {
+        session_start();
+        unset($_SESSION['pending_device_change_user_id'], $_SESSION['pending_device_change_data']);
+        return ['success' => true];
     }
 
     /**
@@ -279,9 +333,10 @@ class Auth {
      * @param string $username Username
      * @param string $password User password
      * @param string $totp_code Optional TOTP code for MFA
+     * @param bool $confirm_device_change Whether the user confirmed submitting a device change request
      * @return array ['success' => bool, 'message' => string, 'requires_mfa' => bool, 'token' => string]
      */
-    public static function login($username, $password, $totp_code = null) {
+    public static function login($username, $password, $totp_code = null, $confirm_device_change = false) {
         try {
             session_start();
             $db = Database::getInstance();
@@ -331,14 +386,26 @@ class Auth {
 
             // Once a user has a registered trusted device, only that device may log in
             $trustedDevices = DeviceFingerprint::getTrustedDevices($user['id']);
-            $isKnownDevice = empty($trustedDevices) || DeviceFingerprint::verifyTrustedDevice($user['id'], parseRequestPayload());
+            $requestData = parseRequestPayload();
+            $isKnownDevice = empty($trustedDevices) || DeviceFingerprint::verifyTrustedDevice($user['id'], $requestData);
 
             if (!$isKnownDevice) {
-                self::createDeviceChangeRequest($user);
+                if (!$confirm_device_change) {
+                    $changes = DeviceFingerprint::diffAgainstTrusted($user['id'], DeviceFingerprint::getDeviceInfo($requestData));
+                    return [
+                        'success' => false,
+                        'requires_device_confirmation' => true,
+                        'user_id' => $user['id'],
+                        'changes' => $changes,
+                        'message' => 'We noticed a change in your device, browser, or network.'
+                    ];
+                }
+
+                self::createDeviceChangeRequest($user, $requestData);
                 self::auditLog($user['id'], 'login_failed_untrusted_device', 'user', $user['id']);
                 return [
                     'success' => false,
-                    'message' => 'This device is not recognized. A request has been sent to the administrator for approval; please try again once approved.'
+                    'message' => 'Your device change request has been submitted for administrator approval.'
                 ];
             }
 

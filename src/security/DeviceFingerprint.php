@@ -29,6 +29,40 @@ class DeviceFingerprint {
     }
 
     /**
+     * Compare a candidate device's info against the user's most recently used
+     * trusted device, returning only the fields that actually differ
+     * (browser, device/OS, IP address) so it can be shown to the user/admin.
+     * @param int $user_id
+     * @param array $newInfo Result of getDeviceInfo() for the new attempt
+     * @return array e.g. ['browser' => ['label' => 'Browser', 'old' => 'Chrome 120', 'new' => 'Firefox 115']]
+     */
+    public static function diffAgainstTrusted($user_id, array $newInfo) {
+        $db = Database::getInstance();
+        $trusted = $db->getRow(
+            "SELECT device_info FROM device_fingerprints WHERE user_id = ? AND is_trusted = 1 ORDER BY last_used DESC LIMIT 1",
+            [$user_id]
+        );
+
+        if (!$trusted) {
+            return [];
+        }
+
+        $old = json_decode($trusted['device_info'], true) ?: [];
+        $fields = ['browser' => 'Browser', 'os' => 'Device / OS', 'ip_address' => 'IP Address'];
+        $changes = [];
+
+        foreach ($fields as $key => $label) {
+            $oldValue = $old[$key] ?? 'Unknown';
+            $newValue = $newInfo[$key] ?? 'Unknown';
+            if ($oldValue !== $newValue) {
+                $changes[$key] = ['label' => $label, 'old' => $oldValue, 'new' => $newValue];
+            }
+        }
+
+        return $changes;
+    }
+
+    /**
      * Get client IP address
      * @return string IP address
      */

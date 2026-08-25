@@ -241,6 +241,11 @@ function getDeviceChangeRequests() {
          ORDER BY dcr.requested_at DESC"
     );
 
+    foreach ($requests as &$request) {
+        $info = json_decode($request['device_info'], true) ?: [];
+        $request['changes'] = DeviceFingerprint::diffAgainstTrusted($request['user_id'], $info);
+    }
+
     return ['success' => true, 'data' => $requests];
 }
 

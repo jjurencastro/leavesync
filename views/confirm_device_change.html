@@ -1,0 +1,90 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Confirm Device Change - Leave Management System</title>
+    <link rel="stylesheet" href="/css/style.css">
+</head>
+<body>
+    <div class="container" style="max-width: 500px; margin: 5rem auto;">
+        <div class="card">
+            <div class="card-header">
+                <h2 class="text-center">Device Change Detected</h2>
+                <p class="text-center" style="color: var(--text-light); margin: 0.5rem 0;">
+                    We noticed the following changes compared to your registered device.
+                </p>
+            </div>
+
+            <div class="card-body">
+                <div id="alert-container"></div>
+                <table class="table" id="changes-table">
+                    <thead>
+                        <tr>
+                            <th>Field</th>
+                            <th>Previous</th>
+                            <th>New</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <tr><td colspan="3" class="text-center">Loading...</td></tr>
+                    </tbody>
+                </table>
+
+                <p>Would you like to request administrator approval to trust this device going forward?</p>
+
+                <div style="display: flex; gap: 1rem;">
+                    <button class="btn btn-secondary" style="width: 100%;" id="cancel-btn">Cancel</button>
+                    <button class="btn btn-primary" style="width: 100%;" id="confirm-btn">Request Approval</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script src="/js/app.js"></script>
+    <script>
+        async function loadChanges() {
+            const result = await APIClient.get('auth.php?action=device_change_info');
+            const tbody = document.querySelector('#changes-table tbody');
+            tbody.innerHTML = '';
+
+            if (!result.success) {
+                window.location.href = '/views/login.html';
+                return;
+            }
+
+            const changes = result.changes || {};
+            const keys = Object.keys(changes);
+
+            if (keys.length === 0) {
+                tbody.innerHTML = '<tr><td colspan="3" class="text-center">No details available</td></tr>';
+                return;
+            }
+
+            keys.forEach(key => {
+                const c = changes[key];
+                const row = document.createElement('tr');
+                row.innerHTML = `<td>${c.label}</td><td>${c.old}</td><td>${c.new}</td>`;
+                tbody.appendChild(row);
+            });
+        }
+
+        document.getElementById('confirm-btn').addEventListener('click', async () => {
+            const result = await APIClient.post('auth.php?action=confirm_device_change', {});
+            if (result.success) {
+                UIManager.showAlert(result.message, 'success');
+                setTimeout(() => { window.location.href = '/views/login.html'; }, 2000);
+            } else {
+                UIManager.showAlert(result.message || 'Failed to submit request', 'danger');
+            }
+        });
+
+        document.getElementById('cancel-btn').addEventListener('click', async () => {
+            await APIClient.post('auth.php?action=cancel_device_change', {});
+            window.location.href = '/views/login.html';
+        });
+
+        loadChanges();
+    </script>
+</body>
+</html>

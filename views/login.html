@@ -38,6 +38,20 @@
                     <button type="submit" class="btn btn-primary" style="width: 100%;">Login</button>
                 </form>
 
+                <div id="device-change-section" style="display: none;">
+                    <table class="table" id="device-changes-table">
+                        <thead>
+                            <tr><th>Field</th><th>Previous</th><th>New</th></tr>
+                        </thead>
+                        <tbody></tbody>
+                    </table>
+                    <p>Would you like to request administrator approval to trust this device?</p>
+                    <div style="display: flex; gap: 1rem;">
+                        <button type="button" class="btn btn-secondary" style="width: 100%;" id="cancel-device-change-btn">Cancel</button>
+                        <button type="button" class="btn btn-primary" style="width: 100%;" id="confirm-device-change-btn">Request Approval</button>
+                    </div>
+                </div>
+
                 <button type="button" class="btn btn-secondary" style="width: 100%; margin-top: 0.75rem;" id="google-login-btn">Continue with Google</button>
             </div>
         </div>
@@ -81,9 +95,54 @@
                 loginUserId = result.user_id;
                 document.getElementById('mfa-section').style.display = 'block';
                 UIManager.showAlert('Please enter your authenticator code', 'info');
+            } else if (result.requires_device_confirmation) {
+                showDeviceChanges(result.changes || {});
             } else {
                 UIManager.showAlert(result.message || 'Login failed', 'danger');
             }
+        });
+
+        function showDeviceChanges(changes) {
+            document.getElementById('login-form').style.display = 'none';
+            document.getElementById('device-change-section').style.display = 'block';
+
+            const tbody = document.querySelector('#device-changes-table tbody');
+            tbody.innerHTML = '';
+            const keys = Object.keys(changes);
+
+            if (keys.length === 0) {
+                tbody.innerHTML = '<tr><td colspan="3" class="text-center">No details available</td></tr>';
+            } else {
+                keys.forEach(key => {
+                    const c = changes[key];
+                    const row = document.createElement('tr');
+                    row.innerHTML = `<td>${c.label}</td><td>${c.old}</td><td>${c.new}</td>`;
+                    tbody.appendChild(row);
+                });
+            }
+
+            UIManager.showAlert('We noticed a change in your device, browser, or network.', 'info');
+        }
+
+        document.getElementById('confirm-device-change-btn').addEventListener('click', async () => {
+            const username = document.getElementById('username').value;
+            const password = document.getElementById('password').value;
+            const totp = document.getElementById('totp').value;
+
+            const fingerprint = await DeviceFingerprintManager.getFingerprint();
+            const result = await APIClient.post('auth.php?action=login', {
+                username, password, totp_code: totp || null, confirm_device_change: true,
+                ...fingerprint
+            });
+
+            UIManager.showAlert(result.message || (result.success ? 'Request submitted' : 'Failed to submit request'), result.success === false ? 'danger' : 'success');
+            document.getElementById('device-change-section').style.display = 'none';
+            document.getElementById('login-form').style.display = 'block';
+        });
+
+        document.getElementById('cancel-device-change-btn').addEventListener('click', () => {
+            document.getElementById('device-change-section').style.display = 'none';
+            document.getElementById('login-form').style.display = 'block';
         });
     </script>
 </body>
