@@ -159,6 +159,35 @@ class DeviceFingerprint {
     }
 
     /**
+     * Directly mark an already-known fingerprint hash as trusted, without a live
+     * request context. Used when an admin approves a pending device change request.
+     * @return int Device fingerprint ID
+     */
+    public static function trustFingerprint($user_id, $fingerprint_hash, $device_info, $ip_address, $browser_info) {
+        $db = Database::getInstance();
+
+        $existing = $db->getRow(
+            "SELECT id FROM device_fingerprints WHERE user_id = ? AND fingerprint_hash = ?",
+            [$user_id, $fingerprint_hash]
+        );
+
+        if ($existing) {
+            $db->execute(
+                "UPDATE device_fingerprints SET is_trusted = 1, last_used = NOW(), device_info = ?, ip_address = ?, browser_info = ? WHERE id = ?",
+                [$device_info, $ip_address, $browser_info, $existing['id']]
+            );
+            return $existing['id'];
+        }
+
+        $db->execute(
+            "INSERT INTO device_fingerprints (user_id, fingerprint_hash, device_info, ip_address, browser_info, is_trusted) VALUES (?, ?, ?, ?, ?, 1)",
+            [$user_id, $fingerprint_hash, $device_info, $ip_address, $browser_info]
+        );
+
+        return $db->lastInsertId();
+    }
+
+    /**
      * Determine whether the current device is trusted for a user.
      * @param int $user_id User ID
      * @param array $data Optional browser/device data supplied by the client

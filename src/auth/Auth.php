@@ -5,7 +5,6 @@
 
 require_once __DIR__ . '/../security/DigitalSignature.php';
 require_once __DIR__ . '/../security/DeviceFingerprint.php';
-require_once __DIR__ . '/../email/Mailer.php';
 require_once __DIR__ . '/MFA.php';
 
 class Auth {
@@ -114,16 +113,8 @@ class Auth {
         // Once a user has a registered trusted device, only that device may sign in
         $trustedDevices = DeviceFingerprint::getTrustedDevices($user['id']);
         if (!empty($trustedDevices) && !DeviceFingerprint::verifyTrustedDevice($user['id'], parseRequestPayload())) {
-            self::requestDeviceVerification($user);
-            session_start();
-            $_SESSION['pending_device_verification_user_id'] = $user['id'];
-            self::auditLog($user['id'], 'login_untrusted_device_challenge', 'user', $user['id']);
-
-            return [
-                'success' => true,
-                'requires_device_verification' => true,
-                'user_id' => $user['id']
-            ];
+            self::createDeviceChangeRequest($user);
+            throw new Exception('This device is not recognized. A request has been sent to the administrator for approval.');
         }
 
         $token = self::createSessionForUser($user['id']);
@@ -194,87 +185,30 @@ class Auth {
     }
 
     /**
-     * Email a 6-digit one-time code to confirm an unrecognized device/network,
-     * mirroring the "new device detected" step-up verification used by banking apps.
+     * Submit a pending device-change request for administrator approval,
+     * instead of trusting (or auto-verifying) an unrecognized device.
      */
-    private static function requestDeviceVerification($user) {
+    private static function createDeviceChangeRequest($user) {
         $db = Database::getInstance();
-        $fingerprint_hash = DeviceFingerprint::generateFromData(parseRequestPayload());
-        $code = str_pad((string) random_int(0, 999999), 6, '0', STR_PAD_LEFT);
-        $code_hash = password_hash($code, PASSWORD_BCRYPT);
-        $expires_at = date('Y-m-d H:i:s', time() + 600);
+        $data = parseRequestPayload();
+        $fingerprint_hash = DeviceFingerprint::generateFromData($data);
+        $info = DeviceFingerprint::getDeviceInfo($data);
 
-        // Replace any previous outstanding code for this exact device attempt
-        $db->execute("DELETE FROM device_verifications WHERE user_id = ? AND fingerprint_hash = ?", [$user['id'], $fingerprint_hash]);
+        $existing = $db->getRow(
+            "SELECT id FROM device_change_requests WHERE user_id = ? AND fingerprint_hash = ? AND status = 'pending'",
+            [$user['id'], $fingerprint_hash]
+        );
+
+        if ($existing) {
+            return; // Already awaiting admin review, don't create a duplicate
+        }
+
         $db->execute(
-            "INSERT INTO device_verifications (user_id, fingerprint_hash, code_hash, expires_at) VALUES (?, ?, ?, ?)",
-            [$user['id'], $fingerprint_hash, $code_hash, $expires_at]
+            "INSERT INTO device_change_requests (user_id, fingerprint_hash, device_info, ip_address, browser_info) VALUES (?, ?, ?, ?, ?)",
+            [$user['id'], $fingerprint_hash, json_encode($info), $info['ip_address'], $info['browser']]
         );
 
-        $body = "Hi {$user['username']},\n\n" .
-            "We noticed a login attempt to your LeaveSync account from a new or unrecognized device/network.\n\n" .
-            "If this was you, enter this verification code to continue:\n\n    {$code}\n\n" .
-            "This code expires in 10 minutes. If you did not attempt to sign in, you can ignore this email.\n";
-
-        Mailer::send($user['email'], 'LeaveSync - Verify your new device', $body);
-        self::auditLog($user['id'], 'device_verification_sent', 'user', $user['id']);
-    }
-
-    /**
-     * Verify a device-verification code entered by the user for the current request's fingerprint.
-     */
-    private static function verifyDeviceCode($user_id, $code) {
-        if (empty($code)) {
-            return false;
-        }
-
-        $db = Database::getInstance();
-        $fingerprint_hash = DeviceFingerprint::generateFromData(parseRequestPayload());
-
-        $record = $db->getRow(
-            "SELECT * FROM device_verifications WHERE user_id = ? AND fingerprint_hash = ? AND consumed = 0 AND expires_at > CURRENT_TIMESTAMP ORDER BY id DESC LIMIT 1",
-            [$user_id, $fingerprint_hash]
-        );
-
-        if (!$record || !password_verify((string) $code, $record['code_hash'])) {
-            return false;
-        }
-
-        $db->execute("UPDATE device_verifications SET consumed = 1 WHERE id = ?", [$record['id']]);
-        return true;
-    }
-
-    /**
-     * Complete a Google-login device verification (submitted from a follow-up page,
-     * since the OAuth callback itself can't collect the code interactively).
-     */
-    public static function completeDeviceVerification($code) {
-        session_start();
-        $user_id = $_SESSION['pending_device_verification_user_id'] ?? null;
-
-        if (!$user_id) {
-            return ['success' => false, 'message' => 'No pending verification. Please log in again.'];
-        }
-
-        if (!self::verifyDeviceCode($user_id, $code)) {
-            self::auditLog($user_id, 'login_failed_device_code', 'user', $user_id);
-            return ['success' => false, 'message' => 'Invalid or expired verification code'];
-        }
-
-        unset($_SESSION['pending_device_verification_user_id']);
-
-        $db = Database::getInstance();
-        $user = $db->getRow("SELECT id, password_set FROM users WHERE id = ?", [$user_id]);
-
-        self::createSessionForUser($user_id);
-        self::auditLog($user_id, 'device_verified_google', 'user', $user_id);
-
-        return [
-            'success' => true,
-            'message' => 'Device verified',
-            'user_id' => $user_id,
-            'needs_password_setup' => empty($user['password_set'])
-        ];
+        self::auditLog($user['id'], 'device_change_requested', 'user', $user['id']);
     }
 
     /**
@@ -345,10 +279,9 @@ class Auth {
      * @param string $username Username
      * @param string $password User password
      * @param string $totp_code Optional TOTP code for MFA
-     * @param string $device_code Optional email verification code for an unrecognized device
      * @return array ['success' => bool, 'message' => string, 'requires_mfa' => bool, 'token' => string]
      */
-    public static function login($username, $password, $totp_code = null, $device_code = null) {
+    public static function login($username, $password, $totp_code = null) {
         try {
             session_start();
             $db = Database::getInstance();
@@ -401,22 +334,12 @@ class Auth {
             $isKnownDevice = empty($trustedDevices) || DeviceFingerprint::verifyTrustedDevice($user['id'], parseRequestPayload());
 
             if (!$isKnownDevice) {
-                if ($device_code === null) {
-                    self::requestDeviceVerification($user);
-                    return [
-                        'success' => false,
-                        'requires_device_verification' => true,
-                        'user_id' => $user['id'],
-                        'message' => 'A verification code has been sent to your email to confirm this new device.'
-                    ];
-                }
-
-                if (!self::verifyDeviceCode($user['id'], $device_code)) {
-                    self::auditLog($user['id'], 'login_failed_device_code', 'user', $user['id']);
-                    return ['success' => false, 'message' => 'Invalid or expired verification code'];
-                }
-
-                self::auditLog($user['id'], 'device_verified', 'user', $user['id']);
+                self::createDeviceChangeRequest($user);
+                self::auditLog($user['id'], 'login_failed_untrusted_device', 'user', $user['id']);
+                return [
+                    'success' => false,
+                    'message' => 'This device is not recognized. A request has been sent to the administrator for approval; please try again once approved.'
+                ];
             }
 
             // Create session token

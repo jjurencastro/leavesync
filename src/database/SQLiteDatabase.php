@@ -172,15 +172,18 @@ class SQLiteDatabase {
             )
         ");
 
-        $this->ensureTableExists('device_verifications', "
-            CREATE TABLE device_verifications (
+        $this->ensureTableExists('device_change_requests', "
+            CREATE TABLE device_change_requests (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
                 user_id INTEGER NOT NULL,
                 fingerprint_hash TEXT NOT NULL,
-                code_hash TEXT NOT NULL,
-                expires_at DATETIME NOT NULL,
-                consumed INTEGER DEFAULT 0,
-                created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+                device_info TEXT,
+                ip_address TEXT,
+                browser_info TEXT,
+                status TEXT DEFAULT 'pending',
+                requested_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+                resolved_at DATETIME,
+                resolved_by INTEGER
             )
         ");
 

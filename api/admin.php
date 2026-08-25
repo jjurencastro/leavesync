@@ -7,6 +7,7 @@ require_once __DIR__ . '/../config/config.php';
 require_once __DIR__ . '/../src/database/Database.php';
 require_once __DIR__ . '/../src/auth/Auth.php';
 require_once __DIR__ . '/../src/security/DigitalSignature.php';
+require_once __DIR__ . '/../src/security/DeviceFingerprint.php';
 
 header('Content-Type: application/json');
 
@@ -47,6 +48,20 @@ try {
         case 'delete_user':
             if ($method !== 'DELETE') throw new Exception('Method not allowed');
             echo json_encode(deleteUser($_GET['id'] ?? null));
+            break;
+
+        case 'device_requests':
+            echo json_encode(getDeviceChangeRequests());
+            break;
+
+        case 'approve_device_request':
+            if ($method !== 'PUT') throw new Exception('Method not allowed');
+            echo json_encode(resolveDeviceChangeRequest($_GET['id'] ?? null, 'approved', $user['id']));
+            break;
+
+        case 'reject_device_request':
+            if ($method !== 'PUT') throw new Exception('Method not allowed');
+            echo json_encode(resolveDeviceChangeRequest($_GET['id'] ?? null, 'rejected', $user['id']));
             break;
 
         case 'leave_types':
@@ -212,6 +227,49 @@ function deleteUser($id) {
     Auth::auditLog($_SESSION['user_id'], 'delete_user', 'user', $id);
 
     return ['success' => true, 'message' => 'User deleted'];
+}
+
+function getDeviceChangeRequests() {
+    global $db;
+
+    $requests = $db->getResults(
+        "SELECT dcr.id, dcr.user_id, dcr.fingerprint_hash, dcr.device_info, dcr.ip_address, dcr.browser_info,
+                dcr.status, dcr.requested_at, u.username, u.full_name, u.email
+         FROM device_change_requests dcr
+         JOIN users u ON dcr.user_id = u.id
+         WHERE dcr.status = 'pending'
+         ORDER BY dcr.requested_at DESC"
+    );
+
+    return ['success' => true, 'data' => $requests];
+}
+
+function resolveDeviceChangeRequest($id, $status, $admin_id) {
+    global $db;
+
+    if (!$id) throw new Exception('Request ID required');
+
+    $request = $db->getRow("SELECT * FROM device_change_requests WHERE id = ? AND status = 'pending'", [$id]);
+    if (!$request) throw new Exception('Pending device request not found');
+
+    if ($status === 'approved') {
+        DeviceFingerprint::trustFingerprint(
+            $request['user_id'],
+            $request['fingerprint_hash'],
+            $request['device_info'],
+            $request['ip_address'],
+            $request['browser_info']
+        );
+    }
+
+    $db->execute(
+        "UPDATE device_change_requests SET status = ?, resolved_at = NOW(), resolved_by = ? WHERE id = ?",
+        [$status, $admin_id, $id]
+    );
+
+    Auth::auditLog($admin_id, "device_request_{$status}", 'device_change_request', $id);
+
+    return ['success' => true, 'message' => "Device request {$status}"];
 }
 
 function getLeaveTypes() {

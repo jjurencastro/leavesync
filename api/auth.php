@@ -20,8 +20,7 @@ try {
         case 'login':
             if ($method !== 'POST') throw new Exception('Method not allowed');
             $totp = $data['totp_code'] ?? null;
-            $deviceCode = $data['device_code'] ?? null;
-            echo json_encode(Auth::login($data['username'] ?? '', $data['password'] ?? '', $totp, $deviceCode));
+            echo json_encode(Auth::login($data['username'] ?? '', $data['password'] ?? '', $totp));
             break;
 
         case 'google_login':
@@ -45,18 +44,9 @@ try {
                 header('Location: ' . rtrim(APP_URL, '/') . '/views/login.html?google_error=' . urlencode($e->getMessage()));
                 exit;
             }
-            if (!empty($result['requires_device_verification'])) {
-                header('Location: ' . rtrim(APP_URL, '/') . '/views/verify_device.html');
-                exit;
-            }
             $destination = !empty($result['needs_password_setup']) ? '/views/activate.html' : '/views/dashboard.html';
             header('Location: ' . rtrim(APP_URL, '/') . $destination);
             exit;
-
-        case 'verify_device':
-            if ($method !== 'POST') throw new Exception('Method not allowed');
-            echo json_encode(Auth::completeDeviceVerification($data['code'] ?? ''));
-            break;
 
         case 'set_password':
             if ($method !== 'POST') throw new Exception('Method not allowed');
