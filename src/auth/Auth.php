@@ -114,6 +114,11 @@ class Auth {
         $trustedDevices = DeviceFingerprint::getTrustedDevices($user['id']);
         $googleRequestData = parseRequestPayload();
         if (!empty($trustedDevices) && !DeviceFingerprint::verifyTrustedDevice($user['id'], $googleRequestData)) {
+            $fingerprintHash = DeviceFingerprint::generateFromData($googleRequestData);
+            if (self::hasPendingDeviceChangeRequest($user['id'], $fingerprintHash)) {
+                throw new Exception('A device change request has already been submitted and is pending administrator approval.');
+            }
+
             session_start();
             $_SESSION['pending_device_change_user_id'] = $user['id'];
             $_SESSION['pending_device_change_data'] = $googleRequestData;
@@ -193,6 +198,19 @@ class Auth {
     }
 
     /**
+     * Whether the user already has a pending device-change request for this
+     * exact device fingerprint, so callers can avoid creating duplicates.
+     */
+    private static function hasPendingDeviceChangeRequest($user_id, $fingerprint_hash) {
+        $db = Database::getInstance();
+        $existing = $db->getRow(
+            "SELECT id FROM device_change_requests WHERE user_id = ? AND fingerprint_hash = ? AND status = 'pending'",
+            [$user_id, $fingerprint_hash]
+        );
+        return !empty($existing);
+    }
+
+    /**
      * Submit a pending device-change request for administrator approval,
      * instead of trusting (or auto-verifying) an unrecognized device.
      */
@@ -201,12 +219,7 @@ class Auth {
         $fingerprint_hash = DeviceFingerprint::generateFromData($data);
         $info = DeviceFingerprint::getDeviceInfo($data);
 
-        $existing = $db->getRow(
-            "SELECT id FROM device_change_requests WHERE user_id = ? AND fingerprint_hash = ? AND status = 'pending'",
-            [$user['id'], $fingerprint_hash]
-        );
-
-        if ($existing) {
+        if (self::hasPendingDeviceChangeRequest($user['id'], $fingerprint_hash)) {
             return; // Already awaiting admin review, don't create a duplicate
         }
 
@@ -390,6 +403,14 @@ class Auth {
             $isKnownDevice = empty($trustedDevices) || DeviceFingerprint::verifyTrustedDevice($user['id'], $requestData);
 
             if (!$isKnownDevice) {
+                $fingerprintHash = DeviceFingerprint::generateFromData($requestData);
+                if (self::hasPendingDeviceChangeRequest($user['id'], $fingerprintHash)) {
+                    return [
+                        'success' => false,
+                        'message' => 'A device change request has already been submitted and is pending administrator approval.'
+                    ];
+                }
+
                 if (!$confirm_device_change) {
                     $changes = DeviceFingerprint::diffAgainstTrusted($user['id'], DeviceFingerprint::getDeviceInfo($requestData));
                     return [
