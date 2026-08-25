@@ -265,6 +265,9 @@ function resolveDeviceChangeRequest($id, $status, $admin_id) {
             $request['ip_address'],
             $request['browser_info']
         );
+
+        // Force logout everywhere so the user must sign in again from the newly trusted device
+        $db->execute("DELETE FROM sessions WHERE user_id = ?", [$request['user_id']]);
     }
 
     $db->execute(
