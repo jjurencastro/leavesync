@@ -110,6 +110,13 @@ class Auth {
             throw new Exception('Your account activation is pending administrator approval.');
         }
 
+        // Once a user has a registered trusted device, only that device may sign in
+        $trustedDevices = DeviceFingerprint::getTrustedDevices($user['id']);
+        if (!empty($trustedDevices) && !DeviceFingerprint::verifyTrustedDevice($user['id'], $_POST)) {
+            self::auditLog($user['id'], 'login_failed_untrusted_device', 'user', $user['id']);
+            throw new Exception('This device is not recognized. Please sign in from your registered device.');
+        }
+
         $device_id = DeviceFingerprint::store($user['id'], true, $_POST);
         $token = bin2hex(random_bytes(32));
         $token_hash = hash('sha256', $token);
@@ -277,6 +284,13 @@ class Auth {
                         return ['success' => false, 'message' => 'Invalid MFA code'];
                     }
                 }
+            }
+
+            // Once a user has a registered trusted device, only that device may log in
+            $trustedDevices = DeviceFingerprint::getTrustedDevices($user['id']);
+            if (!empty($trustedDevices) && !DeviceFingerprint::verifyTrustedDevice($user['id'], $_POST)) {
+                self::auditLog($user['id'], 'login_failed_untrusted_device', 'user', $user['id']);
+                return ['success' => false, 'message' => 'This device is not recognized. Please sign in from your registered device.'];
             }
 
             // Get or create a trusted device fingerprint for this session
