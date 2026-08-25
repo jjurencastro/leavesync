@@ -219,8 +219,8 @@ views/*.html
 ## 🌐 Deployment
 
 ### Production Requirements
-- PHP 7.4+ with OpenSSL
-- MySQL 5.7+ or PostgreSQL
+- PHP 8.2+ with OpenSSL
+- Railway MySQL 9+
 - HTTPS certificate
 - Strong encryption keys
 - Firewall configuration

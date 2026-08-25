@@ -11,5 +11,4 @@ vendor/
 config/local.php
 session/
 cache/
-storage/*.sqlite
 storage/*.db

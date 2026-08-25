@@ -155,10 +155,11 @@ function createUser($data) {
     $key_pair = DigitalSignature::generateKeyPair();
 
     // Insert user
-    $sql = "INSERT INTO users (username, email, password_hash, full_name, department, role, public_key, is_active) 
-            VALUES (?, ?, ?, ?, ?, ?, ?, 1)";
+        $sql = "INSERT INTO users (id, username, email, password_hash, full_name, department, role, public_key, is_active)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, 1)";
 
-    $db->execute($sql, [
+        $values = [
+            Auth::reserveNextUserId(),
         $data['username'],
         $data['email'],
         $password_hash,
@@ -166,7 +167,8 @@ function createUser($data) {
         $data['department'] ?? 'General',
         $data['role'] ?? 'employee',
         $key_pair['public_key']
-    ]);
+    ];
+    $db->execute($sql, $values);
 
     Auth::auditLog($_SESSION['user_id'], 'create_user', 'user', $db->lastInsertId());
 
@@ -219,10 +221,17 @@ function deleteUser($id) {
 
     if (!$id) throw new Exception('User ID required');
 
-    $user = $db->getRow("SELECT id FROM users WHERE id = ?", [$id]);
+    $user = $db->getRow("SELECT id, role FROM users WHERE id = ?", [$id]);
     if (!$user) throw new Exception('User not found');
+    if ($user['role'] === 'admin') throw new Exception('The admin account cannot be deleted');
 
     $db->execute("DELETE FROM users WHERE id = ?", [$id]);
+
+    $remainingUsers = $db->getRow("SELECT COUNT(*) AS count FROM users WHERE role <> 'admin'");
+    if ((int) $remainingUsers['count'] === 0) {
+        $db->execute("UPDATE user_id_sequence SET next_id = 2 WHERE id = 1");
+        $db->execute("ALTER TABLE users AUTO_INCREMENT = 2");
+    }
 
     Auth::auditLog($_SESSION['user_id'], 'delete_user', 'user', $id);
 

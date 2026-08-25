@@ -102,10 +102,12 @@ function createLeaveRequest($data, $user) {
         throw new Exception('Only registered and trusted devices can submit leave requests.');
     }
 
-    // Create leave request
+        $employee = $db->getRow("SELECT supervisor_id FROM users WHERE id = ?", [$user['id']]);
+
+        // Create leave request
     $sql = "INSERT INTO leave_requests 
-            (user_id, leave_type_id, start_date, end_date, number_of_days, reason, status) 
-            VALUES (?, ?, ?, ?, ?, ?, 'pending')";
+            (user_id, leave_type_id, start_date, end_date, number_of_days, reason, status, manager_id)
+            VALUES (?, ?, ?, ?, ?, ?, 'pending', ?)";
 
     if (!$db->execute($sql, [
         $user['id'],
@@ -113,7 +115,8 @@ function createLeaveRequest($data, $user) {
         $data['start_date'],
         $data['end_date'],
         $days,
-        $data['reason']
+        $data['reason'],
+        $employee['supervisor_id'] ?? null
     ])) {
         throw new Exception('Failed to create leave request');
     }
@@ -376,11 +379,10 @@ function getLeaveBalance($user_id) {
 function notifyManagers($user_id, $message, $entity_id) {
     global $db;
 
-    $user = $db->getRow("SELECT department FROM users WHERE id = ?", [$user_id]);
-    $managers = $db->getResults(
-        "SELECT id FROM users WHERE role = 'manager' AND department = ?",
-        [$user['department']]
-    );
+    $user = $db->getRow("SELECT supervisor_id, department FROM users WHERE id = ?", [$user_id]);
+    $managers = $user['supervisor_id']
+        ? $db->getResults("SELECT id FROM users WHERE id = ? AND is_active = 1 AND role IN ('manager', 'admin')", [$user['supervisor_id']])
+        : $db->getResults("SELECT id FROM users WHERE role = 'manager' AND department = ?", [$user['department']]);
 
     foreach ($managers as $manager) {
         createNotification($manager['id'], 'New Leave Request', $message, 'leave_request', $entity_id);

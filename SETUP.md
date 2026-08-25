@@ -20,15 +20,6 @@ GRANT ALL PRIVILEGES ON leavesync.* TO 'leavesync'@'localhost';
 FLUSH PRIVILEGES;
 ```
 
-#### PostgreSQL
-```bash
-# Create database
-createdb leavesync
-
-# Import schema
-psql -U postgres -d leavesync -f /path/to/leavesync/src/database/schema.sql
-```
-
 ### 2. Configuration
 
 ```bash
@@ -206,8 +197,6 @@ ini_set('zlib.output_compression', 'On');
 # MySQL
 mysqldump -u root -p leavesync > backup.sql
 
-# PostgreSQL
-pg_dump leavesync > backup.sql
 ```
 
 ### Restore
@@ -215,8 +204,6 @@ pg_dump leavesync > backup.sql
 # MySQL
 mysql -u root -p leavesync < backup.sql
 
-# PostgreSQL
-psql leavesync < backup.sql
 ```
 
 ## SSL/HTTPS Setup

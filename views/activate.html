@@ -12,7 +12,7 @@
             <div class="card-header">
                 <h2 class="text-center">Activate Your Account</h2>
                 <p class="text-center" style="color: var(--text-light); margin: 0.5rem 0;">
-                    Set a password to finish setting up your LeaveSync account.
+                    Complete your profile before requesting account activation.
                 </p>
             </div>
 
@@ -20,6 +20,34 @@
                 <div id="alert-container"></div>
 
                 <form id="activate-form">
+                    <div class="form-group">
+                        <label for="username">Assigned username</label>
+                        <input type="text" id="username" readonly>
+                    </div>
+
+                    <div class="form-group">
+                        <label for="gender">Gender</label>
+                        <select id="gender" required>
+                            <option value="">Select an option</option>
+                            <option value="male">Male</option>
+                            <option value="female">Female</option>
+                            <option value="non_binary">Non-binary</option>
+                            <option value="prefer_not_to_say">Prefer not to say</option>
+                        </select>
+                    </div>
+
+                    <div class="form-group">
+                        <label for="department">Department</label>
+                        <input type="text" id="department" maxlength="50" required>
+                    </div>
+
+                    <div class="form-group">
+                        <label for="supervisor_id">Immediate supervisor</label>
+                        <select id="supervisor_id" required>
+                            <option value="">Select an approver</option>
+                        </select>
+                    </div>
+
                     <div class="form-group">
                         <label for="password">New Password (min. 8 characters)</label>
                         <input type="password" id="password" name="password" required minlength="8">
@@ -38,7 +66,18 @@
 
     <script src="/js/app.js"></script>
     <script>
-        checkAuth();
+        const activationUser = await checkAuth();
+        const activationInfo = await AuthManager.getActivationInfo();
+        if (activationInfo.success) {
+            document.getElementById('username').value = activationInfo.data.user.username;
+            const supervisorSelect = document.getElementById('supervisor_id');
+            activationInfo.data.supervisors.forEach((supervisor) => {
+                const option = document.createElement('option');
+                option.value = supervisor.id;
+                option.textContent = `${supervisor.full_name} (${supervisor.role})`;
+                supervisorSelect.appendChild(option);
+            });
+        }
 
         document.getElementById('activate-form').addEventListener('submit', async (e) => {
             e.preventDefault();
@@ -51,7 +90,12 @@
                 return;
             }
 
-            const result = await AuthManager.setPassword(password);
+            const result = await AuthManager.setPassword({
+                password,
+                gender: document.getElementById('gender').value,
+                department: document.getElementById('department').value.trim(),
+                supervisor_id: document.getElementById('supervisor_id').value
+            });
 
             if (result.success) {
                 UIManager.showAlert('Password set! Your account now awaits administrator approval. Logging you out...', 'success');

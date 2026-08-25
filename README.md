@@ -24,16 +24,16 @@ A comprehensive, secure leave management system built with PHP and MySQL, featur
 ## 🛠️ Technology Stack
 
 - **Frontend**: HTML5, CSS3, JavaScript (Vanilla)
-- **Backend**: PHP 7.4+
-- **Database**: MySQL 5.7+ or PostgreSQL
+- **Backend**: PHP 8.2+
+- **Database**: Railway MySQL 9+
 - **Cryptography**: OpenSSL (RSA-4096, SHA-256)
 - **Authentication**: TOTP (RFC 6238), JWT, Digital Signatures
 - **Security**: Device Fingerprinting, Encrypted Sessions, Secure Cookies
 
 ## 📋 Prerequisites
 
-- PHP 7.4 or higher
-- MySQL 5.7+ or PostgreSQL
+- PHP 8.2 or higher
+- MySQL 9+
 - OpenSSL library (for digital signatures)
 - Modern web browser with JavaScript enabled
 - HTTPS certificate (self-signed for development)
@@ -62,11 +62,6 @@ APP_URL=https://localhost:8443
 ### 3. Create Database
 ```bash
 mysql -u root -p leavesync < src/database/schema.sql
-```
-
-Or for PostgreSQL:
-```bash
-psql -U postgres -d leavesync -f src/database/schema.sql
 ```
 
 ### 4. Set Permissions
@@ -313,12 +308,11 @@ WORKDIR /var/www/html
 
 - [API Documentation](docs/API.md)
 - [Security Guidelines](docs/SECURITY.md)
-- [Database Schema](docs/SCHEMA.md)
 
 ## 🐛 Troubleshooting
 
 ### Database Connection Issues
-- Verify MySQL/PostgreSQL is running
+- Verify the Railway MySQL service is running
 - Check database credentials in `.env`
 - Ensure database user has proper permissions
 - Check firewall rules

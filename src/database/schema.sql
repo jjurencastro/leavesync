@@ -8,6 +8,8 @@ CREATE TABLE IF NOT EXISTS users (
     password_hash VARCHAR(255) NOT NULL,
     full_name VARCHAR(100) NOT NULL,
     department VARCHAR(50),
+    gender VARCHAR(30),
+    supervisor_id INT,
     role ENUM('employee', 'manager', 'admin') DEFAULT 'employee',
     is_active BOOLEAN DEFAULT TRUE,
     device_fingerprint VARCHAR(255),
@@ -17,8 +19,17 @@ CREATE TABLE IF NOT EXISTS users (
     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
     INDEX idx_email (email),
     INDEX idx_username (username),
-    INDEX idx_role (role)
+    INDEX idx_role (role),
+    INDEX idx_supervisor_id (supervisor_id),
+    FOREIGN KEY (supervisor_id) REFERENCES users(id) ON DELETE SET NULL
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+CREATE TABLE IF NOT EXISTS user_id_sequence (
+    id TINYINT PRIMARY KEY,
+    next_id INT NOT NULL
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+INSERT INTO user_id_sequence (id, next_id) VALUES (1, 2);
 
 -- Two-Factor Authentication Secrets
 CREATE TABLE IF NOT EXISTS mfa_secrets (

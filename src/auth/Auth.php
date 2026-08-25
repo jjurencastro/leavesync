@@ -95,9 +95,10 @@ class Auth {
             $password_hash = password_hash(bin2hex(random_bytes(24)), PASSWORD_BCRYPT);
             $key_pair = DigitalSignature::generateKeyPair();
             // New Google sign-ups are pending until an admin approves them
+            $registrationId = self::reserveNextUserId();
             $db->execute(
-                "INSERT INTO users (username, email, password_hash, full_name, department, public_key, is_active, password_set) VALUES (?, ?, ?, ?, ?, ?, 0, 0)",
-                [$username, $userinfo['email'], $password_hash, $userinfo['name'] ?? $userinfo['email'], 'General', $key_pair['public_key']]
+                "INSERT INTO users (id, username, email, password_hash, full_name, department, public_key, is_active, password_set) VALUES (?, ?, ?, ?, ?, ?, ?, 0, 0)",
+                [$registrationId, $username, $userinfo['email'], $password_hash, $userinfo['name'] ?? $userinfo['email'], 'General', $key_pair['public_key']]
             );
             $user = $db->getRow("SELECT id, username, email, password_hash, is_active, password_set, role FROM users WHERE email = ?", [$userinfo['email']]);
         }
@@ -317,14 +318,15 @@ class Auth {
                     (username, email, password_hash, full_name, department, public_key) 
                     VALUES (?, ?, ?, ?, ?, ?)";
 
-            $db->execute($sql, [
-                $data['username'],
-                $data['email'],
-                $password_hash,
-                $data['full_name'],
-                $data['department'] ?? 'General',
-                $key_pair['public_key']
-            ]);
+            $registrationId = self::reserveNextUserId();
+            $sql = "INSERT INTO users
+                    (id, username, email, password_hash, full_name, department, public_key)
+                    VALUES (?, ?, ?, ?, ?, ?, ?)";
+            $values = [
+                $registrationId, $data['username'], $data['email'], $password_hash, $data['full_name'],
+                $data['department'] ?? 'General', $key_pair['public_key']
+            ];
+            $db->execute($sql, $values);
 
             $user_id = $db->lastInsertId();
             self::initializeLeaveBalances($user_id);
@@ -509,7 +511,7 @@ class Auth {
 
             $db = Database::getInstance();
             $session = $db->getRow(
-                "SELECT s.*, u.id, u.username, u.email, u.full_name, u.department, u.role, u.device_fingerprint, u.password_set
+                "SELECT s.*, u.id, u.username, u.email, u.full_name, u.department, u.gender, u.supervisor_id, u.role, u.device_fingerprint, u.password_set
                  FROM sessions s
                  JOIN users u ON s.user_id = u.id
                  WHERE s.token_hash = ? AND s.expires_at > CURRENT_TIMESTAMP",
@@ -552,21 +554,69 @@ class Auth {
      * @param string $password
      * @return array ['success' => bool, 'message' => string]
      */
-    public static function setPassword($user_id, $password) {
+    public static function setPassword($user_id, $password, array $data = []) {
         if (empty($password) || strlen($password) < 8) {
             return ['success' => false, 'message' => 'Password must be at least 8 characters'];
         }
 
         $db = Database::getInstance();
+        $gender = $data['gender'] ?? '';
+        $department = trim($data['department'] ?? '');
+        $supervisor_id = (int) ($data['supervisor_id'] ?? 0);
+
+        $allowedGenders = ['male', 'female', 'non_binary', 'prefer_not_to_say'];
+        if (!in_array($gender, $allowedGenders, true)) {
+            return ['success' => false, 'message' => 'Please select a valid gender option'];
+        }
+        if ($department === '' || strlen($department) > 50) {
+            return ['success' => false, 'message' => 'Department is required and must be 50 characters or fewer'];
+        }
+
+        $supervisor = $db->getRow(
+            "SELECT id FROM users WHERE id = ? AND id <> ? AND is_active = 1 AND role IN ('manager', 'admin')",
+            [$supervisor_id, $user_id]
+        );
+        if (!$supervisor) {
+            return ['success' => false, 'message' => 'Please select an active immediate supervisor'];
+        }
+
         $password_hash = password_hash($password, PASSWORD_BCRYPT);
         $db->execute(
-            "UPDATE users SET password_hash = ?, password_set = 1 WHERE id = ?",
-            [$password_hash, $user_id]
+            "UPDATE users SET password_hash = ?, password_set = 1, gender = ?, department = ?, supervisor_id = ? WHERE id = ?",
+            [$password_hash, $gender, $department, $supervisor_id, $user_id]
         );
 
         self::auditLog($user_id, 'password_set', 'user', $user_id);
 
         return ['success' => true, 'message' => 'Password set successfully'];
+    }
+
+    public static function getActivationInfo($user_id) {
+        $db = Database::getInstance();
+        $user = $db->getRow(
+            "SELECT username, full_name, email FROM users WHERE id = ?",
+            [$user_id]
+        );
+        $supervisors = $db->getResults(
+            "SELECT id, username, full_name, department, role FROM users
+             WHERE id <> ? AND is_active = 1 AND role IN ('manager', 'admin')
+             ORDER BY full_name, username",
+            [$user_id]
+        );
+
+        return ['success' => true, 'data' => ['user' => $user, 'supervisors' => $supervisors]];
+    }
+
+    public static function reserveNextUserId() {
+        $db = Database::getInstance();
+        $sequence = $db->getRow("SELECT next_id FROM user_id_sequence WHERE id = 1");
+        if (!$sequence) {
+            $db->execute("INSERT INTO user_id_sequence (id, next_id) VALUES (1, 2)");
+            $sequence = ['next_id' => 2];
+        }
+        $nextId = (int) $sequence['next_id'];
+        $db->execute("UPDATE user_id_sequence SET next_id = ? WHERE id = 1", [$nextId + 1]);
+        return $nextId;
     }
 
     /**

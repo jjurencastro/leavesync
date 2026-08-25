@@ -83,8 +83,12 @@ class AuthManager {
         });
     }
 
-    static async setPassword(password) {
-        return APIClient.post('auth.php?action=set_password', { password });
+    static async getActivationInfo() {
+        return APIClient.get('auth.php?action=activation_info');
+    }
+
+    static async setPassword(data) {
+        return APIClient.post('auth.php?action=set_password', data);
     }
 
     static async logout() {

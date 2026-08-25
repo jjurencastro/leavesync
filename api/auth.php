@@ -78,7 +78,16 @@ try {
                 throw new Exception('Unauthorized');
             }
             $user = Auth::getCurrentUser();
-            echo json_encode(Auth::setPassword($user['id'], $data['password'] ?? ''));
+            echo json_encode(Auth::setPassword($user['id'], $data['password'] ?? '', $data));
+            break;
+
+        case 'activation_info':
+            if (!Auth::isAuthenticated()) {
+                http_response_code(401);
+                throw new Exception('Unauthorized');
+            }
+            $user = Auth::getCurrentUser();
+            echo json_encode(Auth::getActivationInfo($user['id']));
             break;
 
         case 'logout':
