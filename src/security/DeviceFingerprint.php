@@ -202,6 +202,8 @@ class DeviceFingerprint {
      * only fields derivable from server-side request headers, so a Google
      * OAuth redirect (no JS payload) and a direct form login (with JS extras)
      * produce the same fingerprint for the same actual browser/device.
+     * IP address is deliberately excluded: mobile carriers/networks rotate it
+     * mid-session, which would otherwise untrust the device and force logout.
      */
     private static function buildHashData(array $data = []) {
         $full = self::buildFingerprintData($data);
@@ -209,7 +211,6 @@ class DeviceFingerprint {
             'user_agent' => $full['user_agent'],
             'accept_language' => $full['accept_language'],
             'accept_encoding' => $full['accept_encoding'],
-            'ip_address' => $full['ip_address'],
             'browser' => $full['browser'],
             'os' => $full['os'],
         ];
