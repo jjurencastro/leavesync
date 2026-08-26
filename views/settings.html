@@ -31,9 +31,48 @@
             </header>
 
     <div class="container" style="max-width: 700px; padding: 2rem 0;">
-        <h1>Account Settings</h1>
+        <h1>My Info</h1>
 
         <div id="alert-container"></div>
+
+        <!-- Profile Info -->
+        <div class="card">
+            <div class="card-header">
+                <h2>My Profile</h2>
+            </div>
+            <div class="card-body">
+                <table class="table">
+                    <tr>
+                        <th>Full Name</th>
+                        <td id="profile-full-name">-</td>
+                    </tr>
+                    <tr>
+                        <th>Employee ID</th>
+                        <td id="profile-employee-id">-</td>
+                    </tr>
+                    <tr>
+                        <th>Username</th>
+                        <td id="profile-username">-</td>
+                    </tr>
+                    <tr>
+                        <th>Email</th>
+                        <td id="profile-email">-</td>
+                    </tr>
+                    <tr>
+                        <th>Department</th>
+                        <td id="profile-department">-</td>
+                    </tr>
+                    <tr>
+                        <th>Position</th>
+                        <td id="profile-position">-</td>
+                    </tr>
+                    <tr>
+                        <th>Gender</th>
+                        <td id="profile-gender">-</td>
+                    </tr>
+                </table>
+            </div>
+        </div>
 
         <!-- Two-Factor Authentication -->
         <div class="card">
@@ -130,7 +169,18 @@
         async function loadSettings() {
             // Check MFA status
             const profile = await AuthManager.getProfile();
-            
+
+            if (profile.success) {
+                const u = profile.data;
+                document.getElementById('profile-full-name').textContent = u.full_name || '-';
+                document.getElementById('profile-employee-id').textContent = u.id ?? '-';
+                document.getElementById('profile-username').textContent = u.username || '-';
+                document.getElementById('profile-email').textContent = u.email || '-';
+                document.getElementById('profile-department').textContent = u.department || '-';
+                document.getElementById('profile-position').textContent = u.position || '-';
+                document.getElementById('profile-gender').textContent = u.gender || '-';
+            }
+
             // Load trusted devices
             const devicesResult = await AuthManager.getTrustedDevices();
             if (devicesResult.success) {

@@ -205,7 +205,7 @@ class AuthSession {
 
             $db = Database::getInstance();
             $session = $db->getRow(
-                "SELECT s.*, u.id, u.username, u.email, u.full_name, u.department, u.gender, u.supervisor_id, u.role, u.device_fingerprint, u.password_set
+                "SELECT s.*, u.id, u.username, u.email, u.full_name, u.department, u.position, u.gender, u.supervisor_id, u.role, u.device_fingerprint, u.password_set
                  FROM sessions s
                  JOIN users u ON s.user_id = u.id
                  WHERE s.token_hash = ? AND s.expires_at > CURRENT_TIMESTAMP",
