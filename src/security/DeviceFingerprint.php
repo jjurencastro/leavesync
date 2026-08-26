@@ -54,7 +54,7 @@ class DeviceFingerprint {
         }
 
         $old = json_decode($trusted['device_info'], true) ?: [];
-        $fields = ['browser' => 'Browser', 'os' => 'Device / OS', 'ip_address' => 'IP Address'];
+        $fields = ['browser' => 'Browser', 'device' => 'Device', 'os' => 'Operating System', 'ip_address' => 'IP Address'];
         $changes = [];
 
         foreach ($fields as $key => $label) {
@@ -75,6 +75,10 @@ class DeviceFingerprint {
                     $changes[$key]['old'] = self::maskVersion($changes[$key]['old']);
                     $changes[$key]['new'] = self::maskVersion($changes[$key]['new']);
                 }
+            }
+            if (isset($changes['device'])) {
+                $changes['device']['old'] = self::maskDevice($changes['device']['old']);
+                $changes['device']['new'] = self::maskDevice($changes['device']['new']);
             }
         }
 
@@ -110,6 +114,16 @@ class DeviceFingerprint {
         }
         $masked = trim(preg_replace('/[\d][\d.\s_]*$/', '', $value));
         return $masked !== '' ? $masked : $value;
+    }
+
+    /**
+     * Generalize a device string to its broad category (e.g. a raw Android
+     * model string becomes "Android Device") so the requesting user doesn't
+     * see exact hardware identifiers.
+     */
+    private static function maskDevice($value) {
+        $generic = ['iPhone', 'iPad', 'iPod', 'Android Device', 'Windows PC', 'Mac', 'Linux PC', 'Unknown'];
+        return in_array($value, $generic, true) ? $value : 'Unknown Device';
     }
 
     /**
@@ -158,13 +172,21 @@ class DeviceFingerprint {
     }
 
     /**
-     * Extract OS information from user agent
+     * Extract OS information from user agent. Mobile OSes are checked before
+     * desktop macOS/Linux, since iOS/Android user agents also contain the
+     * substrings "Mac OS X" / "Linux" and would otherwise be misdetected.
      * @return string Operating system
      */
     private static function getOSInfo() {
         $ua = $_SERVER['HTTP_USER_AGENT'] ?? '';
 
-        if (strpos($ua, 'Windows NT 10.0') !== false) {
+        if (strpos($ua, 'iPhone') !== false || strpos($ua, 'iPad') !== false || strpos($ua, 'iPod') !== false) {
+            preg_match('/OS ([\d_]+) like Mac OS X/', $ua, $matches);
+            return 'iOS ' . (isset($matches[1]) ? str_replace('_', '.', $matches[1]) : 'unknown');
+        } elseif (strpos($ua, 'Android') !== false) {
+            preg_match('/Android ([\d.]+)/', $ua, $matches);
+            return 'Android ' . ($matches[1] ?? 'unknown');
+        } elseif (strpos($ua, 'Windows NT 10.0') !== false) {
             return 'Windows 10';
         } elseif (strpos($ua, 'Windows NT 6.3') !== false) {
             return 'Windows 8.1';
@@ -180,6 +202,33 @@ class DeviceFingerprint {
         }
     }
 
+    /**
+     * Determine the physical device type/model, separate from the OS
+     * (e.g. "iPhone", "iPad", "Android Device", "Windows PC", "Mac", "Linux PC").
+     * @return string Device type
+     */
+    private static function getDeviceType() {
+        $ua = $_SERVER['HTTP_USER_AGENT'] ?? '';
+
+        if (strpos($ua, 'iPad') !== false) {
+            return 'iPad';
+        } elseif (strpos($ua, 'iPhone') !== false) {
+            return 'iPhone';
+        } elseif (strpos($ua, 'iPod') !== false) {
+            return 'iPod';
+        } elseif (strpos($ua, 'Android') !== false) {
+            return 'Android Device';
+        } elseif (strpos($ua, 'Windows') !== false) {
+            return 'Windows PC';
+        } elseif (strpos($ua, 'Macintosh') !== false) {
+            return 'Mac';
+        } elseif (strpos($ua, 'Linux') !== false) {
+            return 'Linux PC';
+        } else {
+            return 'Unknown';
+        }
+    }
+
     private static function buildFingerprintData(array $data = []) {
         return [
             'user_agent' => $_SERVER['HTTP_USER_AGENT'] ?? '',
@@ -188,6 +237,7 @@ class DeviceFingerprint {
             'ip_address' => self::getClientIP(),
             'browser' => self::getBrowserInfo(),
             'os' => self::getOSInfo(),
+            'device' => self::getDeviceType(),
             'screen_resolution' => $data['screen_resolution'] ?? $_POST['screen_resolution'] ?? 'unknown',
             'timezone' => $data['timezone'] ?? $_POST['timezone'] ?? date_default_timezone_get(),
             'language' => $data['language'] ?? $_POST['language'] ?? '',
