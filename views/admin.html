@@ -94,8 +94,9 @@
                 return;
             }
 
-            // Only show accounts that finished setting up their password (i.e. actually requested activation)
-            const pendingUsers = (result.data || []).filter(u => !u.is_active && u.password_set);
+            // Only show accounts that finished setting up their password (i.e. actually requested activation).
+            // Non-ADMIN departments are approved by their own Dean instead (see dashboard.html).
+            const pendingUsers = (result.data || []).filter(u => !u.is_active && u.password_set && u.department === 'ADMIN');
 
             if (pendingUsers.length === 0) {
                 tbody.innerHTML = '<tr><td colspan="5" class="text-center">No pending approvals</td></tr>';

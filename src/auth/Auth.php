@@ -640,8 +640,28 @@ class Auth {
         );
 
         self::auditLog($user_id, 'password_set', 'user', $user_id);
+        self::notifyApprovers($user_id, $department);
 
         return ['success' => true, 'message' => 'Password set successfully'];
+    }
+
+    /**
+     * Alert whoever approves pending accounts for this department: the Dean for
+     * academic departments, or admin for the ADMIN department (which has no Dean).
+     */
+    private static function notifyApprovers($user_id, $department) {
+        $db = Database::getInstance();
+        $applicant = $db->getRow("SELECT full_name FROM users WHERE id = ?", [$user_id]);
+        $approvers = $department === 'ADMIN'
+            ? $db->getResults("SELECT id FROM users WHERE role = 'admin' AND is_active = 1")
+            : $db->getResults("SELECT id FROM users WHERE role = 'manager' AND department = ? AND is_active = 1", [$department]);
+
+        foreach ($approvers as $approver) {
+            $db->execute(
+                "INSERT INTO notifications (user_id, title, message, notification_type, related_entity_type, related_entity_id) VALUES (?, ?, ?, ?, ?, ?)",
+                [$approver['id'], 'New Account Pending Approval', ($applicant['full_name'] ?? 'A new user') . ' has requested account activation.', 'info', 'user', $user_id]
+            );
+        }
     }
 
     public static function getActivationInfo($user_id) {

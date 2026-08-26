@@ -45,6 +45,31 @@
             </div>
         </div>
 
+        <div class="card" id="pending-approvals-card" style="display: none;">
+            <div class="card-header">
+                <h2>Pending Approvals</h2>
+            </div>
+            <div class="card-body">
+                <table class="table">
+                    <thead>
+                        <tr>
+                            <th>Full Name</th>
+                            <th>Username</th>
+                            <th>Email</th>
+                            <th>Position</th>
+                            <th>Requested</th>
+                            <th>Action</th>
+                        </tr>
+                    </thead>
+                    <tbody id="pending-approvals-table">
+                        <tr>
+                            <td colspan="6" class="text-center">Loading...</td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+        </div>
+
         <div class="card">
             <div class="card-header">
                 <h2>Recent Leave Requests</h2>
@@ -82,6 +107,12 @@
             if (user.role === 'admin') {
                 window.location.href = '/views/admin.html';
                 return;
+            }
+
+            // Deans approve pending accounts in their own department here
+            if (user.role === 'manager') {
+                document.getElementById('pending-approvals-card').style.display = '';
+                loadPendingApprovals();
             }
 
             // Load leave balance
@@ -125,6 +156,62 @@
         }
 
         initDashboard();
+
+        async function loadPendingApprovals() {
+            const result = await APIClient.get('manager.php?action=pending_users');
+            const tbody = document.getElementById('pending-approvals-table');
+            tbody.innerHTML = '';
+
+            if (!result.success) {
+                tbody.innerHTML = '<tr><td colspan="6" class="text-center">Failed to load pending approvals</td></tr>';
+                return;
+            }
+
+            if (result.data.length === 0) {
+                tbody.innerHTML = '<tr><td colspan="6" class="text-center">No pending approvals</td></tr>';
+                return;
+            }
+
+            result.data.forEach(u => {
+                const row = document.createElement('tr');
+                row.innerHTML = `
+                    <td>${u.full_name}</td>
+                    <td>${u.username}</td>
+                    <td>${u.email}</td>
+                    <td>${u.position || ''}</td>
+                    <td>${UIManager.formatDate(u.created_at)}</td>
+                    <td>
+                        <button class="btn btn-small btn-success" onclick="approvePendingUser(${u.id})">Approve</button>
+                        <button class="btn btn-small btn-danger" onclick="rejectPendingUser(${u.id})">Reject</button>
+                    </td>
+                `;
+                tbody.appendChild(row);
+            });
+        }
+
+        async function approvePendingUser(id) {
+            if (!confirm('Approve this user account?')) return;
+
+            const result = await APIClient.put(`manager.php?action=approve_user&id=${id}`, {});
+            if (result.success) {
+                UIManager.showAlert('User approved', 'success');
+                loadPendingApprovals();
+            } else {
+                UIManager.showAlert(result.message || 'Failed to approve user', 'danger');
+            }
+        }
+
+        async function rejectPendingUser(id) {
+            if (!confirm('Reject and delete this pending user account?')) return;
+
+            const result = await APIClient.delete(`manager.php?action=reject_user&id=${id}`);
+            if (result.success) {
+                UIManager.showAlert('User rejected', 'success');
+                loadPendingApprovals();
+            } else {
+                UIManager.showAlert(result.message || 'Failed to reject user', 'danger');
+            }
+        }
     </script>
 </body>
 </html>
