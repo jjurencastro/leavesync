@@ -33,22 +33,27 @@
     <div class="container" style="padding: 2rem 0;">
         <h1>Dashboard</h1>
 
-        <div class="dashboard-grid">
-            <div class="stat-card">
-                <h3>Total Leave Days</h3>
-                <div class="stat-value" id="total-days">0</div>
+        <div class="card">
+            <div class="card-header">
+                <h2>Leave Credits</h2>
             </div>
-            <div class="stat-card">
-                <h3>Used Days</h3>
-                <div class="stat-value" id="used-days">0</div>
-            </div>
-            <div class="stat-card">
-                <h3>Pending Days</h3>
-                <div class="stat-value" id="pending-days">0</div>
-            </div>
-            <div class="stat-card">
-                <h3>Available Days</h3>
-                <div class="stat-value" id="available-days">0</div>
+            <div class="card-body">
+                <table class="table">
+                    <thead>
+                        <tr>
+                            <th>Leave Type</th>
+                            <th>Total</th>
+                            <th>Used</th>
+                            <th>Pending</th>
+                            <th>Available</th>
+                        </tr>
+                    </thead>
+                    <tbody id="leave-balances-table">
+                        <tr>
+                            <td colspan="5" class="text-center">Loading...</td>
+                        </tr>
+                    </tbody>
+                </table>
             </div>
         </div>
 
@@ -127,19 +132,25 @@
 
             initUserMenu(user);
 
-            // Load leave balance
+            // Load leave balances, one row per leave type
             const balanceResult = await LeaveRequestManager.getLeaveBalance();
+            const balancesTbody = document.getElementById('leave-balances-table');
+            balancesTbody.innerHTML = '';
+
             if (balanceResult.success && balanceResult.data.length > 0) {
-                const balance = balanceResult.data[0] || {};
-                document.getElementById('total-days').textContent = balance.total_days ?? '0';
-                document.getElementById('used-days').textContent = balance.used_days ?? '0';
-                document.getElementById('pending-days').textContent = balance.pending_days ?? '0';
-                document.getElementById('available-days').textContent = balance.balance ?? '0';
+                balanceResult.data.forEach(balance => {
+                    const row = document.createElement('tr');
+                    row.innerHTML = `
+                        <td>${balance.leave_type_name}</td>
+                        <td>${balance.total_days}</td>
+                        <td>${balance.used_days}</td>
+                        <td>${balance.pending_days}</td>
+                        <td>${balance.balance}</td>
+                    `;
+                    balancesTbody.appendChild(row);
+                });
             } else {
-                document.getElementById('total-days').textContent = '0';
-                document.getElementById('used-days').textContent = '0';
-                document.getElementById('pending-days').textContent = '0';
-                document.getElementById('available-days').textContent = '0';
+                balancesTbody.innerHTML = '<tr><td colspan="5" class="text-center">No leave credits found</td></tr>';
             }
 
             // Load recent requests
