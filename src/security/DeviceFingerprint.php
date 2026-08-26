@@ -38,9 +38,11 @@ class DeviceFingerprint {
      * (browser, device/OS, IP address) so it can be shown to the user/admin.
      * @param int $user_id
      * @param array $newInfo Result of getDeviceInfo() for the new attempt
+     * @param bool $maskSensitive Mask sensitive fields (e.g. IP address) for display to the
+     *   requesting user; admins reviewing the approval always see the unmasked values.
      * @return array e.g. ['browser' => ['label' => 'Browser', 'old' => 'Chrome 120', 'new' => 'Firefox 115']]
      */
-    public static function diffAgainstTrusted($user_id, array $newInfo) {
+    public static function diffAgainstTrusted($user_id, array $newInfo, $maskSensitive = false) {
         $db = Database::getInstance();
         $trusted = $db->getRow(
             "SELECT device_info FROM device_fingerprints WHERE user_id = ? AND is_trusted = 1 ORDER BY last_used DESC LIMIT 1",
@@ -63,7 +65,30 @@ class DeviceFingerprint {
             }
         }
 
+        if ($maskSensitive && isset($changes['ip_address'])) {
+            $changes['ip_address']['old'] = self::maskIp($changes['ip_address']['old']);
+            $changes['ip_address']['new'] = self::maskIp($changes['ip_address']['new']);
+        }
+
         return $changes;
+    }
+
+    /**
+     * Partially obscure an IP address for display to non-admin users.
+     */
+    private static function maskIp($ip) {
+        if (empty($ip) || $ip === 'Unknown') {
+            return $ip;
+        }
+        if (strpos($ip, ':') !== false) {
+            $parts = explode(':', $ip);
+            return implode(':', array_slice($parts, 0, 2)) . ':****';
+        }
+        $parts = explode('.', $ip);
+        if (count($parts) === 4) {
+            return $parts[0] . '.' . $parts[1] . '.*.*';
+        }
+        return '***';
     }
 
     /**

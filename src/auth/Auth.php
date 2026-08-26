@@ -248,7 +248,7 @@ class Auth {
         }
 
         $data = $_SESSION['pending_device_change_data'] ?? [];
-        $changes = DeviceFingerprint::diffAgainstTrusted($user_id, DeviceFingerprint::getDeviceInfo($data));
+        $changes = DeviceFingerprint::diffAgainstTrusted($user_id, DeviceFingerprint::getDeviceInfo($data), true);
 
         return ['success' => true, 'changes' => $changes];
     }
@@ -420,7 +420,7 @@ class Auth {
                 }
 
                 if (!$confirm_device_change) {
-                    $changes = DeviceFingerprint::diffAgainstTrusted($user['id'], DeviceFingerprint::getDeviceInfo($requestData));
+                    $changes = DeviceFingerprint::diffAgainstTrusted($user['id'], DeviceFingerprint::getDeviceInfo($requestData), true);
                     return [
                         'success' => false,
                         'requires_device_confirmation' => true,
