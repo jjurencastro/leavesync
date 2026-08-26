@@ -116,13 +116,31 @@
 
             initUserMenu(user);
 
-            // Load leave balances, one row per leave type
+            // Load leave balances, one card per applicable leave type
             const balanceResult = await LeaveRequestManager.getLeaveBalance();
             const balancesGrid = document.getElementById('leave-balances-grid');
             balancesGrid.innerHTML = '';
 
             if (balanceResult.success && balanceResult.data.length > 0) {
-                balanceResult.data.forEach(balance => {
+                const allBalances = balanceResult.data;
+                const vlSlExhausted = allBalances
+                    .filter(b => b.leave_type_name === 'Vacation Leave' || b.leave_type_name === 'Sick Leave')
+                    .every(b => Number(b.balance) <= 0);
+
+                const visibleBalances = allBalances.filter(balance => {
+                    if (balance.leave_type_name === 'Leave Without Pay') {
+                        return vlSlExhausted;
+                    }
+                    if (balance.leave_type_name === 'Maternity Leave') {
+                        return user.gender === 'female';
+                    }
+                    if (balance.leave_type_name === 'Paternity Leave') {
+                        return user.gender === 'male';
+                    }
+                    return true;
+                });
+
+                visibleBalances.forEach(balance => {
                     const card = document.createElement('div');
                     card.className = 'stat-card';
                     card.innerHTML = `
