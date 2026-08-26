@@ -72,7 +72,7 @@
 
         <div class="card">
             <div class="card-header">
-                <h2>Recent Leave Requests</h2>
+                <h2 id="requests-card-title">Recent Leave Requests</h2>
             </div>
             <div class="card-body">
                 <table class="table">
@@ -112,6 +112,7 @@
             // Deans approve pending accounts in their own department here
             if (user.role === 'manager') {
                 document.getElementById('pending-approvals-card').style.display = '';
+                document.getElementById('requests-card-title').textContent = 'Team Leave Requests';
                 loadPendingApprovals();
             }
 
@@ -141,17 +142,51 @@
                 } else {
                     requestResult.data.slice(0, 5).forEach(req => {
                         const row = document.createElement('tr');
+                        const canApprove = user.role === 'manager' && req.status === 'pending';
                         row.innerHTML = `
                             <td>${req.leave_type_name}</td>
                             <td>${UIManager.formatDate(req.start_date)}</td>
                             <td>${UIManager.formatDate(req.end_date)}</td>
                             <td>${req.number_of_days}</td>
                             <td>${UIManager.getStatusBadge(req.status)}</td>
-                            <td><a href="/views/my_requests.html" class="btn btn-small btn-secondary">View</a></td>
+                            <td>
+                                <a href="/views/my_requests.html" class="btn btn-small btn-secondary">View</a>
+                                ${canApprove ? `
+                                    <button class="btn btn-small btn-success" onclick="approveTeamRequest(${req.id})">Approve</button>
+                                    <button class="btn btn-small btn-danger" onclick="rejectTeamRequest(${req.id})">Reject</button>
+                                ` : ''}
+                            </td>
                         `;
                         tbody.appendChild(row);
                     });
                 }
+            }
+        }
+
+        async function approveTeamRequest(id) {
+            const privateKey = prompt('Paste your private key to digitally sign this approval:');
+            if (!privateKey) return;
+
+            const comments = prompt('Optional comments for the employee:') || '';
+            const result = await LeaveRequestManager.approveRequest(id, comments, privateKey);
+            if (result.success) {
+                UIManager.showAlert('Leave request approved', 'success');
+                initDashboard();
+            } else {
+                UIManager.showAlert(result.message || 'Failed to approve request', 'danger');
+            }
+        }
+
+        async function rejectTeamRequest(id) {
+            const comments = prompt('Reason for rejection (optional):') || '';
+            if (!confirm('Reject this leave request?')) return;
+
+            const result = await LeaveRequestManager.rejectRequest(id, comments);
+            if (result.success) {
+                UIManager.showAlert('Leave request rejected', 'success');
+                initDashboard();
+            } else {
+                UIManager.showAlert(result.message || 'Failed to reject request', 'danger');
             }
         }
 

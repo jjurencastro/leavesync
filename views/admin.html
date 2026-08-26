@@ -69,6 +69,31 @@
                 </table>
             </div>
         </div>
+        <div class="card">
+            <div class="card-header">
+                <h2>All Leave Requests</h2>
+            </div>
+            <div class="card-body">
+                <table class="table">
+                    <thead>
+                        <tr>
+                            <th>Employee</th>
+                            <th>Type</th>
+                            <th>From Date</th>
+                            <th>To Date</th>
+                            <th>Days</th>
+                            <th>Status</th>
+                            <th>Action</th>
+                        </tr>
+                    </thead>
+                    <tbody id="leave-requests-table">
+                        <tr>
+                            <td colspan="7" class="text-center">Loading...</td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+        </div>
     </div>
 
     <script src="/js/app.js"></script>
@@ -82,6 +107,7 @@
 
             loadPendingUsers();
             loadPendingDeviceRequests();
+            loadLeaveRequests();
         }
 
         async function loadPendingUsers() {
@@ -205,6 +231,71 @@
                 loadPendingDeviceRequests();
             } else {
                 UIManager.showAlert(result.message || 'Failed to reject device request', 'danger');
+            }
+        }
+
+        async function loadLeaveRequests() {
+            const result = await LeaveRequestManager.listRequests();
+            const tbody = document.getElementById('leave-requests-table');
+            tbody.innerHTML = '';
+
+            if (!result.success) {
+                tbody.innerHTML = '<tr><td colspan="7" class="text-center">Failed to load leave requests</td></tr>';
+                return;
+            }
+
+            const requests = result.data || [];
+
+            if (requests.length === 0) {
+                tbody.innerHTML = '<tr><td colspan="7" class="text-center">No leave requests found</td></tr>';
+                return;
+            }
+
+            requests.forEach(req => {
+                const row = document.createElement('tr');
+                const canApprove = req.status === 'pending';
+                row.innerHTML = `
+                    <td>${req.full_name}</td>
+                    <td>${req.leave_type_name}</td>
+                    <td>${UIManager.formatDate(req.start_date)}</td>
+                    <td>${UIManager.formatDate(req.end_date)}</td>
+                    <td>${req.number_of_days}</td>
+                    <td>${UIManager.getStatusBadge(req.status)}</td>
+                    <td>
+                        ${canApprove ? `
+                            <button class="btn btn-small btn-success" onclick="approveLeaveRequestAdmin(${req.id})">Approve</button>
+                            <button class="btn btn-small btn-danger" onclick="rejectLeaveRequestAdmin(${req.id})">Reject</button>
+                        ` : ''}
+                    </td>
+                `;
+                tbody.appendChild(row);
+            });
+        }
+
+        async function approveLeaveRequestAdmin(id) {
+            const privateKey = prompt('Paste your private key to digitally sign this approval:');
+            if (!privateKey) return;
+
+            const comments = prompt('Optional comments for the employee:') || '';
+            const result = await LeaveRequestManager.approveRequest(id, comments, privateKey);
+            if (result.success) {
+                UIManager.showAlert('Leave request approved', 'success');
+                loadLeaveRequests();
+            } else {
+                UIManager.showAlert(result.message || 'Failed to approve request', 'danger');
+            }
+        }
+
+        async function rejectLeaveRequestAdmin(id) {
+            const comments = prompt('Reason for rejection (optional):') || '';
+            if (!confirm('Reject this leave request?')) return;
+
+            const result = await LeaveRequestManager.rejectRequest(id, comments);
+            if (result.success) {
+                UIManager.showAlert('Leave request rejected', 'success');
+                loadLeaveRequests();
+            } else {
+                UIManager.showAlert(result.message || 'Failed to reject request', 'danger');
             }
         }
 
