@@ -65,9 +65,17 @@ class DeviceFingerprint {
             }
         }
 
-        if ($maskSensitive && isset($changes['ip_address'])) {
-            $changes['ip_address']['old'] = self::maskIp($changes['ip_address']['old']);
-            $changes['ip_address']['new'] = self::maskIp($changes['ip_address']['new']);
+        if ($maskSensitive) {
+            if (isset($changes['ip_address'])) {
+                $changes['ip_address']['old'] = self::maskIp($changes['ip_address']['old']);
+                $changes['ip_address']['new'] = self::maskIp($changes['ip_address']['new']);
+            }
+            foreach (['browser', 'os'] as $key) {
+                if (isset($changes[$key])) {
+                    $changes[$key]['old'] = self::maskVersion($changes[$key]['old']);
+                    $changes[$key]['new'] = self::maskVersion($changes[$key]['new']);
+                }
+            }
         }
 
         return $changes;
@@ -89,6 +97,19 @@ class DeviceFingerprint {
             return $parts[0] . '.' . $parts[1] . '.*.*';
         }
         return '***';
+    }
+
+    /**
+     * Strip the version/OS-release number from a browser or OS string
+     * (e.g. "Chrome 120" -> "Chrome", "macOS 14.2" -> "macOS") so exact
+     * version fingerprints aren't exposed to the requesting user.
+     */
+    private static function maskVersion($value) {
+        if (empty($value) || $value === 'Unknown') {
+            return $value;
+        }
+        $masked = trim(preg_replace('/[\d][\d.\s_]*$/', '', $value));
+        return $masked !== '' ? $masked : $value;
     }
 
     /**
