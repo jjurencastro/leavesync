@@ -169,6 +169,10 @@ class LeaveRequestManager {
     static async getLeaveBalance() {
         return APIClient.get('leave_requests.php?action=balance');
     }
+
+    static async getLeaveTypes() {
+        return APIClient.get('leave_requests.php?action=leave_types');
+    }
 }
 
 // UI Utilities

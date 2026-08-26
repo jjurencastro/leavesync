@@ -60,6 +60,10 @@ try {
             echo json_encode(getLeaveBalance($user['id']));
             break;
 
+        case 'leave_types':
+            echo json_encode(getAvailableLeaveTypes($user));
+            break;
+
         default:
             throw new Exception('Invalid action');
     }
@@ -87,6 +91,39 @@ function createLeaveRequest($data, $user) {
     }
 
     $days = $start->diff($end)->days + 1;
+
+    $leaveType = $db->getRow("SELECT id, name FROM leave_types WHERE id = ?", [$data['leave_type_id']]);
+    if (!$leaveType) {
+        throw new Exception('Invalid leave type');
+    }
+
+    if ($leaveType['name'] === 'Maternity Leave' && $user['gender'] !== 'female') {
+        throw new Exception('Maternity Leave is only available to female employees');
+    }
+
+    if ($leaveType['name'] === 'Paternity Leave' && $user['gender'] !== 'male') {
+        throw new Exception('Paternity Leave is only available to male employees');
+    }
+
+    if ($leaveType['name'] === 'Vacation Leave') {
+        $today = new DateTime('today');
+        if ($today->diff($start)->days < 3 || $start < $today) {
+            throw new Exception('Vacation Leave must be filed at least 3 days before the requested start date');
+        }
+    }
+
+    if ($leaveType['name'] === 'Leave Without Pay') {
+        $remaining = $db->getRow(
+            "SELECT COALESCE(SUM(lb.balance), 0) AS total_remaining
+             FROM leave_balances lb
+             JOIN leave_types lt ON lb.leave_type_id = lt.id
+             WHERE lb.user_id = ? AND lt.name IN ('Vacation Leave', 'Sick Leave')",
+            [$user['id']]
+        );
+        if ((float) ($remaining['total_remaining'] ?? 0) > 0) {
+            throw new Exception('Leave Without Pay can only be filed once Vacation and Sick leave balances are exhausted');
+        }
+    }
 
     // Check leave balance
     $balance = $db->getRow(
@@ -374,6 +411,27 @@ function getLeaveBalance($user_id) {
     );
 
     return ['success' => true, 'data' => $balances];
+}
+
+/**
+ * Leave types the requesting user is allowed to file, excluding gender-restricted
+ * types (Maternity/Paternity) that don't apply to them.
+ */
+function getAvailableLeaveTypes($user) {
+    global $db;
+
+    $types = $db->getResults("SELECT id, name FROM leave_types ORDER BY name");
+    $types = array_values(array_filter($types, function ($type) use ($user) {
+        if ($type['name'] === 'Maternity Leave') {
+            return $user['gender'] === 'female';
+        }
+        if ($type['name'] === 'Paternity Leave') {
+            return $user['gender'] === 'male';
+        }
+        return true;
+    }));
+
+    return ['success' => true, 'data' => $types];
 }
 
 function notifyManagers($user_id, $message, $entity_id) {

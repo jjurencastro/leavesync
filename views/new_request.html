@@ -43,12 +43,6 @@
                     <label for="leave-type">Leave Type</label>
                     <select id="leave-type" name="leave_type_id" required>
                         <option value="">Select a leave type</option>
-                        <option value="1">Sick Leave</option>
-                        <option value="2">Annual Leave</option>
-                        <option value="3">Unpaid Leave</option>
-                        <option value="4">Maternity Leave</option>
-                        <option value="5">Paternity Leave</option>
-                        <option value="6">Casual Leave</option>
                     </select>
                 </div>
 
@@ -93,6 +87,17 @@
                 window.location.href = '/views/admin.html';
             }
             initUserMenu(user);
+
+            const typesResult = await LeaveRequestManager.getLeaveTypes();
+            if (typesResult.success) {
+                const select = document.getElementById('leave-type');
+                typesResult.data.forEach((type) => {
+                    const option = document.createElement('option');
+                    option.value = type.id;
+                    option.textContent = type.name;
+                    select.appendChild(option);
+                });
+            }
         })();
 
         // Calculate days

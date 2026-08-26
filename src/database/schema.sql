@@ -208,9 +208,9 @@ CREATE TABLE IF NOT EXISTS notifications (
 
 -- Insert Default Leave Types
 INSERT INTO leave_types (name, description, days_per_year, is_paid, requires_documentation) VALUES
-('Sick Leave', 'Leave for medical reasons', 10, 1, 0),
-('Annual Leave', 'Paid vacation leave', 20, 1, 0),
-('Unpaid Leave', 'Leave without pay', 30, 0, 1),
-('Maternity Leave', 'Leave for maternity', 90, 1, 1),
-('Paternity Leave', 'Leave for paternity', 10, 1, 0),
-('Casual Leave', 'Casual absence', 5, 1, 0);
+('Vacation Leave', 'Paid vacation leave; must be filed at least 3 days before the requested start date', 7, 1, 0),
+('Sick Leave', 'Leave for medical reasons', 5, 1, 0),
+('Leave Without Pay', 'Unpaid leave, only usable once Vacation and Sick leave balances are exhausted', 999, 0, 1),
+('Maternity Leave', 'Leave for maternity (RA 11210); female employees only', 105, 1, 1),
+('Paternity Leave', 'Leave for paternity (RA 8187); male employees only', 7, 1, 1),
+('Bereavement Leave', 'Leave for the death of an immediate family member', 3, 1, 1);
