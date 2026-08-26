@@ -625,8 +625,9 @@ class Auth {
         $role = self::POSITION_ROLE_MAP[$position];
 
         $supervisor = $db->getRow(
-            "SELECT id FROM users WHERE id = ? AND id <> ? AND is_active = 1 AND role = 'admin'",
-            [$supervisor_id, $user_id]
+            "SELECT id FROM users WHERE id = ? AND id <> ? AND is_active = 1
+             AND (role = 'admin' OR (role = 'manager' AND department = ?))",
+            [$supervisor_id, $user_id, $department]
         );
         if (!$supervisor) {
             return ['success' => false, 'message' => 'Please select an active immediate supervisor'];
@@ -651,7 +652,7 @@ class Auth {
         );
         $supervisors = $db->getResults(
             "SELECT id, username, full_name, department, role FROM users
-             WHERE id <> ? AND is_active = 1 AND role = 'admin'
+             WHERE id <> ? AND is_active = 1 AND (role = 'admin' OR role = 'manager')
              ORDER BY full_name, username",
             [$user_id]
         );

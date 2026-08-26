@@ -102,12 +102,19 @@
                 departmentSelect.addEventListener('change', populatePositions);
 
                 const supervisorSelect = document.getElementById('supervisor_id');
-                activationInfo.data.supervisors.forEach((supervisor) => {
-                    const option = document.createElement('option');
-                    option.value = supervisor.id;
-                    option.textContent = supervisor.full_name;
-                    supervisorSelect.appendChild(option);
-                });
+                const populateSupervisors = () => {
+                    supervisorSelect.innerHTML = '<option value="">Select an approver</option>';
+                    activationInfo.data.supervisors
+                        .filter((supervisor) => supervisor.role === 'admin' || supervisor.department === departmentSelect.value)
+                        .forEach((supervisor) => {
+                            const option = document.createElement('option');
+                            option.value = supervisor.id;
+                            option.textContent = supervisor.full_name + (supervisor.role === 'manager' ? ' (Dean)' : '');
+                            supervisorSelect.appendChild(option);
+                        });
+                };
+                departmentSelect.addEventListener('change', populateSupervisors);
+                populateSupervisors();
             }
         })();
 
