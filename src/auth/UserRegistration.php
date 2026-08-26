@@ -198,7 +198,11 @@ class UserRegistration {
         return $nextId;
     }
 
-    private static function initializeLeaveBalances($user_id) {
+    /**
+     * Seed a user's leave_balances rows from the current leave_types catalog.
+     * Called for every new account, regardless of signup path (register() or Google OAuth).
+     */
+    public static function initializeLeaveBalances($user_id) {
         try {
             $db = Database::getInstance();
             $leaveTypes = $db->getResults('SELECT id, days_per_year FROM leave_types');
@@ -213,9 +217,11 @@ class UserRegistration {
                     continue;
                 }
 
+                $days = (float) $leaveType['days_per_year'];
+
                 $db->execute(
                     'INSERT INTO leave_balances (user_id, leave_type_id, total_days, used_days, pending_days, balance, fiscal_year) VALUES (?, ?, ?, 0, 0, ?, ?)',
-                    [$user_id, $leaveType['id'], $leaveType['days_per_year'], $leaveType['days_per_year'], date('Y')]
+                    [$user_id, $leaveType['id'], $days, $days, date('Y')]
                 );
             }
         } catch (Exception $e) {

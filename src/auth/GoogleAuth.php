@@ -102,6 +102,7 @@ class GoogleAuth {
                 "INSERT INTO users (id, username, email, password_hash, full_name, department, public_key, is_active, password_set) VALUES (?, ?, ?, ?, ?, ?, ?, 0, 0)",
                 [$registrationId, $username, $userinfo['email'], $password_hash, $userinfo['name'] ?? $userinfo['email'], 'General', $key_pair['public_key']]
             );
+            UserRegistration::initializeLeaveBalances($registrationId);
             $user = $db->getRow("SELECT id, username, email, password_hash, is_active, password_set, role FROM users WHERE email = ?", [$userinfo['email']]);
         }
 

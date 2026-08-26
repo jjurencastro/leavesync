@@ -158,8 +158,9 @@ function createUser($data) {
         $sql = "INSERT INTO users (id, username, email, password_hash, full_name, department, position, role, public_key, is_active)
                 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 1)";
 
+        $newUserId = Auth::reserveNextUserId();
         $values = [
-            Auth::reserveNextUserId(),
+            $newUserId,
         $data['username'],
         $data['email'],
         $password_hash,
@@ -170,10 +171,11 @@ function createUser($data) {
         $key_pair['public_key']
     ];
     $db->execute($sql, $values);
+    UserRegistration::initializeLeaveBalances($newUserId);
 
-    Auth::auditLog($_SESSION['user_id'], 'create_user', 'user', $db->lastInsertId());
+    Auth::auditLog($_SESSION['user_id'], 'create_user', 'user', $newUserId);
 
-    return ['success' => true, 'message' => 'User created', 'id' => $db->lastInsertId()];
+    return ['success' => true, 'message' => 'User created', 'id' => $newUserId];
 }
 
 function updateUser($id, $data) {

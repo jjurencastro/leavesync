@@ -98,7 +98,7 @@ CREATE TABLE IF NOT EXISTS leave_requests (
     leave_type_id INT NOT NULL,
     start_date DATE NOT NULL,
     end_date DATE NOT NULL,
-    number_of_days DECIMAL(4, 2),
+    number_of_days DECIMAL(6, 2),
     reason TEXT,
     status ENUM('pending', 'approved', 'rejected', 'cancelled') DEFAULT 'pending',
     manager_id INT,
@@ -173,17 +173,18 @@ CREATE TABLE IF NOT EXISTS device_change_requests (
 -- Leave Balances
 CREATE TABLE IF NOT EXISTS leave_balances (
     id INT PRIMARY KEY AUTO_INCREMENT,
-    user_id INT NOT NULL UNIQUE,
+    user_id INT NOT NULL,
     leave_type_id INT NOT NULL,
-    total_days DECIMAL(4, 2),
-    used_days DECIMAL(4, 2) DEFAULT 0,
-    pending_days DECIMAL(4, 2) DEFAULT 0,
-    balance DECIMAL(4, 2),
+    total_days DECIMAL(6, 2),
+    used_days DECIMAL(6, 2) DEFAULT 0,
+    pending_days DECIMAL(6, 2) DEFAULT 0,
+    balance DECIMAL(6, 2),
     fiscal_year INT,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
     FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
     FOREIGN KEY (leave_type_id) REFERENCES leave_types(id),
+    UNIQUE KEY unique_user_leave_type (user_id, leave_type_id),
     INDEX idx_user_id (user_id),
     INDEX idx_fiscal_year (fiscal_year)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
@@ -210,7 +211,7 @@ CREATE TABLE IF NOT EXISTS notifications (
 INSERT INTO leave_types (name, description, days_per_year, is_paid, requires_documentation) VALUES
 ('Vacation Leave', 'Paid vacation leave; must be filed at least 3 days before the requested start date', 7, 1, 0),
 ('Sick Leave', 'Leave for medical reasons', 5, 1, 0),
-('Leave Without Pay', 'Unpaid leave, only usable once Vacation and Sick leave balances are exhausted', 999, 0, 1),
+('Leave Without Pay', 'Unpaid leave, only usable once Vacation and Sick leave balances are exhausted', 99, 0, 1),
 ('Maternity Leave', 'Leave for maternity (RA 11210); female employees only', 105, 1, 1),
 ('Paternity Leave', 'Leave for paternity (RA 8187); male employees only', 7, 1, 1),
 ('Bereavement Leave', 'Leave for the death of an immediate family member', 3, 1, 1);
