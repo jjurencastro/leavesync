@@ -99,7 +99,7 @@ function getUsers() {
     global $db;
     
     $users = $db->getResults(
-        "SELECT id, username, email, full_name, department, role, is_active, password_set, created_at 
+        "SELECT id, username, email, full_name, department, position, role, is_active, password_set, created_at 
          FROM users 
          ORDER BY created_at DESC"
     );
@@ -111,7 +111,7 @@ function getUserDetails($id) {
     global $db;
     
     $user = $db->getRow(
-        "SELECT id, username, email, full_name, department, role, is_active, created_at, updated_at 
+        "SELECT id, username, email, full_name, department, position, role, is_active, created_at, updated_at 
          FROM users 
          WHERE id = ?",
         [$id]
@@ -155,8 +155,8 @@ function createUser($data) {
     $key_pair = DigitalSignature::generateKeyPair();
 
     // Insert user
-        $sql = "INSERT INTO users (id, username, email, password_hash, full_name, department, role, public_key, is_active)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, 1)";
+        $sql = "INSERT INTO users (id, username, email, password_hash, full_name, department, position, role, public_key, is_active)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 1)";
 
         $values = [
             Auth::reserveNextUserId(),
@@ -165,6 +165,7 @@ function createUser($data) {
         $password_hash,
         $data['full_name'],
         $data['department'] ?? 'General',
+        $data['position'] ?? null,
         $data['role'] ?? 'employee',
         $key_pair['public_key']
     ];
@@ -193,6 +194,10 @@ function updateUser($id, $data) {
     if (isset($data['department'])) {
         $updates[] = "department = ?";
         $values[] = $data['department'];
+    }
+    if (isset($data['position'])) {
+        $updates[] = "position = ?";
+        $values[] = $data['position'];
     }
     if (isset($data['role'])) {
         $updates[] = "role = ?";

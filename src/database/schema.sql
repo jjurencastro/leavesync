@@ -8,6 +8,7 @@ CREATE TABLE IF NOT EXISTS users (
     password_hash VARCHAR(255) NOT NULL,
     full_name VARCHAR(100) NOT NULL,
     department VARCHAR(50),
+    position VARCHAR(50),
     gender VARCHAR(30),
     supervisor_id INT,
     role ENUM('employee', 'manager', 'admin') DEFAULT 'employee',

@@ -11,6 +11,27 @@ class Auth {
 
     private static $current_user = null;
 
+    const ALLOWED_DEPARTMENTS = [
+        'ADMIN', 'HED', 'BED', 'FINANCE', 'REGISTRAR', 'HR', 'IT', 'LIBRARY', 'GUIDANCE', 'CLINIC', 'FACILITIES', 'SECURITY'
+    ];
+
+    // Job title/position -> permission tier that governs what the account can access
+    const POSITION_ROLE_MAP = [
+        'Faculty' => 'employee',
+        'Staff' => 'employee',
+        'Registrar Officer' => 'employee',
+        'IT Officer' => 'employee',
+        'Librarian' => 'employee',
+        'Guidance Counselor' => 'employee',
+        'Nurse' => 'employee',
+        'Facilities Staff' => 'employee',
+        'Security Officer' => 'employee',
+        'Department Head' => 'manager',
+        'Dean' => 'manager',
+        'System Administrator' => 'admin',
+        'HR Officer' => 'admin',
+    ];
+
     /**
      * Check whether an email address belongs to the allowed institutional domain
      * @param string $email
@@ -578,15 +599,22 @@ class Auth {
         $db = Database::getInstance();
         $gender = $data['gender'] ?? '';
         $department = trim($data['department'] ?? '');
+        $position = trim($data['position'] ?? '');
         $supervisor_id = (int) ($data['supervisor_id'] ?? 0);
 
         $allowedGenders = ['male', 'female'];
         if (!in_array($gender, $allowedGenders, true)) {
             return ['success' => false, 'message' => 'Please select a valid gender option'];
         }
-        if (!in_array($department, ['ADMIN', 'HED', 'BED'], true)) {
+        if (!in_array($department, self::ALLOWED_DEPARTMENTS, true)) {
             return ['success' => false, 'message' => 'Please select a valid department'];
         }
+        if (!isset(self::POSITION_ROLE_MAP[$position])) {
+            return ['success' => false, 'message' => 'Please select a valid position'];
+        }
+        // Account stays pending (is_active = 0) until an admin approves it, so a
+        // self-selected manager/admin-tier position has no effect until then.
+        $role = self::POSITION_ROLE_MAP[$position];
 
         $supervisor = $db->getRow(
             "SELECT id FROM users WHERE id = ? AND id <> ? AND is_active = 1 AND role = 'admin'",
@@ -598,8 +626,8 @@ class Auth {
 
         $password_hash = password_hash($password, PASSWORD_BCRYPT);
         $db->execute(
-            "UPDATE users SET password_hash = ?, password_set = 1, gender = ?, department = ?, supervisor_id = ? WHERE id = ?",
-            [$password_hash, $gender, $department, $supervisor_id, $user_id]
+            "UPDATE users SET password_hash = ?, password_set = 1, gender = ?, department = ?, position = ?, role = ?, supervisor_id = ? WHERE id = ?",
+            [$password_hash, $gender, $department, $position, $role, $supervisor_id, $user_id]
         );
 
         self::auditLog($user_id, 'password_set', 'user', $user_id);
@@ -620,7 +648,15 @@ class Auth {
             [$user_id]
         );
 
-        return ['success' => true, 'data' => ['user' => $user, 'supervisors' => $supervisors]];
+        return [
+            'success' => true,
+            'data' => [
+                'user' => $user,
+                'supervisors' => $supervisors,
+                'departments' => self::ALLOWED_DEPARTMENTS,
+                'positions' => array_keys(self::POSITION_ROLE_MAP),
+            ]
+        ];
     }
 
     public static function reserveNextUserId() {

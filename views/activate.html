@@ -38,9 +38,13 @@
                         <label for="department">Department</label>
                         <select id="department" required>
                             <option value="">Select a department</option>
-                            <option value="ADMIN">ADMIN</option>
-                            <option value="HED">HED</option>
-                            <option value="BED">BED</option>
+                        </select>
+                    </div>
+
+                    <div class="form-group">
+                        <label for="position">Position</label>
+                        <select id="position" required>
+                            <option value="">Select a position</option>
                         </select>
                     </div>
 
@@ -74,6 +78,23 @@
             const activationInfo = await AuthManager.getActivationInfo();
             if (activationInfo.success) {
                 document.getElementById('username').value = activationInfo.data.user.username;
+
+                const departmentSelect = document.getElementById('department');
+                activationInfo.data.departments.forEach((department) => {
+                    const option = document.createElement('option');
+                    option.value = department;
+                    option.textContent = department;
+                    departmentSelect.appendChild(option);
+                });
+
+                const positionSelect = document.getElementById('position');
+                activationInfo.data.positions.forEach((position) => {
+                    const option = document.createElement('option');
+                    option.value = position;
+                    option.textContent = position;
+                    positionSelect.appendChild(option);
+                });
+
                 const supervisorSelect = document.getElementById('supervisor_id');
                 activationInfo.data.supervisors.forEach((supervisor) => {
                     const option = document.createElement('option');
@@ -99,6 +120,7 @@
                 password,
                 gender: document.getElementById('gender').value,
                 department: document.getElementById('department').value.trim(),
+                position: document.getElementById('position').value.trim(),
                 supervisor_id: document.getElementById('supervisor_id').value
             });
 
