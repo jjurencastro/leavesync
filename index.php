@@ -63,9 +63,10 @@ elseif (in_array(pathinfo($request_uri, PATHINFO_EXTENSION), ['css', 'js', 'html
         echo "File not found";
     }
 }
-// Default to login
+// Default to the dashboard; its own client-side auth check bounces
+// unauthenticated visitors to login.html
 else {
-    header('Location: /views/login.html');
+    header('Location: /views/dashboard.html');
     exit;
 }
 ?>

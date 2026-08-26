@@ -266,6 +266,24 @@ async function checkAuth() {
     return result.data;
 }
 
+// Wire up the top-right user menu (full name + Settings/Logout dropdown) shared by every authenticated page
+function initUserMenu(user) {
+    const nameEl = document.getElementById('user-fullname');
+    if (nameEl) {
+        nameEl.textContent = user.full_name || user.username;
+    }
+
+    const toggle = document.getElementById('user-menu-toggle');
+    const dropdown = document.getElementById('user-menu-dropdown');
+    if (toggle && dropdown) {
+        toggle.addEventListener('click', (e) => {
+            e.stopPropagation();
+            dropdown.classList.toggle('open');
+        });
+        document.addEventListener('click', () => dropdown.classList.remove('open'));
+    }
+}
+
 // Initialize on page load
 document.addEventListener('DOMContentLoaded', async () => {
     // Send device fingerprint on page load
