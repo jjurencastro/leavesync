@@ -11,25 +11,36 @@ class Auth {
 
     private static $current_user = null;
 
-    const ALLOWED_DEPARTMENTS = [
-        'ADMIN', 'HED', 'BED', 'FINANCE', 'REGISTRAR', 'HR', 'IT', 'LIBRARY', 'GUIDANCE', 'CLINIC', 'FACILITIES', 'SECURITY'
+    const ALLOWED_DEPARTMENTS = ['ADMIN', 'CCS', 'CTE', 'CBE'];
+
+    // Positions available per department, shown in the activation form based on the chosen department
+    const DEPARTMENT_POSITIONS = [
+        'CCS' => ['Dean', 'Program Head', 'Faculty', 'Instructor'],
+        'CTE' => ['Dean', 'Program Head', 'Faculty', 'Instructor'],
+        'CBE' => ['Dean', 'Program Head', 'Faculty', 'Instructor'],
+        'ADMIN' => [
+            'System Administrator', 'HR Officer', 'Registrar Officer', 'Finance Officer', 'IT Officer',
+            'Librarian', 'Guidance Counselor', 'Nurse', 'Facilities Staff', 'Security Officer', 'Staff'
+        ],
     ];
 
     // Job title/position -> permission tier that governs what the account can access
     const POSITION_ROLE_MAP = [
+        'Dean' => 'manager',
+        'Program Head' => 'manager',
         'Faculty' => 'employee',
-        'Staff' => 'employee',
+        'Instructor' => 'employee',
+        'System Administrator' => 'admin',
+        'HR Officer' => 'admin',
         'Registrar Officer' => 'employee',
+        'Finance Officer' => 'employee',
         'IT Officer' => 'employee',
         'Librarian' => 'employee',
         'Guidance Counselor' => 'employee',
         'Nurse' => 'employee',
         'Facilities Staff' => 'employee',
         'Security Officer' => 'employee',
-        'Department Head' => 'manager',
-        'Dean' => 'manager',
-        'System Administrator' => 'admin',
-        'HR Officer' => 'admin',
+        'Staff' => 'employee',
     ];
 
     /**
@@ -609,8 +620,8 @@ class Auth {
         if (!in_array($department, self::ALLOWED_DEPARTMENTS, true)) {
             return ['success' => false, 'message' => 'Please select a valid department'];
         }
-        if (!isset(self::POSITION_ROLE_MAP[$position])) {
-            return ['success' => false, 'message' => 'Please select a valid position'];
+        if (!in_array($position, self::DEPARTMENT_POSITIONS[$department] ?? [], true)) {
+            return ['success' => false, 'message' => 'Please select a valid position for the chosen department'];
         }
         // Account stays pending (is_active = 0) until an admin approves it, so a
         // self-selected manager/admin-tier position has no effect until then.
@@ -654,7 +665,7 @@ class Auth {
                 'user' => $user,
                 'supervisors' => $supervisors,
                 'departments' => self::ALLOWED_DEPARTMENTS,
-                'positions' => array_keys(self::POSITION_ROLE_MAP),
+                'department_positions' => self::DEPARTMENT_POSITIONS,
             ]
         ];
     }

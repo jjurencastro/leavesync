@@ -79,7 +79,10 @@
             if (activationInfo.success) {
                 document.getElementById('username').value = activationInfo.data.user.username;
 
+                const departmentPositions = activationInfo.data.department_positions;
                 const departmentSelect = document.getElementById('department');
+                const positionSelect = document.getElementById('position');
+
                 activationInfo.data.departments.forEach((department) => {
                     const option = document.createElement('option');
                     option.value = department;
@@ -87,13 +90,16 @@
                     departmentSelect.appendChild(option);
                 });
 
-                const positionSelect = document.getElementById('position');
-                activationInfo.data.positions.forEach((position) => {
-                    const option = document.createElement('option');
-                    option.value = position;
-                    option.textContent = position;
-                    positionSelect.appendChild(option);
-                });
+                const populatePositions = () => {
+                    positionSelect.innerHTML = '<option value="">Select a position</option>';
+                    (departmentPositions[departmentSelect.value] || []).forEach((position) => {
+                        const option = document.createElement('option');
+                        option.value = position;
+                        option.textContent = position;
+                        positionSelect.appendChild(option);
+                    });
+                };
+                departmentSelect.addEventListener('change', populatePositions);
 
                 const supervisorSelect = document.getElementById('supervisor_id');
                 activationInfo.data.supervisors.forEach((supervisor) => {
