@@ -31,6 +31,8 @@
             </header>
 
     <div class="container" style="max-width: 600px; padding: 2rem 0;">
+        <div id="balance-pills" class="balance-pills"></div>
+
         <div class="card">
             <div class="card-header">
                 <h2>Submit New Leave Request</h2>
@@ -97,6 +99,29 @@
                     option.textContent = type.name;
                     select.appendChild(option);
                 });
+            }
+
+            const balanceResult = await LeaveRequestManager.getLeaveBalance();
+            const pillsContainer = document.getElementById('balance-pills');
+            if (balanceResult.success) {
+                const allBalances = balanceResult.data;
+                const vlSlExhausted = allBalances
+                    .filter(b => b.leave_type_name === 'Vacation Leave' || b.leave_type_name === 'Sick Leave')
+                    .every(b => Number(b.balance) <= 0);
+
+                allBalances
+                    .filter(balance => {
+                        if (balance.leave_type_name === 'Leave Without Pay') return vlSlExhausted;
+                        if (balance.leave_type_name === 'Maternity Leave') return user.gender === 'female';
+                        if (balance.leave_type_name === 'Paternity Leave') return user.gender === 'male';
+                        return true;
+                    })
+                    .forEach(balance => {
+                        const pill = document.createElement('span');
+                        pill.className = 'balance-pill';
+                        pill.innerHTML = `${balance.leave_type_name}: <strong>${balance.balance}</strong>`;
+                        pillsContainer.appendChild(pill);
+                    });
             }
         })();
 
