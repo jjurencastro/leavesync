@@ -15,11 +15,11 @@ class Auth {
 
     // Positions available per department, shown in the activation form based on the chosen department
     const DEPARTMENT_POSITIONS = [
-        'CCS' => ['Dean', 'Program Head', 'Faculty', 'Instructor'],
-        'CTE' => ['Dean', 'Program Head', 'Faculty', 'Instructor'],
-        'CBE' => ['Dean', 'Program Head', 'Faculty', 'Instructor'],
+        'CCS' => ['Dean', 'Instructor'],
+        'CTE' => ['Dean', 'Instructor'],
+        'CBE' => ['Dean', 'Instructor'],
         'ADMIN' => [
-            'System Administrator', 'HR Officer', 'Registrar Officer', 'Finance Officer', 'IT Officer',
+            'HR Officer', 'Registrar Officer', 'Finance Officer', 'IT Officer',
             'Librarian', 'Guidance Counselor', 'Nurse', 'Facilities Staff', 'Security Officer', 'Staff'
         ],
     ];
@@ -27,10 +27,7 @@ class Auth {
     // Job title/position -> permission tier that governs what the account can access
     const POSITION_ROLE_MAP = [
         'Dean' => 'manager',
-        'Program Head' => 'manager',
-        'Faculty' => 'employee',
         'Instructor' => 'employee',
-        'System Administrator' => 'admin',
         'HR Officer' => 'admin',
         'Registrar Officer' => 'employee',
         'Finance Officer' => 'employee',
