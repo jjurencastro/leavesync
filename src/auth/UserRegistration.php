@@ -24,10 +24,11 @@ class UserRegistration {
     ];
 
     // Job title/position -> permission tier that governs what the account can access
+    // (default suggestion only; the System Administrator can override this after activation)
     const POSITION_ROLE_MAP = [
         'Dean' => 'manager',
         'Instructor' => 'employee',
-        'HR Officer' => 'admin',
+        'HR Officer' => 'hr',
         'Registrar Officer' => 'employee',
         'Finance Officer' => 'employee',
         'IT Officer' => 'employee',

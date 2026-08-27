@@ -141,10 +141,20 @@ function createLeaveRequest($data, $user) {
 
         $employee = $db->getRow("SELECT supervisor_id FROM users WHERE id = ?", [$user['id']]);
 
-        // Create leave request
-    $sql = "INSERT INTO leave_requests 
-            (user_id, leave_type_id, start_date, end_date, number_of_days, reason, status, manager_id)
-            VALUES (?, ?, ?, ?, ?, ?, 'pending', ?)";
+    // Tier 1 (employee) needs supervisor approval then HR approval; Tier 2 (manager) skips
+    // straight to HR; Tier 3 (hr) / System Administrator's own leave is self-exempt.
+    $isSelfExempt = in_array($user['role'], ['hr', 'admin'], true);
+    $supervisorStatus = $user['role'] === 'manager' ? 'not_required' : 'pending';
+    $status = $isSelfExempt ? 'approved' : 'pending';
+    if ($isSelfExempt) {
+        $supervisorStatus = 'not_required';
+    }
+    $hrStatus = $isSelfExempt ? 'approved' : 'pending';
+
+    // Create leave request
+    $sql = "INSERT INTO leave_requests
+            (user_id, leave_type_id, start_date, end_date, number_of_days, reason, status, supervisor_status, hr_status, manager_id)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)";
 
     if (!$db->execute($sql, [
         $user['id'],
@@ -153,6 +163,9 @@ function createLeaveRequest($data, $user) {
         $data['end_date'],
         $days,
         $data['reason'],
+        $status,
+        $supervisorStatus,
+        $hrStatus,
         $employee['supervisor_id'] ?? null
     ])) {
         throw new Exception('Failed to create leave request');
@@ -160,14 +173,22 @@ function createLeaveRequest($data, $user) {
 
     $request_id = $db->lastInsertId();
 
-    // Update leave balance
-    $db->execute(
-        "UPDATE leave_balances SET pending_days = pending_days + ? WHERE user_id = ? AND leave_type_id = ?",
-        [$days, $user['id'], $data['leave_type_id']]
-    );
+    if ($isSelfExempt) {
+        // Self-exempt: credit used days directly, no pending stage needed
+        $db->execute(
+            "UPDATE leave_balances SET used_days = used_days + ? WHERE user_id = ? AND leave_type_id = ?",
+            [$days, $user['id'], $data['leave_type_id']]
+        );
+    } else {
+        // Update leave balance
+        $db->execute(
+            "UPDATE leave_balances SET pending_days = pending_days + ? WHERE user_id = ? AND leave_type_id = ?",
+            [$days, $user['id'], $data['leave_type_id']]
+        );
 
-    // Create notification for managers
-    notifyManagers($user['id'], "New leave request from {$user['full_name']}", $request_id);
+        // Notify whoever needs to act on this first (supervisor for Tier 1, HR for Tier 2)
+        notifyNextApprover($user, "New leave request from {$user['full_name']}", $request_id);
+    }
 
     Auth::auditLog($user['id'], 'create_leave_request', 'leave_request', $request_id);
 
@@ -178,15 +199,25 @@ function listLeaveRequests($user) {
     global $db;
 
     if ($user['role'] === 'manager') {
-        // Managers see requests from their team
+        // Managers see requests from their direct reports (Tier 1 employees who chose them as supervisor)
         $sql = "SELECT lr.*, u.full_name, lt.name as leave_type_name, COUNT(*) OVER() as total 
                 FROM leave_requests lr
                 JOIN users u ON lr.user_id = u.id
                 JOIN leave_types lt ON lr.leave_type_id = lt.id
-                WHERE lr.manager_id = ? OR u.department = ?
+                WHERE u.supervisor_id = ?
                 ORDER BY lr.created_at DESC
                 LIMIT 50";
-        $requests = $db->getResults($sql, [$user['id'], $user['department']]);
+        $requests = $db->getResults($sql, [$user['id']]);
+    } else if ($user['role'] === 'hr') {
+        // HR sees requests that have reached (or passed) the HR stage
+        $sql = "SELECT lr.*, u.full_name, lt.name as leave_type_name, COUNT(*) OVER() as total 
+                FROM leave_requests lr
+                JOIN users u ON lr.user_id = u.id
+                JOIN leave_types lt ON lr.leave_type_id = lt.id
+                WHERE lr.supervisor_status IN ('approved', 'not_required')
+                ORDER BY lr.created_at DESC
+                LIMIT 50";
+        $requests = $db->getResults($sql, []);
     } else if ($user['role'] === 'admin') {
         // Admins see all requests
         $sql = "SELECT lr.*, u.full_name, lt.name as leave_type_name, COUNT(*) OVER() as total 
@@ -229,7 +260,7 @@ function getLeaveRequest($id, $user) {
     }
 
     // Check authorization
-    if ($user['role'] !== 'admin' && $user['role'] !== 'manager' && $request['user_id'] != $user['id']) {
+    if (!in_array($user['role'], ['admin', 'manager', 'hr'], true) && $request['user_id'] != $user['id']) {
         throw new Exception('Unauthorized');
     }
 
@@ -290,7 +321,7 @@ function updateLeaveRequest($id, $data, $user) {
 function approveLeaveRequest($data, $user) {
     global $db;
 
-    if (!in_array($user['role'], ['manager', 'admin'])) {
+    if (!in_array($user['role'], ['manager', 'hr', 'admin'], true)) {
         throw new Exception('Unauthorized to approve requests');
     }
 
@@ -298,7 +329,11 @@ function approveLeaveRequest($data, $user) {
         throw new Exception('Leave request ID required');
     }
 
-    $request = $db->getRow("SELECT * FROM leave_requests WHERE id = ?", [$data['id']]);
+    $request = $db->getRow(
+        "SELECT lr.*, u.supervisor_id as requester_supervisor_id
+         FROM leave_requests lr JOIN users u ON lr.user_id = u.id WHERE lr.id = ?",
+        [$data['id']]
+    );
 
     if (!$request || $request['status'] !== 'pending') {
         throw new Exception('Invalid leave request');
@@ -308,6 +343,20 @@ function approveLeaveRequest($data, $user) {
         throw new Exception('A private key is required to cryptographically approve this request.');
     }
 
+    $stage = currentApprovalStage($request);
+
+    if ($stage === 'supervisor') {
+        if ($user['role'] === 'manager' && (int) $request['requester_supervisor_id'] !== (int) $user['id']) {
+            throw new Exception('Unauthorized to approve requests');
+        }
+    } elseif ($stage === 'hr') {
+        if (!in_array($user['role'], ['hr', 'admin'], true)) {
+            throw new Exception('Unauthorized to approve requests');
+        }
+    } else {
+        throw new Exception('This request has already been resolved');
+    }
+
     // Sign the request digitally
     try {
         DigitalSignature::signLeaveRequest($data['id'], $data['private_key'], $user['id']);
@@ -315,18 +364,32 @@ function approveLeaveRequest($data, $user) {
         throw new Exception('Invalid private key provided for digital approval.');
     }
 
-    // Update request status
-    $sql = "UPDATE leave_requests 
-            SET status = 'approved', manager_id = ?, manager_comments = ? 
-            WHERE id = ?";
+    if ($stage === 'supervisor') {
+        $db->execute(
+            "UPDATE leave_requests SET supervisor_status = 'approved', manager_id = ?, manager_comments = ? WHERE id = ?",
+            [$user['id'], $data['comments'] ?? '', $data['id']]
+        );
 
-    $db->execute($sql, [
-        $user['id'],
-        $data['comments'] ?? '',
-        $data['id']
-    ]);
+        notifyHR("New leave request awaiting HR approval", $data['id']);
+        createNotification(
+            $request['user_id'],
+            'Leave Request: Supervisor Approved',
+            "Your supervisor approved your leave request from {$request['start_date']} to {$request['end_date']}. It now awaits HR approval.",
+            'leave_request',
+            $data['id']
+        );
 
-    // Update leave balance
+        Auth::auditLog($user['id'], 'approve_leave_request_supervisor', 'leave_request', $data['id']);
+        return ['success' => true, 'message' => 'Leave request approved by supervisor; awaiting HR'];
+    }
+
+    // HR stage: finalize the request
+    $db->execute(
+        "UPDATE leave_requests SET status = 'approved', hr_status = 'approved', hr_id = ?, hr_comments = ? WHERE id = ?",
+        [$user['id'], $data['comments'] ?? '', $data['id']]
+    );
+
+    // Move the days from pending to used now that it's fully approved
     $db->execute(
         "UPDATE leave_balances 
          SET pending_days = pending_days - ?, used_days = used_days + ? 
@@ -334,8 +397,6 @@ function approveLeaveRequest($data, $user) {
         [$request['number_of_days'], $request['number_of_days'], $request['user_id'], $request['leave_type_id']]
     );
 
-    // Notify employee
-    $employee = $db->getRow("SELECT full_name FROM users WHERE id = ?", [$request['user_id']]);
     createNotification(
         $request['user_id'],
         'Leave Request Approved',
@@ -352,7 +413,7 @@ function approveLeaveRequest($data, $user) {
 function rejectLeaveRequest($data, $user) {
     global $db;
 
-    if (!in_array($user['role'], ['manager', 'admin'])) {
+    if (!in_array($user['role'], ['manager', 'hr', 'admin'], true)) {
         throw new Exception('Unauthorized to reject requests');
     }
 
@@ -360,22 +421,37 @@ function rejectLeaveRequest($data, $user) {
         throw new Exception('Leave request ID required');
     }
 
-    $request = $db->getRow("SELECT * FROM leave_requests WHERE id = ?", [$data['id']]);
+    $request = $db->getRow(
+        "SELECT lr.*, u.supervisor_id as requester_supervisor_id
+         FROM leave_requests lr JOIN users u ON lr.user_id = u.id WHERE lr.id = ?",
+        [$data['id']]
+    );
 
     if (!$request || $request['status'] !== 'pending') {
         throw new Exception('Invalid leave request');
     }
 
-    // Update request status
-    $sql = "UPDATE leave_requests 
-            SET status = 'rejected', manager_id = ?, manager_comments = ? 
-            WHERE id = ?";
+    $stage = currentApprovalStage($request);
 
-    $db->execute($sql, [
-        $user['id'],
-        $data['comments'] ?? '',
-        $data['id']
-    ]);
+    if ($stage === 'supervisor') {
+        if ($user['role'] === 'manager' && (int) $request['requester_supervisor_id'] !== (int) $user['id']) {
+            throw new Exception('Unauthorized to reject requests');
+        }
+        $db->execute(
+            "UPDATE leave_requests SET status = 'rejected', supervisor_status = 'rejected', manager_id = ?, manager_comments = ? WHERE id = ?",
+            [$user['id'], $data['comments'] ?? '', $data['id']]
+        );
+    } elseif ($stage === 'hr') {
+        if (!in_array($user['role'], ['hr', 'admin'], true)) {
+            throw new Exception('Unauthorized to reject requests');
+        }
+        $db->execute(
+            "UPDATE leave_requests SET status = 'rejected', hr_status = 'rejected', hr_id = ?, hr_comments = ? WHERE id = ?",
+            [$user['id'], $data['comments'] ?? '', $data['id']]
+        );
+    } else {
+        throw new Exception('This request has already been resolved');
+    }
 
     // Revert pending days to balance
     $db->execute(
@@ -397,6 +473,20 @@ function rejectLeaveRequest($data, $user) {
     Auth::auditLog($user['id'], 'reject_leave_request', 'leave_request', $data['id']);
 
     return ['success' => true, 'message' => 'Leave request rejected'];
+}
+
+/**
+ * Which stage a pending request is currently waiting on, so an approve/reject
+ * action can be validated and routed to the right columns.
+ */
+function currentApprovalStage($request) {
+    if ($request['supervisor_status'] === 'pending') {
+        return 'supervisor';
+    }
+    if (in_array($request['supervisor_status'], ['approved', 'not_required'], true) && $request['hr_status'] === 'pending') {
+        return 'hr';
+    }
+    return null;
 }
 
 function getLeaveBalance($user_id) {
@@ -434,16 +524,38 @@ function getAvailableLeaveTypes($user) {
     return ['success' => true, 'data' => $types];
 }
 
-function notifyManagers($user_id, $message, $entity_id) {
+/**
+ * Notify whoever needs to act first on a newly-created request: the requester's
+ * supervisor for Tier 1 (employee), or HR directly for Tier 2 (manager).
+ */
+function notifyNextApprover($requester, $message, $entity_id) {
     global $db;
 
-    $user = $db->getRow("SELECT supervisor_id, department FROM users WHERE id = ?", [$user_id]);
-    $managers = $user['supervisor_id']
-        ? $db->getResults("SELECT id FROM users WHERE id = ? AND is_active = 1 AND role IN ('manager', 'admin')", [$user['supervisor_id']])
-        : $db->getResults("SELECT id FROM users WHERE role = 'manager' AND department = ?", [$user['department']]);
+    if ($requester['role'] === 'manager') {
+        notifyHR($message, $entity_id);
+        return;
+    }
 
-    foreach ($managers as $manager) {
-        createNotification($manager['id'], 'New Leave Request', $message, 'leave_request', $entity_id);
+    $approvers = $requester['supervisor_id']
+        ? $db->getResults("SELECT id FROM users WHERE id = ? AND is_active = 1 AND role IN ('manager', 'admin')", [$requester['supervisor_id']])
+        : $db->getResults("SELECT id FROM users WHERE role = 'manager' AND department = ? AND is_active = 1", [$requester['department']]);
+
+    // No supervisor on file for this employee: fall back to the System Administrator
+    if (empty($approvers)) {
+        $approvers = $db->getResults("SELECT id FROM users WHERE role = 'admin' AND is_active = 1");
+    }
+
+    foreach ($approvers as $approver) {
+        createNotification($approver['id'], 'New Leave Request', $message, 'leave_request', $entity_id);
+    }
+}
+
+function notifyHR($message, $entity_id) {
+    global $db;
+
+    $hrUsers = $db->getResults("SELECT id FROM users WHERE role = 'hr' AND is_active = 1");
+    foreach ($hrUsers as $hrUser) {
+        createNotification($hrUser['id'], 'New Leave Request', $message, 'leave_request', $entity_id);
     }
 }
 

@@ -95,10 +95,11 @@
             const user = await checkAuth();
             initUserMenu(user);
 
-            // Admins only see the Admin Dashboard + My Info links, matching the admin landing page
-            if (user.role === 'admin') {
+            // Admins/HR only see their own dashboard + My Info links, matching their landing page
+            const soloNavLinks = { admin: 'Admin Dashboard', hr: 'HR Dashboard' };
+            if (soloNavLinks[user.role]) {
                 document.getElementById('sidebar-nav').innerHTML = `
-                    <a href="/admin" class="sidebar-link">Admin Dashboard</a>
+                    <a href="/${user.role === 'admin' ? 'admin' : 'hr'}" class="sidebar-link">${soloNavLinks[user.role]}</a>
                     <a href="/my-info" class="sidebar-link active">My Info</a>
                 `;
             }

@@ -66,6 +66,29 @@
             </div>
         </div>
 
+        <div class="card" id="pending-devices-card" style="display: none;">
+            <div class="card-header">
+                <h2>Pending Device Change Requests</h2>
+            </div>
+            <div class="card-body">
+                <table class="table">
+                    <thead>
+                        <tr>
+                            <th>User</th>
+                            <th>What Changed</th>
+                            <th>Requested</th>
+                            <th>Action</th>
+                        </tr>
+                    </thead>
+                    <tbody id="pending-devices-table">
+                        <tr>
+                            <td colspan="4" class="text-center">Loading...</td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+        </div>
+
         <div class="card">
             <div class="card-header">
                 <h2 id="requests-card-title">Recent Leave Requests</h2>
@@ -101,17 +124,23 @@
             const user = await checkAuth();
             if (!user) return;
 
-            // Admins use the Administration Dashboard instead
+            // Admins/HR use their own dashboards instead
             if (user.role === 'admin') {
                 window.location.href = '/admin';
+                return;
+            }
+            if (user.role === 'hr') {
+                window.location.href = '/hr';
                 return;
             }
 
             // Deans approve pending accounts in their own department here
             if (user.role === 'manager') {
                 document.getElementById('pending-approvals-card').style.display = '';
+                document.getElementById('pending-devices-card').style.display = '';
                 document.getElementById('requests-card-title').textContent = 'Team Leave Requests';
                 loadPendingApprovals();
+                loadPendingDeviceRequests();
             }
 
             initUserMenu(user);
@@ -164,13 +193,13 @@
                 } else {
                     requestResult.data.slice(0, 5).forEach(req => {
                         const row = document.createElement('tr');
-                        const canApprove = user.role === 'manager' && req.status === 'pending';
+                        const canApprove = user.role === 'manager' && req.status === 'pending' && req.supervisor_status === 'pending';
                         row.innerHTML = `
                             <td>${req.leave_type_name}</td>
                             <td>${UIManager.formatDate(req.start_date)}</td>
                             <td>${UIManager.formatDate(req.end_date)}</td>
                             <td>${req.number_of_days}</td>
-                            <td>${UIManager.getStatusBadge(req.status)}</td>
+                            <td>${user.role === 'manager' ? UIManager.getStatusBadge(req.status) : UIManager.getApprovalStageBadges(req)}</td>
                             <td>
                                 <a href="/my-requests" class="btn btn-small btn-secondary">View</a>
                                 ${canApprove ? `
@@ -267,6 +296,71 @@
                 loadPendingApprovals();
             } else {
                 UIManager.showAlert(result.message || 'Failed to reject user', 'danger');
+            }
+        }
+
+        async function loadPendingDeviceRequests() {
+            const result = await APIClient.get('manager.php?action=device_requests');
+            const tbody = document.getElementById('pending-devices-table');
+            tbody.innerHTML = '';
+
+            if (!result.success) {
+                tbody.innerHTML = '<tr><td colspan="4" class="text-center">Failed to load device requests</td></tr>';
+                return;
+            }
+
+            const requests = result.data || [];
+
+            if (requests.length === 0) {
+                tbody.innerHTML = '<tr><td colspan="4" class="text-center">No pending device requests</td></tr>';
+                return;
+            }
+
+            requests.forEach(r => {
+                const changes = r.changes || {};
+                const changeKeys = Object.keys(changes);
+                const changeSummary = changeKeys.length === 0
+                    ? 'No trusted device on file yet'
+                    : changeKeys.map(key => {
+                        const c = changes[key];
+                        return `<strong>${c.label}:</strong> ${c.old} &rarr; ${c.new}`;
+                    }).join('<br>');
+
+                const row = document.createElement('tr');
+                row.innerHTML = `
+                    <td>${r.full_name} (${r.username})</td>
+                    <td>${changeSummary}</td>
+                    <td>${UIManager.formatDate(r.requested_at)}</td>
+                    <td>
+                        <button class="btn btn-small btn-success" onclick="approveDeviceRequest(${r.id})">Approve</button>
+                        <button class="btn btn-small btn-danger" onclick="rejectDeviceRequest(${r.id})">Reject</button>
+                    </td>
+                `;
+                tbody.appendChild(row);
+            });
+        }
+
+        async function approveDeviceRequest(id) {
+            if (!confirm('Trust this device for the user?')) return;
+
+            const result = await APIClient.put(`manager.php?action=approve_device_request&id=${id}`, {});
+            if (result.success) {
+                UIManager.showAlert('Device approved', 'success');
+                loadPendingDeviceRequests();
+            } else {
+                UIManager.showAlert(result.message || 'Failed to approve device', 'danger');
+            }
+        }
+
+        async function rejectDeviceRequest(id) {
+            if (!confirm('Reject this device change request?')) return;
+
+            const result = await APIClient.put(`manager.php?action=reject_device_request&id=${id}`, {});
+            if (result.success) {
+                UIManager.showAlert('Device request rejected', 'success');
+                loadPendingDeviceRequests();
+            } else {
+                UIManager.showAlert(result.message || 'Failed to reject device request', 'danger');
             }
         }
     </script>

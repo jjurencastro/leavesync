@@ -49,8 +49,9 @@ try {
                 header('Location: ' . rtrim(APP_URL, '/') . '/confirm-device-change');
                 exit;
             }
-            if (($result['role'] ?? null) === 'admin') {
-                header('Location: ' . rtrim(APP_URL, '/') . '/admin');
+            $roleLandingPages = ['admin' => '/admin', 'hr' => '/hr'];
+            if (isset($roleLandingPages[$result['role'] ?? null])) {
+                header('Location: ' . rtrim(APP_URL, '/') . $roleLandingPages[$result['role']]);
                 exit;
             }
             $destination = !empty($result['needs_password_setup']) ? '/activate' : '/dashboard';

@@ -6,6 +6,7 @@
 require_once __DIR__ . '/../config/config.php';
 require_once __DIR__ . '/../src/database/Database.php';
 require_once __DIR__ . '/../src/auth/Auth.php';
+require_once __DIR__ . '/../src/auth/DeviceChangeRequest.php';
 require_once __DIR__ . '/../src/security/DigitalSignature.php';
 require_once __DIR__ . '/../src/security/DeviceFingerprint.php';
 
@@ -183,7 +184,7 @@ function updateUser($id, $data) {
 
     if (!$id) throw new Exception('User ID required');
 
-    $user = $db->getRow("SELECT id FROM users WHERE id = ?", [$id]);
+    $user = $db->getRow("SELECT id, role FROM users WHERE id = ?", [$id]);
     if (!$user) throw new Exception('User not found');
 
     $updates = [];
@@ -202,6 +203,15 @@ function updateUser($id, $data) {
         $values[] = $data['position'];
     }
     if (isset($data['role'])) {
+        if (!in_array($data['role'], ['employee', 'manager', 'hr', 'admin'], true)) {
+            throw new Exception('Invalid role');
+        }
+        if ($user['role'] === 'admin' && $data['role'] !== 'admin') {
+            $otherAdmins = $db->getRow("SELECT COUNT(*) AS count FROM users WHERE role = 'admin' AND id <> ?", [$id]);
+            if ((int) $otherAdmins['count'] === 0) {
+                throw new Exception('At least one System Administrator account must remain');
+            }
+        }
         $updates[] = "role = ?";
         $values[] = $data['role'];
     }
@@ -248,14 +258,7 @@ function deleteUser($id) {
 function getDeviceChangeRequests() {
     global $db;
 
-    $requests = $db->getResults(
-        "SELECT dcr.id, dcr.user_id, dcr.fingerprint_hash, dcr.device_info, dcr.ip_address, dcr.browser_info,
-                dcr.status, dcr.requested_at, u.username, u.full_name, u.email
-         FROM device_change_requests dcr
-         JOIN users u ON dcr.user_id = u.id
-         WHERE dcr.status = 'pending'
-         ORDER BY dcr.requested_at DESC"
-    );
+    $requests = DeviceChangeRequest::getPendingForAdmin();
 
     foreach ($requests as &$request) {
         $info = json_decode($request['device_info'], true) ?: [];
@@ -266,34 +269,7 @@ function getDeviceChangeRequests() {
 }
 
 function resolveDeviceChangeRequest($id, $status, $admin_id) {
-    global $db;
-
-    if (!$id) throw new Exception('Request ID required');
-
-    $request = $db->getRow("SELECT * FROM device_change_requests WHERE id = ? AND status = 'pending'", [$id]);
-    if (!$request) throw new Exception('Pending device request not found');
-
-    if ($status === 'approved') {
-        DeviceFingerprint::trustFingerprint(
-            $request['user_id'],
-            $request['fingerprint_hash'],
-            $request['device_info'],
-            $request['ip_address'],
-            $request['browser_info']
-        );
-
-        // Force logout everywhere so the user must sign in again from the newly trusted device
-        $db->execute("DELETE FROM sessions WHERE user_id = ?", [$request['user_id']]);
-    }
-
-    $db->execute(
-        "UPDATE device_change_requests SET status = ?, resolved_at = NOW(), resolved_by = ? WHERE id = ?",
-        [$status, $admin_id, $id]
-    );
-
-    Auth::auditLog($admin_id, "device_request_{$status}", 'device_change_request', $id);
-
-    return ['success' => true, 'message' => "Device request {$status}"];
+    return DeviceChangeRequest::resolve($id, $status, $admin_id);
 }
 
 function getLeaveTypes() {

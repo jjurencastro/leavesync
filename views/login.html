@@ -98,9 +98,8 @@
                 UIManager.showAlert('Login successful! Redirecting...', 'success');
                 setTimeout(async () => {
                     const profile = await AuthManager.getProfile();
-                    const destination = profile.success && profile.data.role === 'admin'
-                        ? '/admin'
-                        : '/dashboard';
+                    const landingPages = { admin: '/admin', hr: '/hr' };
+                    const destination = (profile.success && landingPages[profile.data.role]) || '/dashboard';
                     window.location.href = destination;
                 }, 1500);
             } else if (result.requires_mfa) {

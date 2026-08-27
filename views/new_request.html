@@ -85,8 +85,9 @@
         // Check authentication
         (async () => {
             const user = await checkAuth();
-            if (user && user.role === 'admin') {
-                window.location.href = '/admin';
+            const landingPages = { admin: '/admin', hr: '/hr' };
+            if (user && landingPages[user.role]) {
+                window.location.href = landingPages[user.role];
             }
             initUserMenu(user);
 

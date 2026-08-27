@@ -90,4 +90,71 @@ class DeviceChangeRequest {
         unset($_SESSION['pending_device_change_user_id'], $_SESSION['pending_device_change_data']);
         return ['success' => true];
     }
+
+    /**
+     * Pending requests from Tier 2/3 (manager/hr) accounts, and Tier 1 accounts with
+     * no supervisor on file, which only the System Administrator can approve.
+     */
+    public static function getPendingForAdmin() {
+        $db = Database::getInstance();
+        return $db->getResults(
+            "SELECT dcr.id, dcr.user_id, dcr.fingerprint_hash, dcr.device_info, dcr.ip_address, dcr.browser_info,
+                    dcr.status, dcr.requested_at, u.username, u.full_name, u.email
+             FROM device_change_requests dcr
+             JOIN users u ON dcr.user_id = u.id
+             WHERE dcr.status = 'pending' AND (u.role IN ('manager', 'hr', 'admin') OR u.supervisor_id IS NULL)
+             ORDER BY dcr.requested_at DESC"
+        );
+    }
+
+    /**
+     * Pending requests from a manager's own direct reports (Tier 1 employees who chose them as supervisor).
+     */
+    public static function getPendingForSupervisor($supervisor_id) {
+        $db = Database::getInstance();
+        return $db->getResults(
+            "SELECT dcr.id, dcr.user_id, dcr.fingerprint_hash, dcr.device_info, dcr.ip_address, dcr.browser_info,
+                    dcr.status, dcr.requested_at, u.username, u.full_name, u.email
+             FROM device_change_requests dcr
+             JOIN users u ON dcr.user_id = u.id
+             WHERE dcr.status = 'pending' AND u.supervisor_id = ? AND u.role = 'employee'
+             ORDER BY dcr.requested_at DESC",
+            [$supervisor_id]
+        );
+    }
+
+    /**
+     * Approve/reject a pending request, trusting the device on approval and forcing
+     * a fresh login. Shared by both the admin and manager (supervisor) approval queues.
+     */
+    public static function resolve($id, $status, $resolver_id) {
+        $db = Database::getInstance();
+
+        if (!$id) throw new Exception('Request ID required');
+
+        $request = $db->getRow("SELECT * FROM device_change_requests WHERE id = ? AND status = 'pending'", [$id]);
+        if (!$request) throw new Exception('Pending device request not found');
+
+        if ($status === 'approved') {
+            DeviceFingerprint::trustFingerprint(
+                $request['user_id'],
+                $request['fingerprint_hash'],
+                $request['device_info'],
+                $request['ip_address'],
+                $request['browser_info']
+            );
+
+            // Force logout everywhere so the user must sign in again from the newly trusted device
+            $db->execute("DELETE FROM sessions WHERE user_id = ?", [$request['user_id']]);
+        }
+
+        $db->execute(
+            "UPDATE device_change_requests SET status = ?, resolved_at = NOW(), resolved_by = ? WHERE id = ?",
+            [$status, $resolver_id, $id]
+        );
+
+        AuditLogger::log($resolver_id, "device_request_{$status}", 'device_change_request', $id);
+
+        return ['success' => true, 'message' => "Device request {$status}"];
+    }
 }

@@ -57,6 +57,31 @@
 
         <div class="card">
             <div class="card-header">
+                <h2>Manage Users &amp; Approval Tiers</h2>
+            </div>
+            <div class="card-body">
+                <p>Set each active user's approval tier: Tier 1 (Employee), Tier 2 (Supervisor), Tier 3 (HR), or System Administrator.</p>
+                <table class="table">
+                    <thead>
+                        <tr>
+                            <th>Full Name</th>
+                            <th>Username</th>
+                            <th>Department</th>
+                            <th>Position</th>
+                            <th>Tier / Role</th>
+                        </tr>
+                    </thead>
+                    <tbody id="manage-users-table">
+                        <tr>
+                            <td colspan="5" class="text-center">Loading...</td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+        </div>
+
+        <div class="card">
+            <div class="card-header">
                 <h2>Pending Device Change Requests</h2>
             </div>
             <div class="card-body">
@@ -117,6 +142,7 @@
 
             initUserMenu(user);
             loadPendingUsers();
+            loadManageUsers();
             loadPendingDeviceRequests();
             loadLeaveRequests();
         }
@@ -177,6 +203,54 @@
                 loadPendingUsers();
             } else {
                 UIManager.showAlert(result.message || 'Failed to reject user', 'danger');
+            }
+        }
+
+        const TIER_ROLES = [
+            { value: 'employee', label: 'Tier 1 — Employee' },
+            { value: 'manager', label: 'Tier 2 — Supervisor' },
+            { value: 'hr', label: 'Tier 3 — HR' },
+            { value: 'admin', label: 'System Administrator' }
+        ];
+
+        async function loadManageUsers() {
+            const result = await APIClient.get('admin.php?action=users');
+            const tbody = document.getElementById('manage-users-table');
+            tbody.innerHTML = '';
+
+            if (!result.success) {
+                tbody.innerHTML = '<tr><td colspan="5" class="text-center">Failed to load users</td></tr>';
+                return;
+            }
+
+            const activeUsers = (result.data || []).filter(u => u.is_active);
+
+            if (activeUsers.length === 0) {
+                tbody.innerHTML = '<tr><td colspan="5" class="text-center">No active users</td></tr>';
+                return;
+            }
+
+            activeUsers.forEach(u => {
+                const row = document.createElement('tr');
+                const options = TIER_ROLES.map(r => `<option value="${r.value}" ${r.value === u.role ? 'selected' : ''}>${r.label}</option>`).join('');
+                row.innerHTML = `
+                    <td>${u.full_name}</td>
+                    <td>${u.username}</td>
+                    <td>${u.department || ''}</td>
+                    <td>${u.position || ''}</td>
+                    <td><select onchange="setUserTier(${u.id}, this.value)">${options}</select></td>
+                `;
+                tbody.appendChild(row);
+            });
+        }
+
+        async function setUserTier(id, role) {
+            const result = await APIClient.put(`admin.php?action=update_user&id=${id}`, { role });
+            if (result.success) {
+                UIManager.showAlert('Approval tier updated', 'success');
+            } else {
+                UIManager.showAlert(result.message || 'Failed to update tier', 'danger');
+                loadManageUsers();
             }
         }
 
@@ -271,7 +345,7 @@
                     <td>${UIManager.formatDate(req.start_date)}</td>
                     <td>${UIManager.formatDate(req.end_date)}</td>
                     <td>${req.number_of_days}</td>
-                    <td>${UIManager.getStatusBadge(req.status)}</td>
+                    <td>${UIManager.getApprovalStageBadges(req)}</td>
                     <td>
                         ${canApprove ? `
                             <button class="btn btn-small btn-success" onclick="approveLeaveRequestAdmin(${req.id})">Approve</button>

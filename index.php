@@ -19,18 +19,27 @@ if (strpos($request_uri, '..') !== false) {
 }
 
 // Clean URL -> physical view file, plus who is allowed to load it.
-// 'auth' => must be logged in. 'role' => 'admin' restricts to admins,
-// 'non-admin' redirects admins elsewhere (they use the admin dashboard instead).
+// 'auth' => must be logged in. 'allow' => only these roles may view it (others get
+// bounced to their own landing page); omitted means any authenticated role is fine.
 $viewRoutes = [
     '/login'                  => ['file' => 'views/login.html', 'guest' => true],
     '/activate'                => ['file' => 'views/activate.html', 'auth' => true],
     '/confirm-device-change'   => ['file' => 'views/confirm_device_change.html'],
-    '/dashboard'               => ['file' => 'views/dashboard.html', 'auth' => true, 'role' => 'non-admin'],
-    '/new-request'             => ['file' => 'views/new_request.html', 'auth' => true, 'role' => 'non-admin'],
-    '/my-requests'             => ['file' => 'views/my_requests.html', 'auth' => true, 'role' => 'non-admin'],
+    '/dashboard'               => ['file' => 'views/dashboard.html', 'auth' => true, 'allow' => ['employee', 'manager']],
+    '/new-request'             => ['file' => 'views/new_request.html', 'auth' => true, 'allow' => ['employee', 'manager']],
+    '/my-requests'             => ['file' => 'views/my_requests.html', 'auth' => true, 'allow' => ['employee', 'manager']],
     '/my-info'                 => ['file' => 'views/my_info.html', 'auth' => true],
     '/settings'                => ['file' => 'views/settings.html', 'auth' => true],
-    '/admin'                   => ['file' => 'views/admin.html', 'auth' => true, 'role' => 'admin'],
+    '/admin'                   => ['file' => 'views/admin.html', 'auth' => true, 'allow' => ['admin']],
+    '/hr'                      => ['file' => 'views/hr.html', 'auth' => true, 'allow' => ['hr']],
+];
+
+// Where each role lands after login / when bounced off a page it can't access
+$roleLandingPage = [
+    'admin' => '/admin',
+    'hr' => '/hr',
+    'manager' => '/dashboard',
+    'employee' => '/dashboard',
 ];
 
 // API routes
@@ -54,10 +63,10 @@ elseif (array_key_exists($request_uri, $viewRoutes)) {
 
         $isAuthenticated = Auth::isAuthenticated();
         $currentUser = $isAuthenticated ? Auth::getCurrentUser() : null;
-        $isAdmin = $currentUser && $currentUser['role'] === 'admin';
+        $landingPage = $currentUser ? ($roleLandingPage[$currentUser['role']] ?? '/dashboard') : '/dashboard';
 
         if (!empty($route['guest']) && $isAuthenticated) {
-            header('Location: ' . ($isAdmin ? '/admin' : '/dashboard'));
+            header('Location: ' . $landingPage);
             exit;
         }
 
@@ -66,13 +75,8 @@ elseif (array_key_exists($request_uri, $viewRoutes)) {
                 header('Location: /login');
                 exit;
             }
-            $requiredRole = $route['role'] ?? null;
-            if ($requiredRole === 'admin' && !$isAdmin) {
-                header('Location: /dashboard');
-                exit;
-            }
-            if ($requiredRole === 'non-admin' && $isAdmin) {
-                header('Location: /admin');
+            if (!empty($route['allow']) && !in_array($currentUser['role'], $route['allow'], true)) {
+                header('Location: ' . $landingPage);
                 exit;
             }
         }

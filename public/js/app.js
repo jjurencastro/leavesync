@@ -247,9 +247,15 @@ class UIManager {
             pending: '<span class="badge badge-pending">Pending</span>',
             approved: '<span class="badge badge-approved">Approved</span>',
             rejected: '<span class="badge badge-rejected">Rejected</span>',
-            cancelled: '<span class="badge badge-cancelled">Cancelled</span>'
+            cancelled: '<span class="badge badge-cancelled">Cancelled</span>',
+            not_required: '<span class="badge">N/A</span>'
         };
         return badges[status] || `<span class="badge">${status}</span>`;
+    }
+
+    // Two-stage leave approval status: Supervisor stage (skipped for Tier 2/manager requesters) then HR stage
+    static getApprovalStageBadges(req) {
+        return `Supervisor: ${this.getStatusBadge(req.supervisor_status)} &nbsp; HR: ${this.getStatusBadge(req.hr_status)}`;
     }
 }
 
