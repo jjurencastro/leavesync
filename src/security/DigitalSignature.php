@@ -152,6 +152,27 @@ class DigitalSignature {
     }
 
     /**
+     * Record a WebAuthn passkey approval as the leave request's digital signature,
+     * in place of the RSA private-key signature flow.
+     * @param int $leave_request_id Leave request ID
+     * @param int $approver_id Approver's user ID
+     * @param string $assertion_signature Base64url WebAuthn assertion signature
+     */
+    public static function recordWebAuthnApproval($leave_request_id, $approver_id, $assertion_signature) {
+        $db = Database::getInstance();
+
+        $db->execute(
+            "INSERT INTO digital_signatures (document_id, document_type, signer_id, signature_hash, timestamp, is_valid) VALUES (?, ?, ?, ?, NOW(), 1)",
+            [$leave_request_id, 'leave_request', $approver_id, $assertion_signature]
+        );
+
+        $db->execute(
+            "UPDATE leave_requests SET digital_signature = ?, signature_timestamp = NOW() WHERE id = ?",
+            [$assertion_signature, $leave_request_id]
+        );
+    }
+
+    /**
      * Verify leave request signature
      * @param int $leave_request_id Leave request ID
      * @return bool Is signature valid

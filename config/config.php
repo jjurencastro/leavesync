@@ -3,6 +3,8 @@
  * Application Configuration
  */
 
+require_once __DIR__ . '/../vendor/autoload.php';
+
 function parseRequestPayload($rawBody = null) {
     if (!empty($_POST)) {
         return $_POST;

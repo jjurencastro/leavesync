@@ -156,12 +156,12 @@ class LeaveRequestManager {
         return APIClient.put(`leave_requests.php?action=update&id=${id}`, { reason });
     }
 
-    static async approveRequest(id, comments = '', privateKey = '') {
+    static async approveRequest(id, comments = '', webauthnResponse = null) {
         const fingerprint = await DeviceFingerprintManager.getFingerprint();
         return APIClient.post('leave_requests.php?action=approve', {
             id: id,
             comments: comments,
-            private_key: privateKey,
+            webauthn_response: webauthnResponse,
             ...fingerprint
         });
     }
@@ -179,6 +179,126 @@ class LeaveRequestManager {
 
     static async getLeaveTypes() {
         return APIClient.get('leave_requests.php?action=leave_types');
+    }
+}
+
+// WebAuthn passkeys (Windows Hello / Face ID / Touch ID), used for manager/hr/admin approvals
+class WebAuthnManager {
+    static base64urlToBuffer(base64url) {
+        const padding = '='.repeat((4 - (base64url.length % 4)) % 4);
+        const base64 = (base64url + padding).replace(/-/g, '+').replace(/_/g, '/');
+        const raw = atob(base64);
+        const buffer = new Uint8Array(raw.length);
+        for (let i = 0; i < raw.length; i++) buffer[i] = raw.charCodeAt(i);
+        return buffer.buffer;
+    }
+
+    static bufferToBase64url(buffer) {
+        const bytes = new Uint8Array(buffer);
+        let str = '';
+        bytes.forEach(b => { str += String.fromCharCode(b); });
+        return btoa(str).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+    }
+
+    static isSupported() {
+        return !!(window.PublicKeyCredential && navigator.credentials);
+    }
+
+    static async register(label) {
+        if (!this.isSupported()) {
+            return { success: false, message: 'This browser does not support passkeys' };
+        }
+
+        const optionsResult = await APIClient.get('webauthn.php?action=register_options');
+        if (!optionsResult.success) return optionsResult;
+
+        const o = optionsResult.options;
+        const publicKey = {
+            rp: o.rp,
+            user: {
+                id: this.base64urlToBuffer(o.user.id),
+                name: o.user.name,
+                displayName: o.user.displayName
+            },
+            challenge: this.base64urlToBuffer(o.challenge),
+            pubKeyCredParams: o.pubKeyCredParams,
+            authenticatorSelection: o.authenticatorSelection,
+            attestation: o.attestation,
+            excludeCredentials: o.excludeCredentials.map(c => ({
+                type: c.type,
+                id: this.base64urlToBuffer(c.id),
+                transports: c.transports
+            })),
+            timeout: o.timeout
+        };
+
+        let credential;
+        try {
+            credential = await navigator.credentials.create({ publicKey });
+        } catch (err) {
+            return { success: false, message: err.message || 'Passkey registration was cancelled or failed' };
+        }
+
+        const response = {
+            id: credential.id,
+            rawId: this.bufferToBase64url(credential.rawId),
+            type: credential.type,
+            response: {
+                clientDataJSON: this.bufferToBase64url(credential.response.clientDataJSON),
+                attestationObject: this.bufferToBase64url(credential.response.attestationObject)
+            }
+        };
+
+        return APIClient.post('webauthn.php?action=register_verify', { response, label });
+    }
+
+    static async listCredentials() {
+        return APIClient.get('webauthn.php?action=credentials');
+    }
+
+    static async deleteCredential(id) {
+        return APIClient.delete(`webauthn.php?action=delete_credential&id=${id}`);
+    }
+
+    /**
+     * Prompts for a passkey (Windows Hello/Face ID/etc.) scoped to a specific leave request
+     * or device-change request, and returns the response payload ready to submit for approval.
+     */
+    static async getApprovalAssertion(contextType, contextId) {
+        if (!this.isSupported()) {
+            throw new Error('This browser does not support passkeys');
+        }
+
+        const challengeResult = await APIClient.get(`webauthn.php?action=approval_challenge&type=${contextType}&id=${contextId}`);
+        if (!challengeResult.success) {
+            throw new Error(challengeResult.message || 'Failed to get passkey challenge');
+        }
+
+        const o = challengeResult.options;
+        const publicKey = {
+            challenge: this.base64urlToBuffer(o.challenge),
+            rpId: o.rpId,
+            userVerification: o.userVerification,
+            allowCredentials: o.allowCredentials.map(c => ({
+                type: c.type,
+                id: this.base64urlToBuffer(c.id)
+            })),
+            timeout: o.timeout
+        };
+
+        const assertion = await navigator.credentials.get({ publicKey });
+
+        return {
+            id: assertion.id,
+            rawId: this.bufferToBase64url(assertion.rawId),
+            type: assertion.type,
+            response: {
+                clientDataJSON: this.bufferToBase64url(assertion.response.clientDataJSON),
+                authenticatorData: this.bufferToBase64url(assertion.response.authenticatorData),
+                signature: this.bufferToBase64url(assertion.response.signature),
+                userHandle: assertion.response.userHandle ? this.bufferToBase64url(assertion.response.userHandle) : null
+            }
+        };
     }
 }
 

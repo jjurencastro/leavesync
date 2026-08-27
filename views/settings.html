@@ -68,6 +68,32 @@
             </div>
         </div>
 
+        <!-- Passkeys (manager/hr/admin only): required to approve leave/device-change requests -->
+        <div class="card" id="passkeys-card" style="display: none;">
+            <div class="card-header">
+                <h2>Passkeys</h2>
+            </div>
+            <div class="card-body">
+                <p>Register a passkey (Windows Hello, Face ID, Touch ID, etc.) to approve leave and device-change requests.</p>
+                <table class="table" id="passkeys-table">
+                    <thead>
+                        <tr>
+                            <th>Label</th>
+                            <th>Registered</th>
+                            <th>Last Used</th>
+                            <th>Action</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <tr>
+                            <td colspan="4" class="text-center">Loading...</td>
+                        </tr>
+                    </tbody>
+                </table>
+                <button class="btn btn-primary" onclick="registerPasskey()">Register a Passkey</button>
+            </div>
+        </div>
+
         <!-- Trusted Devices -->
         <div class="card">
             <div class="card-header">
@@ -154,6 +180,12 @@
                 `;
             }
             document.getElementById('sidebar-nav').style.visibility = 'visible';
+
+            // Only supervisors/HR/admins approve requests, so only they need passkeys
+            if (['manager', 'hr', 'admin'].includes(user.role)) {
+                document.getElementById('passkeys-card').style.display = '';
+                loadPasskeys();
+            }
         })();
 
         // Load settings
@@ -250,6 +282,56 @@
                 document.getElementById('confirm-password').value = '';
             } else {
                 UIManager.showAlert(result.message || 'Failed to change password', 'danger');
+            }
+        }
+
+        async function loadPasskeys() {
+            const result = await WebAuthnManager.listCredentials();
+            const tbody = document.querySelector('#passkeys-table tbody');
+            tbody.innerHTML = '';
+
+            if (!result.success) {
+                tbody.innerHTML = '<tr><td colspan="4" class="text-center">Failed to load passkeys</td></tr>';
+                return;
+            }
+
+            if (result.data.length === 0) {
+                tbody.innerHTML = '<tr><td colspan="4" class="text-center">No passkeys registered yet</td></tr>';
+                return;
+            }
+
+            result.data.forEach(credential => {
+                const row = document.createElement('tr');
+                row.innerHTML = `
+                    <td>${credential.label || 'Passkey'}</td>
+                    <td>${UIManager.formatDate(credential.created_at)}</td>
+                    <td>${credential.last_used_at ? UIManager.formatDate(credential.last_used_at) : 'Never'}</td>
+                    <td><button class="btn btn-small btn-danger" onclick="removePasskey(${credential.id})">Remove</button></td>
+                `;
+                tbody.appendChild(row);
+            });
+        }
+
+        async function registerPasskey() {
+            const label = prompt('Give this passkey a label (e.g. "Work Laptop"):') || 'Passkey';
+            const result = await WebAuthnManager.register(label);
+            if (result.success) {
+                UIManager.showAlert('Passkey registered', 'success');
+                loadPasskeys();
+            } else {
+                UIManager.showAlert(result.message || 'Failed to register passkey', 'danger');
+            }
+        }
+
+        async function removePasskey(id) {
+            if (!confirm('Remove this passkey? You will need it to approve requests.')) return;
+
+            const result = await WebAuthnManager.deleteCredential(id);
+            if (result.success) {
+                UIManager.showAlert('Passkey removed', 'success');
+                loadPasskeys();
+            } else {
+                UIManager.showAlert(result.message || 'Failed to remove passkey', 'danger');
             }
         }
     </script>

@@ -8,6 +8,7 @@ require_once __DIR__ . '/../src/database/Database.php';
 require_once __DIR__ . '/../src/auth/Auth.php';
 require_once __DIR__ . '/../src/security/DeviceFingerprint.php';
 require_once __DIR__ . '/../src/security/DigitalSignature.php';
+require_once __DIR__ . '/../src/security/WebAuthnService.php';
 
 header('Content-Type: application/json');
 
@@ -339,8 +340,8 @@ function approveLeaveRequest($data, $user) {
         throw new Exception('Invalid leave request');
     }
 
-    if (empty($data['private_key'])) {
-        throw new Exception('A private key is required to cryptographically approve this request.');
+    if (empty($data['webauthn_response'])) {
+        throw new Exception('A passkey approval is required to approve this request.');
     }
 
     $stage = currentApprovalStage($request);
@@ -357,11 +358,12 @@ function approveLeaveRequest($data, $user) {
         throw new Exception('This request has already been resolved');
     }
 
-    // Sign the request digitally
+    // Verify the passkey assertion and record it as the digital signature
     try {
-        DigitalSignature::signLeaveRequest($data['id'], $data['private_key'], $user['id']);
+        $assertionSignature = WebAuthnService::verifyApproval($user, $data['webauthn_response'], 'leave_request', (int) $data['id']);
+        DigitalSignature::recordWebAuthnApproval($data['id'], $user['id'], $assertionSignature);
     } catch (Exception $e) {
-        throw new Exception('Invalid private key provided for digital approval.');
+        throw new Exception('Passkey verification failed: ' . $e->getMessage());
     }
 
     if ($stage === 'supervisor') {

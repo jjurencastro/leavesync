@@ -57,12 +57,12 @@ try {
 
         case 'approve_device_request':
             if ($method !== 'PUT') throw new Exception('Method not allowed');
-            echo json_encode(resolveDeviceChangeRequest($_GET['id'] ?? null, 'approved', $user['id']));
+            echo json_encode(resolveDeviceChangeRequest($_GET['id'] ?? null, 'approved', $user, parseRequestPayload()['webauthn_response'] ?? null));
             break;
 
         case 'reject_device_request':
             if ($method !== 'PUT') throw new Exception('Method not allowed');
-            echo json_encode(resolveDeviceChangeRequest($_GET['id'] ?? null, 'rejected', $user['id']));
+            echo json_encode(resolveDeviceChangeRequest($_GET['id'] ?? null, 'rejected', $user));
             break;
 
         case 'leave_types':
@@ -268,8 +268,8 @@ function getDeviceChangeRequests() {
     return ['success' => true, 'data' => $requests];
 }
 
-function resolveDeviceChangeRequest($id, $status, $admin_id) {
-    return DeviceChangeRequest::resolve($id, $status, $admin_id);
+function resolveDeviceChangeRequest($id, $status, $resolverUser, $webauthnResponse = null) {
+    return DeviceChangeRequest::resolve($id, $status, $resolverUser, $webauthnResponse);
 }
 
 function getLeaveTypes() {

@@ -6,6 +6,7 @@
 
 require_once __DIR__ . '/../database/Database.php';
 require_once __DIR__ . '/../security/DeviceFingerprint.php';
+require_once __DIR__ . '/../security/WebAuthnService.php';
 require_once __DIR__ . '/AuditLogger.php';
 
 class DeviceChangeRequest {
@@ -126,8 +127,9 @@ class DeviceChangeRequest {
     /**
      * Approve/reject a pending request, trusting the device on approval and forcing
      * a fresh login. Shared by both the admin and manager (supervisor) approval queues.
+     * Approval requires a passkey assertion; rejection does not.
      */
-    public static function resolve($id, $status, $resolver_id) {
+    public static function resolve($id, $status, $resolverUser, $webauthnResponse = null) {
         $db = Database::getInstance();
 
         if (!$id) throw new Exception('Request ID required');
@@ -136,6 +138,11 @@ class DeviceChangeRequest {
         if (!$request) throw new Exception('Pending device request not found');
 
         if ($status === 'approved') {
+            if (empty($webauthnResponse)) {
+                throw new Exception('A passkey approval is required to approve this request.');
+            }
+            WebAuthnService::verifyApproval($resolverUser, $webauthnResponse, 'device_change', (int) $id);
+
             DeviceFingerprint::trustFingerprint(
                 $request['user_id'],
                 $request['fingerprint_hash'],
@@ -150,10 +157,10 @@ class DeviceChangeRequest {
 
         $db->execute(
             "UPDATE device_change_requests SET status = ?, resolved_at = NOW(), resolved_by = ? WHERE id = ?",
-            [$status, $resolver_id, $id]
+            [$status, $resolverUser['id'], $id]
         );
 
-        AuditLogger::log($resolver_id, "device_request_{$status}", 'device_change_request', $id);
+        AuditLogger::log($resolverUser['id'], "device_request_{$status}", 'device_change_request', $id);
 
         return ['success' => true, 'message' => "Device request {$status}"];
     }

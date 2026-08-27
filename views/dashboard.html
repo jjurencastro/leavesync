@@ -215,11 +215,16 @@
         }
 
         async function approveTeamRequest(id) {
-            const privateKey = prompt('Paste your private key to digitally sign this approval:');
-            if (!privateKey) return;
-
             const comments = prompt('Optional comments for the employee:') || '';
-            const result = await LeaveRequestManager.approveRequest(id, comments, privateKey);
+            let assertion;
+            try {
+                assertion = await WebAuthnManager.getApprovalAssertion('leave_request', id);
+            } catch (err) {
+                UIManager.showAlert(err.message || 'Passkey approval failed', 'danger');
+                return;
+            }
+
+            const result = await LeaveRequestManager.approveRequest(id, comments, assertion);
             if (result.success) {
                 UIManager.showAlert('Leave request approved', 'success');
                 initDashboard();
@@ -343,7 +348,15 @@
         async function approveDeviceRequest(id) {
             if (!confirm('Trust this device for the user?')) return;
 
-            const result = await APIClient.put(`manager.php?action=approve_device_request&id=${id}`, {});
+            let assertion;
+            try {
+                assertion = await WebAuthnManager.getApprovalAssertion('device_change', id);
+            } catch (err) {
+                UIManager.showAlert(err.message || 'Passkey approval failed', 'danger');
+                return;
+            }
+
+            const result = await APIClient.put(`manager.php?action=approve_device_request&id=${id}`, { webauthn_response: assertion });
             if (result.success) {
                 UIManager.showAlert('Device approved', 'success');
                 loadPendingDeviceRequests();

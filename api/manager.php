@@ -38,20 +38,20 @@ try {
         case 'reject_user':
             if ($method !== 'DELETE') throw new Exception('Method not allowed');
             echo json_encode(rejectDepartmentUser($_GET['id'] ?? null, $user));
+            break;
+
         case 'device_requests':
             echo json_encode(getSupervisorDeviceRequests($user));
             break;
 
         case 'approve_device_request':
             if ($method !== 'PUT') throw new Exception('Method not allowed');
-            echo json_encode(resolveSupervisorDeviceRequest($_GET['id'] ?? null, 'approved', $user));
+            echo json_encode(resolveSupervisorDeviceRequest($_GET['id'] ?? null, 'approved', $user, parseRequestPayload()['webauthn_response'] ?? null));
             break;
 
         case 'reject_device_request':
             if ($method !== 'PUT') throw new Exception('Method not allowed');
             echo json_encode(resolveSupervisorDeviceRequest($_GET['id'] ?? null, 'rejected', $user));
-            break;
-
             break;
 
         default:
@@ -96,6 +96,11 @@ function approveDepartmentUser($id, $user) {
 
     assertOwnDepartmentUser($id, $user);
 
+    $db->execute("UPDATE users SET is_active = 1 WHERE id = ?", [$id]);
+    Auth::auditLog($user['id'], 'approve_user', 'user', $id);
+
+    return ['success' => true, 'message' => 'User approved'];
+}
 
 /**
  * Device-change requests from this manager's Tier 1 (employee) direct reports only.
@@ -111,7 +116,7 @@ function getSupervisorDeviceRequests($user) {
     return ['success' => true, 'data' => $requests];
 }
 
-function resolveSupervisorDeviceRequest($id, $status, $user) {
+function resolveSupervisorDeviceRequest($id, $status, $user, $webauthnResponse = null) {
     global $db;
 
     if (!$id) throw new Exception('Request ID required');
@@ -125,12 +130,7 @@ function resolveSupervisorDeviceRequest($id, $status, $user) {
     );
     if (!$request) throw new Exception('Pending device request not found');
 
-    return DeviceChangeRequest::resolve($id, $status, $user['id']);
-}
-    $db->execute("UPDATE users SET is_active = 1 WHERE id = ?", [$id]);
-    Auth::auditLog($user['id'], 'approve_user', 'user', $id);
-
-    return ['success' => true, 'message' => 'User approved'];
+    return DeviceChangeRequest::resolve($id, $status, $user, $webauthnResponse);
 }
 
 function rejectDepartmentUser($id, $user) {
