@@ -115,6 +115,19 @@ try {
             echo json_encode(['success' => true, 'data' => $user]);
             break;
 
+        case 'mfa_status':
+            if (!Auth::isAuthenticated()) {
+                http_response_code(401);
+                throw new Exception('Unauthorized');
+            }
+
+            $user = Auth::getCurrentUser();
+            echo json_encode([
+                'success' => true,
+                'data' => ['enabled' => MFA::isMFAEnabled($user['id'])]
+            ]);
+            break;
+
         case 'mfa_setup':
             if (!Auth::isAuthenticated()) {
                 http_response_code(401);

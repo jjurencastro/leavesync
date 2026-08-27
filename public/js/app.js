@@ -124,6 +124,10 @@ class AuthManager {
         return APIClient.get('auth.php?action=mfa_setup');
     }
 
+    static async getMFAStatus() {
+        return APIClient.get('auth.php?action=mfa_status');
+    }
+
     static async enableMFA(totpCode) {
         return APIClient.post('auth.php?action=mfa_enable', { totp_code: totpCode });
     }
