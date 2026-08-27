@@ -66,11 +66,12 @@ elseif (array_key_exists($request_uri, $viewRoutes)) {
                 header('Location: /login');
                 exit;
             }
-            if ($route['role'] === 'admin' && !$isAdmin) {
+            $requiredRole = $route['role'] ?? null;
+            if ($requiredRole === 'admin' && !$isAdmin) {
                 header('Location: /dashboard');
                 exit;
             }
-            if ($route['role'] === 'non-admin' && $isAdmin) {
+            if ($requiredRole === 'non-admin' && $isAdmin) {
                 header('Location: /admin');
                 exit;
             }
