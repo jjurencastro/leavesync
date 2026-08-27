@@ -219,11 +219,10 @@
             const result = await AuthManager.setupMFA();
             if (result.success) {
                 document.getElementById('mfa-secret').textContent = result.secret;
-                
-                // Generate QR code URL
+
                 const qrUrl = `https://api.qrserver.com/v1/create-qr-code/?size=300x300&data=${encodeURIComponent(result.qr_url)}`;
                 document.getElementById('qr-container').innerHTML = `<img src="${qrUrl}" alt="QR Code" style="max-width: 300px;">`;
-                
+
                 document.getElementById('mfa-modal').classList.add('active');
             } else {
                 UIManager.showAlert(result.message || 'Failed to setup MFA', 'danger');

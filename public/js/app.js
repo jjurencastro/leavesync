@@ -3,6 +3,23 @@
  */
 
 const API_BASE = '/api';
+const LEAVE_TYPE_ORDER = {
+    'Vacation Leave': 1,
+    'Sick Leave': 2,
+    'Paternity Leave': 3,
+    'Maternity Leave': 4,
+    'Bereavement Leave': 5,
+};
+
+function sortLeaveTypes(items, nameKey = 'name') {
+    return [...items].sort((a, b) => {
+        const aName = a[nameKey] || a.name || '';
+        const bName = b[nameKey] || b.name || '';
+        const aOrder = LEAVE_TYPE_ORDER[aName] ?? Number.MAX_SAFE_INTEGER;
+        const bOrder = LEAVE_TYPE_ORDER[bName] ?? Number.MAX_SAFE_INTEGER;
+        return aOrder - bOrder;
+    });
+}
 
 // Device Fingerprinting
 class DeviceFingerprintManager {
@@ -355,11 +372,16 @@ class UIManager {
     }
 
     static formatDate(dateString) {
-        return new Date(dateString).toLocaleDateString('en-US', {
-            year: 'numeric',
-            month: 'short',
-            day: 'numeric'
-        });
+        const date = new Date(dateString);
+        if (Number.isNaN(date.getTime())) {
+            return dateString || '';
+        }
+
+        const month = String(date.getMonth() + 1).padStart(2, '0');
+        const day = String(date.getDate()).padStart(2, '0');
+        const year = String(date.getFullYear());
+
+        return `${month}/${day}/${year}`;
     }
 
     static getStatusBadge(status) {

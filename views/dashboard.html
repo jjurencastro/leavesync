@@ -151,7 +151,7 @@
             balancesGrid.innerHTML = '';
 
             if (balanceResult.success && balanceResult.data.length > 0) {
-                const allBalances = balanceResult.data;
+                const allBalances = sortLeaveTypes(balanceResult.data, 'leave_type_name');
                 const vlSlExhausted = allBalances
                     .filter(b => b.leave_type_name === 'Vacation Leave' || b.leave_type_name === 'Sick Leave')
                     .every(b => Number(b.balance) <= 0);

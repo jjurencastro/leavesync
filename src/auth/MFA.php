@@ -80,10 +80,11 @@ class MFA {
      * @return string QR Code URL
      */
     public static function getQRCodeURL($secret, $email, $issuer = 'LeaveSync') {
-        $label = urlencode($issuer . ' (' . $email . ')');
-        $secret_encoded = urlencode($secret);
-        
-        return "otpauth://totp/{$label}?secret={$secret_encoded}&issuer={$issuer}";
+        $label = rawurlencode($issuer . ':' . $email);
+        $secret_encoded = rawurlencode($secret);
+        $issuer_encoded = rawurlencode($issuer);
+
+        return "otpauth://totp/{$label}?secret={$secret_encoded}&issuer={$issuer_encoded}";
     }
 
     /**

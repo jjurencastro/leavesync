@@ -365,24 +365,43 @@ textarea {
     color: #374151;
 }
 
-/* Compact leave balance pills, e.g. shown above the New Request form */
+.request-layout {
+    display: grid;
+    grid-template-columns: 260px minmax(0, 1fr);
+    gap: 1.5rem;
+    align-items: start;
+}
+
+.request-side-panel,
+.request-form-panel {
+    min-width: 0;
+}
+
+/* Compact leave balance pills shown beside the New Request form */
 .balance-pills {
     display: flex;
-    flex-wrap: wrap;
+    flex-direction: column;
     gap: 0.5rem;
-    margin-bottom: 1rem;
+    margin: 0;
 }
 
 .balance-pill {
     display: flex;
     align-items: center;
+    justify-content: space-between;
     gap: 0.35rem;
-    padding: 0.3rem 0.65rem;
+    padding: 0.55rem 0.7rem;
     border-radius: 6px;
     background: var(--light-bg);
     border: 1px solid var(--border-color);
     font-size: 0.8rem;
     color: var(--text-color);
+}
+
+@media (max-width: 768px) {
+    .request-layout {
+        grid-template-columns: 1fr;
+    }
 }
 
 .balance-pill strong {

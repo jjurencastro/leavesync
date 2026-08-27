@@ -72,25 +72,25 @@
     <script src="/js/app.js"></script>
     <script>
         let allRequests = [];
+        let currentUser = null;
         let currentFilter = 'all';
 
         // Check authentication
         (async () => {
-            const user = await checkAuth();
+            currentUser = await checkAuth();
             const landingPages = { admin: '/admin', hr: '/hr' };
-            if (user && landingPages[user.role]) {
-                window.location.href = landingPages[user.role];
+            if (currentUser && landingPages[currentUser.role]) {
+                window.location.href = landingPages[currentUser.role];
             }
-            initUserMenu(user);
+            initUserMenu(currentUser);
+            loadRequests();
         })();
 
         // Load requests
-        loadRequests();
-
         async function loadRequests() {
             const result = await LeaveRequestManager.listRequests();
             if (result.success) {
-                allRequests = result.data || [];
+                allRequests = (result.data || []).filter(req => req.user_id === currentUser?.id);
                 displayRequests();
             }
         }

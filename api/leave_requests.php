@@ -9,6 +9,7 @@ require_once __DIR__ . '/../src/auth/Auth.php';
 require_once __DIR__ . '/../src/security/DeviceFingerprint.php';
 require_once __DIR__ . '/../src/security/DigitalSignature.php';
 require_once __DIR__ . '/../src/security/WebAuthnService.php';
+require_once __DIR__ . '/../src/leave/LeaveTypeOrder.php';
 
 header('Content-Type: application/json');
 
@@ -502,7 +503,7 @@ function getLeaveBalance($user_id) {
         [$user_id]
     );
 
-    return ['success' => true, 'data' => $balances];
+    return ['success' => true, 'data' => LeaveTypeOrder::sortTypes($balances, 'leave_type_name')];
 }
 
 /**
@@ -512,7 +513,7 @@ function getLeaveBalance($user_id) {
 function getAvailableLeaveTypes($user) {
     global $db;
 
-    $types = $db->getResults("SELECT id, name FROM leave_types ORDER BY name");
+    $types = $db->getResults("SELECT id, name FROM leave_types");
     $types = array_values(array_filter($types, function ($type) use ($user) {
         if ($type['name'] === 'Maternity Leave') {
             return $user['gender'] === 'female';
@@ -523,7 +524,7 @@ function getAvailableLeaveTypes($user) {
         return true;
     }));
 
-    return ['success' => true, 'data' => $types];
+    return ['success' => true, 'data' => LeaveTypeOrder::sortTypes($types, 'name')];
 }
 
 /**

@@ -30,16 +30,26 @@
                 </div>
             </header>
 
-    <div class="container" style="max-width: 600px; padding: 2rem 0;">
-        <div id="balance-pills" class="balance-pills"></div>
-
-        <div class="card">
-            <div class="card-header">
-                <h2>Submit New Leave Request</h2>
+    <div class="container request-layout" style="max-width: 900px; padding: 2rem 0;">
+        <div class="request-side-panel">
+            <div class="card">
+                <div class="card-header">
+                    <h2>Leave Credits</h2>
+                </div>
+                <div class="card-body">
+                    <div id="balance-pills" class="balance-pills"></div>
+                </div>
             </div>
-            
-            <form id="leave-form" class="card-body">
-                <div id="alert-container"></div>
+        </div>
+
+        <div class="request-form-panel">
+            <div class="card">
+                <div class="card-header">
+                    <h2>Submit New Leave Request</h2>
+                </div>
+                
+                <form id="leave-form" class="card-body">
+                    <div id="alert-container"></div>
 
                 <div class="form-group">
                     <label for="leave-type">Leave Type</label>
@@ -70,11 +80,12 @@
                     <textarea id="reason" name="reason" required placeholder="Please provide a reason for your leave request..."></textarea>
                 </div>
 
-                <div class="card-footer" style="justify-content: flex-end;">
-                    <a href="/dashboard" class="btn btn-secondary">Cancel</a>
-                    <button type="submit" class="btn btn-primary">Submit Request</button>
-                </div>
-            </form>
+                    <div class="card-footer" style="justify-content: flex-end;">
+                        <a href="/dashboard" class="btn btn-secondary">Cancel</a>
+                        <button type="submit" class="btn btn-primary">Submit Request</button>
+                    </div>
+                </form>
+            </div>
         </div>
     </div>
         </div>
@@ -94,7 +105,7 @@
             const typesResult = await LeaveRequestManager.getLeaveTypes();
             if (typesResult.success) {
                 const select = document.getElementById('leave-type');
-                typesResult.data.forEach((type) => {
+                sortLeaveTypes(typesResult.data).forEach((type) => {
                     const option = document.createElement('option');
                     option.value = type.id;
                     option.textContent = type.name;
@@ -105,7 +116,7 @@
             const balanceResult = await LeaveRequestManager.getLeaveBalance();
             const pillsContainer = document.getElementById('balance-pills');
             if (balanceResult.success) {
-                const allBalances = balanceResult.data;
+                const allBalances = sortLeaveTypes(balanceResult.data, 'leave_type_name');
                 const vlSlExhausted = allBalances
                     .filter(b => b.leave_type_name === 'Vacation Leave' || b.leave_type_name === 'Sick Leave')
                     .every(b => Number(b.balance) <= 0);
