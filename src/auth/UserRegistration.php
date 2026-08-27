@@ -144,6 +144,29 @@ class UserRegistration {
     }
 
     /**
+     * Change the password for an already-active account, verifying the current
+     * password first. Used from the account settings page.
+     */
+    public static function changePassword($user_id, $currentPassword, $newPassword) {
+        if (empty($newPassword) || strlen($newPassword) < 8) {
+            return ['success' => false, 'message' => 'New password must be at least 8 characters'];
+        }
+
+        $db = Database::getInstance();
+        $user = $db->getRow("SELECT password_hash FROM users WHERE id = ?", [$user_id]);
+        if (!$user || !password_verify($currentPassword ?? '', $user['password_hash'])) {
+            return ['success' => false, 'message' => 'Current password is incorrect'];
+        }
+
+        $password_hash = password_hash($newPassword, PASSWORD_BCRYPT);
+        $db->execute("UPDATE users SET password_hash = ? WHERE id = ?", [$password_hash, $user_id]);
+
+        AuditLogger::log($user_id, 'password_changed', 'user', $user_id);
+
+        return ['success' => true, 'message' => 'Password changed successfully'];
+    }
+
+    /**
      * Alert whoever approves pending accounts for this department: the Dean for
      * academic departments, or admin for the ADMIN department (which has no Dean).
      */

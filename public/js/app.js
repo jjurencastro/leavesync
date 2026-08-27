@@ -122,6 +122,13 @@ class AuthManager {
     static async removeDevice(deviceId) {
         return APIClient.post('auth.php?action=remove_device', { device_id: deviceId });
     }
+
+    static async changePassword(currentPassword, newPassword) {
+        return APIClient.post('auth.php?action=change_password', {
+            current_password: currentPassword,
+            new_password: newPassword
+        });
+    }
 }
 
 // Leave Requests

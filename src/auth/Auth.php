@@ -61,6 +61,10 @@ class Auth {
         return UserRegistration::setPassword($user_id, $password, $data);
     }
 
+    public static function changePassword($user_id, $currentPassword, $newPassword) {
+        return UserRegistration::changePassword($user_id, $currentPassword, $newPassword);
+    }
+
     public static function getActivationInfo($user_id) {
         return UserRegistration::getActivationInfo($user_id);
     }
