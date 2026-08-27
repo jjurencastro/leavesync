@@ -123,7 +123,8 @@ date_default_timezone_set('UTC');
 // Session Settings
 ini_set('session.cookie_secure', SESSION_SECURE ? 1 : 0);
 ini_set('session.cookie_httponly', SESSION_HTTPONLY ? 1 : 0);
-ini_set('session.cookie_samesite', 'Strict');
+// Lax (not Strict) so the native session cookie survives the top-level redirect back from Google OAuth
+ini_set('session.cookie_samesite', 'Lax');
 ini_set('session.gc_maxlifetime', SESSION_LIFETIME);
 
 // CORS Configuration

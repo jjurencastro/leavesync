@@ -36,7 +36,8 @@ class AuthSession {
             'domain' => parse_url(APP_URL, PHP_URL_HOST),
             'secure' => SESSION_SECURE,
             'httponly' => SESSION_HTTPONLY,
-            'samesite' => 'Strict'
+            // Lax (not Strict) so the cookie survives the top-level redirect Google sends us back through after OAuth
+            'samesite' => 'Lax'
         ]);
 
         if ($setNativeSession) {
@@ -236,7 +237,7 @@ class AuthSession {
                     'domain' => parse_url(APP_URL, PHP_URL_HOST),
                     'secure' => SESSION_SECURE,
                     'httponly' => SESSION_HTTPONLY,
-                    'samesite' => 'Strict'
+                    'samesite' => 'Lax'
                 ]);
             }
 
