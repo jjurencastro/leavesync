@@ -23,7 +23,7 @@ class AuthSession {
         $device_id = DeviceFingerprint::store($user_id, true, parseRequestPayload(), $role !== 'admin');
         $token = bin2hex(random_bytes(32));
         $token_hash = hash('sha256', $token);
-        $expires_at = date('Y-m-d H:i:s', time() + SESSION_LIFETIME);
+        $expires_at = date('Y-m-d H:i:s', time() + AUTH_SESSION_LIFETIME);
 
         $db->execute(
             "INSERT INTO sessions (user_id, token_hash, device_id, ip_address, expires_at) VALUES (?, ?, ?, ?, ?)",
@@ -31,7 +31,7 @@ class AuthSession {
         );
 
         setcookie('auth_token', $token, [
-            'expires' => time() + SESSION_LIFETIME,
+            'expires' => time() + AUTH_SESSION_LIFETIME,
             'path' => '/',
             'domain' => parse_url(APP_URL, PHP_URL_HOST),
             'secure' => SESSION_SECURE,
@@ -228,11 +228,11 @@ class AuthSession {
             // Sliding expiration: renew the session/cookie while the user is
             // actively using the app, instead of forcing logout after a fixed
             // window even during continuous activity.
-            $new_expires_at = date('Y-m-d H:i:s', time() + SESSION_LIFETIME);
+            $new_expires_at = date('Y-m-d H:i:s', time() + AUTH_SESSION_LIFETIME);
             $db->execute("UPDATE sessions SET expires_at = ? WHERE token_hash = ?", [$new_expires_at, $token_hash]);
             if (isset($_COOKIE['auth_token'])) {
                 setcookie('auth_token', $token, [
-                    'expires' => time() + SESSION_LIFETIME,
+                    'expires' => time() + AUTH_SESSION_LIFETIME,
                     'path' => '/',
                     'domain' => parse_url(APP_URL, PHP_URL_HOST),
                     'secure' => SESSION_SECURE,

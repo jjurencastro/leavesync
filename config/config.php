@@ -56,6 +56,7 @@ $envKeys = [
     'APP_ENV', 'APP_DEBUG', 'APP_URL', 'APP_SECRET',
     'ENCRYPTION_KEY', 'JWT_SECRET', 'ALLOWED_EMAIL_DOMAIN',
     'SESSION_LIFETIME', 'SESSION_SECURE', 'SESSION_HTTPONLY',
+    'AUTH_SESSION_LIFETIME',
     'MFA_ENABLED', 'MFA_WINDOW',
     'RATE_LIMIT_REQUESTS', 'RATE_LIMIT_WINDOW',
 ];
@@ -93,6 +94,11 @@ define('JWT_SECRET', $env['JWT_SECRET'] ?? '');
 define('SESSION_LIFETIME', (int)($env['SESSION_LIFETIME'] ?? 3600));
 define('SESSION_SECURE', (isset($env['SESSION_SECURE']) ? $env['SESSION_SECURE'] : (APP_ENV === 'production' ? 'true' : 'false')) === 'true');
 define('SESSION_HTTPONLY', (isset($env['SESSION_HTTPONLY']) ? $env['SESSION_HTTPONLY'] : 'true') === 'true');
+
+// How long the login (auth_token) cookie/session lasts, sliding on activity. Only a
+// device that already passed the single-trusted-device check ever reaches this, so
+// it's safe to keep users signed in for a long stretch, like Facebook's "stay logged in".
+define('AUTH_SESSION_LIFETIME', (int)($env['AUTH_SESSION_LIFETIME'] ?? 2592000)); // 30 days
 
 // MFA Configuration
 define('MFA_ENABLED', (isset($env['MFA_ENABLED']) ? $env['MFA_ENABLED'] : 'true') === 'true');
