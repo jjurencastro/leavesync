@@ -42,18 +42,18 @@ try {
             try {
                 $result = Auth::handleGoogleCallback($_GET['code'], $redirectUri);
             } catch (Exception $e) {
-                header('Location: ' . rtrim(APP_URL, '/') . '/views/login.html?google_error=' . urlencode($e->getMessage()));
+                header('Location: ' . rtrim(APP_URL, '/') . '/login?google_error=' . urlencode($e->getMessage()));
                 exit;
             }
             if (!empty($result['requires_device_confirmation'])) {
-                header('Location: ' . rtrim(APP_URL, '/') . '/views/confirm_device_change.html');
+                header('Location: ' . rtrim(APP_URL, '/') . '/confirm-device-change');
                 exit;
             }
             if (($result['role'] ?? null) === 'admin') {
-                header('Location: ' . rtrim(APP_URL, '/') . '/views/admin.html');
+                header('Location: ' . rtrim(APP_URL, '/') . '/admin');
                 exit;
             }
-            $destination = !empty($result['needs_password_setup']) ? '/views/activate.html' : '/views/dashboard.html';
+            $destination = !empty($result['needs_password_setup']) ? '/activate' : '/dashboard';
             header('Location: ' . rtrim(APP_URL, '/') . $destination);
             exit;
 

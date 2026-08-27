@@ -99,8 +99,8 @@
                 setTimeout(async () => {
                     const profile = await AuthManager.getProfile();
                     const destination = profile.success && profile.data.role === 'admin'
-                        ? '/views/admin.html'
-                        : '/views/dashboard.html';
+                        ? '/admin'
+                        : '/dashboard';
                     window.location.href = destination;
                 }, 1500);
             } else if (result.requires_mfa) {

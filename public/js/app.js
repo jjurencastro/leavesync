@@ -46,7 +46,7 @@ class APIClient {
             const result = await response.json();
 
             if (!response.ok && response.status === 401) {
-                window.location.href = '/views/login.html';
+                window.location.href = '/login';
             }
 
             return result;
@@ -257,7 +257,7 @@ class UIManager {
 async function checkAuth() {
     const result = await AuthManager.getProfile();
     if (!result.success) {
-        window.location.href = '/views/login.html';
+        window.location.href = '/login';
         return null;
     }
 
@@ -269,7 +269,7 @@ async function checkAuth() {
         setInterval(async () => {
             const check = await AuthManager.getProfile();
             if (!check.success) {
-                window.location.href = '/views/login.html';
+                window.location.href = '/login';
             }
         }, 15000);
     }
@@ -306,6 +306,6 @@ document.addEventListener('DOMContentLoaded', async () => {
 async function logout() {
     if (confirm('Are you sure you want to logout?')) {
         await AuthManager.logout();
-        window.location.href = '/views/login.html';
+        window.location.href = '/login';
     }
 }

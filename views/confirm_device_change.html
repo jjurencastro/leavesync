@@ -49,7 +49,7 @@
             tbody.innerHTML = '';
 
             if (!result.success) {
-                window.location.href = '/views/login.html';
+                window.location.href = '/login';
                 return;
             }
 
@@ -73,7 +73,7 @@
             const result = await APIClient.post('auth.php?action=confirm_device_change', {});
             if (result.success) {
                 UIManager.showAlert(result.message, 'success');
-                setTimeout(() => { window.location.href = '/views/login.html'; }, 2000);
+                setTimeout(() => { window.location.href = '/login'; }, 2000);
             } else {
                 UIManager.showAlert(result.message || 'Failed to submit request', 'danger');
             }
@@ -81,7 +81,7 @@
 
         document.getElementById('cancel-btn').addEventListener('click', async () => {
             await APIClient.post('auth.php?action=cancel_device_change', {});
-            window.location.href = '/views/login.html';
+            window.location.href = '/login';
         });
 
         loadChanges();

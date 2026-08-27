@@ -50,7 +50,7 @@ php -r "echo 'APP_SECRET=' . bin2hex(random_bytes(32)) . PHP_EOL;"
 cd /path/to/leavesync
 php -S 0.0.0.0:8000 -t public/ index.php
 ```
-Access: `http://localhost:8000/views/login.html`
+Access: `http://localhost:8000/login`
 
 #### Option B: Apache
 Configure in Apache:
@@ -88,7 +88,7 @@ server {
 
 ### 5. Create First User
 
-1. Navigate to `/views/register.html`
+1. Navigate to `/activate` after signing in with an account pending setup
 2. Fill in registration form
 3. Test login with credentials
 

@@ -39,7 +39,7 @@ leavesync/
 1. Copy `.env.example` to `.env` and configure
 2. Import database schema: `mysql < src/database/schema.sql`
 3. Start PHP server: `php -S localhost:8000 -t public/`
-4. Access: `https://localhost:8443/views/login.html`
+4. Access: `https://localhost:8443/login`
 
 ## Security Considerations
 - All passwords are hashed with bcrypt

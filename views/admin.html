@@ -11,8 +11,8 @@
         <aside class="sidebar">
             <div class="sidebar-brand">LeaveSync</div>
             <nav class="sidebar-nav">
-                <a href="/views/admin.html" class="sidebar-link active">Admin Dashboard</a>
-                <a href="/views/my_info.html" class="sidebar-link">My Info</a>
+                <a href="/admin" class="sidebar-link active">Admin Dashboard</a>
+                <a href="/my-info" class="sidebar-link">My Info</a>
             </nav>
         </aside>
         <div class="main-area">
@@ -22,7 +22,7 @@
                         <span id="user-fullname">Loading...</span> <span>&#9662;</span>
                     </button>
                     <div class="user-menu-dropdown" id="user-menu-dropdown">
-                        <a href="/views/settings.html">Settings</a>
+                        <a href="/settings">Settings</a>
                         <a href="#" onclick="logout()">Logout</a>
                     </div>
                 </div>
@@ -112,7 +112,7 @@
         async function initAdmin() {
             const user = await checkAuth();
             if (user.role !== 'admin') {
-                window.location.href = '/views/dashboard.html';
+                window.location.href = '/dashboard';
             }
 
             initUserMenu(user);

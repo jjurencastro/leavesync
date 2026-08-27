@@ -141,7 +141,7 @@
                 UIManager.showAlert('Password set! Your account now awaits administrator approval. Logging you out...', 'success');
                 setTimeout(async () => {
                     await AuthManager.logout();
-                    window.location.href = '/views/login.html?google_error=' + encodeURIComponent('Your account activation is pending administrator approval.');
+                    window.location.href = '/login?google_error=' + encodeURIComponent('Your account activation is pending administrator approval.');
                 }, 2000);
             } else {
                 UIManager.showAlert(result.message || 'Failed to set password', 'danger');

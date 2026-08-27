@@ -18,6 +18,21 @@ if (strpos($request_uri, '..') !== false) {
     exit;
 }
 
+// Clean URL -> physical view file, plus who is allowed to load it.
+// 'auth' => must be logged in. 'role' => 'admin' restricts to admins,
+// 'non-admin' redirects admins elsewhere (they use the admin dashboard instead).
+$viewRoutes = [
+    '/login'                  => ['file' => 'views/login.html', 'guest' => true],
+    '/activate'                => ['file' => 'views/activate.html', 'auth' => true],
+    '/confirm-device-change'   => ['file' => 'views/confirm_device_change.html'],
+    '/dashboard'               => ['file' => 'views/dashboard.html', 'auth' => true, 'role' => 'non-admin'],
+    '/new-request'             => ['file' => 'views/new_request.html', 'auth' => true, 'role' => 'non-admin'],
+    '/my-requests'             => ['file' => 'views/my_requests.html', 'auth' => true, 'role' => 'non-admin'],
+    '/my-info'                 => ['file' => 'views/my_info.html', 'auth' => true],
+    '/settings'                => ['file' => 'views/settings.html', 'auth' => true],
+    '/admin'                   => ['file' => 'views/admin.html', 'auth' => true, 'role' => 'admin'],
+];
+
 // API routes
 if (strpos($request_uri, '/api/') === 0) {
     $api_file = __DIR__ . $request_uri;
@@ -30,8 +45,39 @@ if (strpos($request_uri, '/api/') === 0) {
     }
 }
 // View routes (checked before generic static handling since these live outside public/)
-elseif (in_array($request_uri, ['/views/login.html', '/views/activate.html', '/views/confirm_device_change.html', '/views/dashboard.html', '/views/new_request.html', '/views/settings.html', '/views/my_info.html', '/views/my_requests.html', '/views/admin.html'])) {
-    $file_path = __DIR__ . $request_uri;
+elseif (array_key_exists($request_uri, $viewRoutes)) {
+    $route = $viewRoutes[$request_uri];
+
+    if (!empty($route['auth']) || !empty($route['guest'])) {
+        require_once __DIR__ . '/src/database/Database.php';
+        require_once __DIR__ . '/src/auth/Auth.php';
+
+        $isAuthenticated = Auth::isAuthenticated();
+        $currentUser = $isAuthenticated ? Auth::getCurrentUser() : null;
+        $isAdmin = $currentUser && $currentUser['role'] === 'admin';
+
+        if (!empty($route['guest']) && $isAuthenticated) {
+            header('Location: ' . ($isAdmin ? '/admin' : '/dashboard'));
+            exit;
+        }
+
+        if (!empty($route['auth'])) {
+            if (!$isAuthenticated) {
+                header('Location: /login');
+                exit;
+            }
+            if ($route['role'] === 'admin' && !$isAdmin) {
+                header('Location: /dashboard');
+                exit;
+            }
+            if ($route['role'] === 'non-admin' && $isAdmin) {
+                header('Location: /admin');
+                exit;
+            }
+        }
+    }
+
+    $file_path = __DIR__ . '/' . $route['file'];
     if (file_exists($file_path)) {
         header('Content-Type: text/html');
         readfile($file_path);
@@ -63,10 +109,10 @@ elseif (in_array(pathinfo($request_uri, PATHINFO_EXTENSION), ['css', 'js', 'html
         echo "File not found";
     }
 }
-// Default to the dashboard; its own client-side auth check bounces
-// unauthenticated visitors to login.html
+// Default to the dashboard; the route above redirects unauthenticated
+// visitors to /login and admins to /admin
 else {
-    header('Location: /views/dashboard.html');
+    header('Location: /dashboard');
     exit;
 }
 ?>

@@ -11,10 +11,10 @@
         <aside class="sidebar">
             <div class="sidebar-brand">LeaveSync</div>
             <nav class="sidebar-nav">
-                <a href="/views/dashboard.html" class="sidebar-link">Dashboard</a>
-                <a href="/views/new_request.html" class="sidebar-link active">New Request</a>
-                <a href="/views/my_requests.html" class="sidebar-link">My Requests</a>
-                <a href="/views/my_info.html" class="sidebar-link">My Info</a>
+                <a href="/dashboard" class="sidebar-link">Dashboard</a>
+                <a href="/new-request" class="sidebar-link active">New Request</a>
+                <a href="/my-requests" class="sidebar-link">My Requests</a>
+                <a href="/my-info" class="sidebar-link">My Info</a>
             </nav>
         </aside>
         <div class="main-area">
@@ -24,7 +24,7 @@
                         <span id="user-fullname">Loading...</span> <span>&#9662;</span>
                     </button>
                     <div class="user-menu-dropdown" id="user-menu-dropdown">
-                        <a href="/views/settings.html">Settings</a>
+                        <a href="/settings">Settings</a>
                         <a href="#" onclick="logout()">Logout</a>
                     </div>
                 </div>
@@ -71,7 +71,7 @@
                 </div>
 
                 <div class="card-footer" style="justify-content: flex-end;">
-                    <a href="/views/dashboard.html" class="btn btn-secondary">Cancel</a>
+                    <a href="/dashboard" class="btn btn-secondary">Cancel</a>
                     <button type="submit" class="btn btn-primary">Submit Request</button>
                 </div>
             </form>
@@ -86,7 +86,7 @@
         (async () => {
             const user = await checkAuth();
             if (user && user.role === 'admin') {
-                window.location.href = '/views/admin.html';
+                window.location.href = '/admin';
             }
             initUserMenu(user);
 
@@ -157,7 +157,7 @@
             if (result.success) {
                 UIManager.showAlert('Leave request submitted successfully!', 'success');
                 setTimeout(() => {
-                    window.location.href = '/views/my_requests.html';
+                    window.location.href = '/my-requests';
                 }, 1500);
             } else {
                 UIManager.showAlert(result.message || 'Failed to submit request', 'danger');

@@ -11,10 +11,10 @@
         <aside class="sidebar">
             <div class="sidebar-brand">LeaveSync</div>
             <nav class="sidebar-nav">
-                <a href="/views/dashboard.html" class="sidebar-link">Dashboard</a>
-                <a href="/views/new_request.html" class="sidebar-link">New Request</a>
-                <a href="/views/my_requests.html" class="sidebar-link active">My Requests</a>
-                <a href="/views/my_info.html" class="sidebar-link">My Info</a>
+                <a href="/dashboard" class="sidebar-link">Dashboard</a>
+                <a href="/new-request" class="sidebar-link">New Request</a>
+                <a href="/my-requests" class="sidebar-link active">My Requests</a>
+                <a href="/my-info" class="sidebar-link">My Info</a>
             </nav>
         </aside>
         <div class="main-area">
@@ -24,7 +24,7 @@
                         <span id="user-fullname">Loading...</span> <span>&#9662;</span>
                     </button>
                     <div class="user-menu-dropdown" id="user-menu-dropdown">
-                        <a href="/views/settings.html">Settings</a>
+                        <a href="/settings">Settings</a>
                         <a href="#" onclick="logout()">Logout</a>
                     </div>
                 </div>
@@ -33,7 +33,7 @@
     <div class="container" style="padding: 2rem 0;">
         <div class="flex-between">
             <h1>My Leave Requests</h1>
-            <a href="/views/new_request.html" class="btn btn-primary">New Request</a>
+            <a href="/new-request" class="btn btn-primary">New Request</a>
         </div>
 
         <div class="card">
@@ -78,7 +78,7 @@
         (async () => {
             const user = await checkAuth();
             if (user && user.role === 'admin') {
-                window.location.href = '/views/admin.html';
+                window.location.href = '/admin';
             }
             initUserMenu(user);
         })();
