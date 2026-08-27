@@ -10,7 +10,7 @@
     <div class="app-shell">
         <aside class="sidebar">
             <div class="sidebar-brand">LeaveSync</div>
-            <nav class="sidebar-nav" id="sidebar-nav">
+            <nav class="sidebar-nav" id="sidebar-nav" style="visibility: hidden;">
                 <a href="/views/dashboard.html" class="sidebar-link">Dashboard</a>
                 <a href="/views/new_request.html" class="sidebar-link">New Request</a>
                 <a href="/views/my_requests.html" class="sidebar-link">My Requests</a>
@@ -102,6 +102,7 @@
                     <a href="/views/my_info.html" class="sidebar-link active">My Info</a>
                 `;
             }
+            document.getElementById('sidebar-nav').style.visibility = 'visible';
         })();
 
         // Load profile
