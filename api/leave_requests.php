@@ -242,6 +242,11 @@ function listLeaveRequests($user) {
         $requests = $db->getResults($sql, [$user['id']]);
     }
 
+    foreach ($requests as &$request) {
+        addApprovalState($request);
+    }
+    unset($request);
+
     return ['success' => true, 'data' => $requests];
 }
 
@@ -265,6 +270,8 @@ function getLeaveRequest($id, $user) {
     if (!LeaveRequestAccess::canView($request, $user)) {
         throw new Exception('Unauthorized');
     }
+
+    addApprovalState($request);
 
     // Include every verified approval, including a supervisor approval while HR is pending.
     if ($request['digital_signature']) {
@@ -491,6 +498,21 @@ function currentApprovalStage($request) {
         return 'hr';
     }
     return null;
+}
+
+/**
+ * Adds unambiguous API names for the final outcome and the current workflow stage.
+ */
+function addApprovalState(&$request) {
+    $request['overall_status'] = $request['status'];
+
+    if ($request['status'] === 'approved' || $request['status'] === 'rejected' || $request['status'] === 'cancelled') {
+        $request['approval_stage'] = 'completed';
+        return;
+    }
+
+    $stage = currentApprovalStage($request);
+    $request['approval_stage'] = $stage === 'supervisor' ? 'supervisor_review' : 'hr_review';
 }
 
 function getLeaveBalance($user_id) {

@@ -401,7 +401,15 @@ class UIManager {
 
     // Two-stage leave approval status: Supervisor stage (skipped for Tier 2/manager requesters) then HR stage
     static getApprovalStageBadges(req) {
-        return `Supervisor: ${this.getStatusBadge(req.supervisor_status)} &nbsp; HR: ${this.getStatusBadge(req.hr_status)}`;
+        const stageLabels = {
+            supervisor_review: 'Awaiting Supervisor Review',
+            hr_review: 'Awaiting HR Review',
+            completed: 'Completed'
+        };
+        const overallStatus = req.overall_status || req.status;
+        const stage = stageLabels[req.approval_stage] || 'In Progress';
+
+        return `Outcome: ${this.getStatusBadge(overallStatus)}<br><small>Current Stage: ${stage}</small><br>Supervisor: ${this.getStatusBadge(req.supervisor_status)} &nbsp; HR: ${this.getStatusBadge(req.hr_status)}`;
     }
 }
 
