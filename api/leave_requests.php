@@ -10,6 +10,7 @@ require_once __DIR__ . '/../src/security/DeviceFingerprint.php';
 require_once __DIR__ . '/../src/security/DigitalSignature.php';
 require_once __DIR__ . '/../src/security/WebAuthnService.php';
 require_once __DIR__ . '/../src/leave/LeaveTypeOrder.php';
+require_once __DIR__ . '/../src/leave/LeaveRequestAccess.php';
 
 header('Content-Type: application/json');
 
@@ -248,7 +249,7 @@ function getLeaveRequest($id, $user) {
     global $db;
 
     $request = $db->getRow(
-        "SELECT lr.*, u.full_name, u.email, lt.name as leave_type_name, m.full_name as manager_name 
+        "SELECT lr.*, u.full_name, u.email, u.supervisor_id AS requester_supervisor_id, lt.name as leave_type_name, m.full_name as manager_name
          FROM leave_requests lr
          JOIN users u ON lr.user_id = u.id
          JOIN leave_types lt ON lr.leave_type_id = lt.id
@@ -261,15 +262,15 @@ function getLeaveRequest($id, $user) {
         throw new Exception('Leave request not found');
     }
 
-    // Check authorization
-    if (!in_array($user['role'], ['admin', 'manager', 'hr'], true) && $request['user_id'] != $user['id']) {
+    if (!LeaveRequestAccess::canView($request, $user)) {
         throw new Exception('Unauthorized');
     }
 
-    // Get signature info if approved
-    if ($request['status'] === 'approved' && $request['digital_signature']) {
-        $signature_info = DigitalSignature::getSignatureInfo($request['id']);
-        $request['signature_info'] = $signature_info;
+    // Include every verified approval, including a supervisor approval while HR is pending.
+    if ($request['digital_signature']) {
+        $signatureHistory = DigitalSignature::getSignatureHistory($request['id']);
+        $request['signature_history'] = $signatureHistory;
+        $request['signature_info'] = empty($signatureHistory) ? null : $signatureHistory[count($signatureHistory) - 1];
     }
 
     return ['success' => true, 'data' => $request];
@@ -361,8 +362,8 @@ function approveLeaveRequest($data, $user) {
 
     // Verify the passkey assertion and record it as the digital signature
     try {
-        $assertionSignature = WebAuthnService::verifyApproval($user, $data['webauthn_response'], 'leave_request', (int) $data['id']);
-        DigitalSignature::recordWebAuthnApproval($data['id'], $user['id'], $assertionSignature);
+        $approvalEvidence = WebAuthnService::verifyApproval($user, $data['webauthn_response'], 'leave_request', (int) $data['id']);
+        DigitalSignature::recordWebAuthnApproval($data['id'], $user['id'], $approvalEvidence);
     } catch (Exception $e) {
         throw new Exception('Passkey verification failed: ' . $e->getMessage());
     }

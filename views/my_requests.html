@@ -136,11 +136,22 @@
             if (result.success) {
                 const req = result.data;
                 let signatureInfo = '';
-                if (req.signature_info) {
+                const signatureHistory = req.signature_history || (req.signature_info ? [req.signature_info] : []);
+                if (signatureHistory.length) {
+                    const signatureRows = signatureHistory.map((signature, index) => `
+                        <tr>
+                            <td>${index + 1}</td>
+                            <td>${signature.full_name || 'Unknown approver'}</td>
+                            <td>${UIManager.formatDate(signature.timestamp)}</td>
+                        </tr>
+                    `).join('');
                     signatureInfo = `
                         <div class="alert alert-info mt-2">
-                            <strong>Digitally Signed by:</strong> ${req.signature_info.full_name}<br>
-                            <strong>Timestamp:</strong> ${UIManager.formatDate(req.signature_info.timestamp)}
+                            <strong>Digital Approval History</strong>
+                            <table class="table mt-2" style="width: 100%;">
+                                <thead><tr><th>#</th><th>Signed By</th><th>Timestamp</th></tr></thead>
+                                <tbody>${signatureRows}</tbody>
+                            </table>
                         </div>
                     `;
                 }

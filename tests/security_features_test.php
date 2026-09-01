@@ -26,4 +26,18 @@ $message = 'approval-123';
 $signature = DigitalSignature::sign($message, $keyPair['private_key']);
 assertTrue(DigitalSignature::verify($message, $signature, $keyPair['public_key']), 'Signature verification should succeed for a valid key pair');
 
+$leaveRequest = [
+    'id' => 1,
+    'user_id' => 2,
+    'leave_type_id' => 3,
+    'start_date' => '2026-09-01',
+    'end_date' => '2026-09-03',
+    'number_of_days' => '3',
+    'reason' => 'Medical leave',
+    'created_at' => '2026-08-01 10:00:00',
+];
+$snapshotHash = DigitalSignature::createLeaveRequestSnapshotHash($leaveRequest);
+$leaveRequest['reason'] = 'Changed reason';
+assertTrue($snapshotHash !== DigitalSignature::createLeaveRequestSnapshotHash($leaveRequest), 'Leave approval snapshot hash should detect request changes');
+
 echo "PASS: device fingerprint and digital signature checks work\n";

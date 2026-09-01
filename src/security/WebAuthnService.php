@@ -7,6 +7,7 @@
 
 require_once __DIR__ . '/../database/Database.php';
 require_once __DIR__ . '/../auth/AuditLogger.php';
+require_once __DIR__ . '/DigitalSignature.php';
 
 use Webauthn\PublicKeyCredentialCreationOptions;
 use Webauthn\PublicKeyCredentialRequestOptions;
@@ -46,9 +47,9 @@ class WebAuthnService {
         return (new WebauthnSerializerFactory($supportManager))->create();
     }
 
-    private static function ceremonyFactory() {
+    private static function ceremonyFactory($origin = null) {
         $factory = new CeremonyStepManagerFactory();
-        $factory->setAllowedOrigins([self::origin()]);
+        $factory->setAllowedOrigins([$origin ?: self::origin()]);
         return $factory;
     }
 
@@ -184,6 +185,9 @@ class WebAuthnService {
         }
 
         $challenge = random_bytes(32);
+        if ($contextType === 'leave_request') {
+            $challenge .= hex2bin(DigitalSignature::getLeaveRequestSnapshotHash($contextId));
+        }
         self::storeChallenge($user['id'], $challenge, 'approval', $contextType, $contextId);
 
         return [
@@ -199,7 +203,7 @@ class WebAuthnService {
 
     /**
      * Verify the browser's navigator.credentials.get() response for a specific approval action.
-     * Returns the base64url assertion signature (for the audit trail) on success, throws on failure.
+    * Returns a complete assertion-evidence package on success, throws on failure.
      */
     public static function verifyApproval($user, array $responseData, $contextType, $contextId) {
         self::assertApproverRole($user);
@@ -263,7 +267,91 @@ class WebAuthnService {
             [$updatedRecord->counter, $storedCredential['id']]
         );
 
-        return Base64UrlSafe::encodeUnpadded($publicKeyCredential->response->signature);
+        $evidence = [
+            'type' => 'webauthn',
+            'signature' => Base64UrlSafe::encodeUnpadded($publicKeyCredential->response->signature),
+            'credential_id' => $credentialIdEncoded,
+            'assertion' => $responseData,
+            'challenge' => $challengeRow['challenge'],
+            'rp_id' => self::rpId(),
+            'origin' => self::origin(),
+            'user_id' => (int) $user['id'],
+            'credential' => [
+                'public_key' => $storedCredential['public_key'],
+                'attestation_type' => $storedCredential['attestation_type'],
+                'aaguid' => $storedCredential['aaguid'],
+                'transports' => json_decode($storedCredential['transports'] ?: '[]', true),
+                'sign_count' => (int) $storedCredential['sign_count'],
+            ],
+        ];
+
+        if ($contextType === 'leave_request') {
+            $challenge = Base64UrlSafe::decodeNoPadding($challengeRow['challenge']);
+            if (strlen($challenge) !== 64) {
+                throw new Exception('Invalid leave approval challenge');
+            }
+            $evidence['document_hash'] = bin2hex(substr($challenge, 32));
+        }
+
+        return $evidence;
+    }
+
+    /**
+     * Revalidate a stored leave-approval assertion without relying on mutable
+     * credential records.
+     */
+    public static function verifyRecordedApproval(array $evidence) {
+        try {
+            if (($evidence['type'] ?? null) !== 'webauthn' || empty($evidence['assertion']) || empty($evidence['credential'])) {
+                return false;
+            }
+
+            $challenge = Base64UrlSafe::decodeNoPadding($evidence['challenge'] ?? '');
+            if (strlen($challenge) !== 64 || bin2hex(substr($challenge, 32)) !== ($evidence['document_hash'] ?? '')) {
+                return false;
+            }
+
+            $credential = $evidence['credential'];
+            $credentialRecord = new CredentialRecord(
+                Base64UrlSafe::decodeNoPadding($evidence['credential_id']),
+                'public-key',
+                $credential['transports'] ?? [],
+                $credential['attestation_type'],
+                EmptyTrustPath::create(),
+                Uuid::fromString($credential['aaguid']),
+                base64_decode($credential['public_key']),
+                (string) $evidence['user_id'],
+                (int) $credential['sign_count']
+            );
+
+            $publicKeyCredential = self::serializer()->deserialize(
+                json_encode($evidence['assertion']),
+                \Webauthn\PublicKeyCredential::class,
+                'json'
+            );
+            if (!$publicKeyCredential->response instanceof AuthenticatorAssertionResponse) {
+                return false;
+            }
+
+            $options = PublicKeyCredentialRequestOptions::create(
+                $challenge,
+                $evidence['rp_id'],
+                [],
+                'required'
+            );
+            $validator = AuthenticatorAssertionResponseValidator::create(self::ceremonyFactory($evidence['origin'] ?? null)->requestCeremony());
+            $validator->check(
+                $credentialRecord,
+                $publicKeyCredential->response,
+                $options,
+                $evidence['rp_id'],
+                (string) $evidence['user_id']
+            );
+
+            return true;
+        } catch (Exception $e) {
+            return false;
+        }
     }
 
     private static function listAllCredentialIds($user_id) {

@@ -4,6 +4,8 @@
  * Uses RSA-based digital signatures with cryptographic signing
  */
 
+require_once __DIR__ . '/WebAuthnService.php';
+
 class DigitalSignature {
 
     private static $algorithm = 'sha256WithRSAEncryption';
@@ -156,19 +158,33 @@ class DigitalSignature {
      * in place of the RSA private-key signature flow.
      * @param int $leave_request_id Leave request ID
      * @param int $approver_id Approver's user ID
-     * @param string $assertion_signature Base64url WebAuthn assertion signature
+     * @param array $approvalEvidence Verified WebAuthn assertion evidence
      */
-    public static function recordWebAuthnApproval($leave_request_id, $approver_id, $assertion_signature) {
+    public static function recordWebAuthnApproval($leave_request_id, $approver_id, array $approvalEvidence) {
         $db = Database::getInstance();
 
+        if (($approvalEvidence['type'] ?? null) !== 'webauthn' || empty($approvalEvidence['signature']) || empty($approvalEvidence['document_hash'])) {
+            throw new Exception('Incomplete WebAuthn approval evidence');
+        }
+
+        $leaveRequest = $db->getRow("SELECT * FROM leave_requests WHERE id = ?", [$leave_request_id]);
+        if (!$leaveRequest || !hash_equals(self::createLeaveRequestSnapshotHash($leaveRequest), $approvalEvidence['document_hash'])) {
+            throw new Exception('Leave request changed before approval could be recorded');
+        }
+
+        $evidenceJson = json_encode($approvalEvidence);
+        if ($evidenceJson === false) {
+            throw new Exception('Unable to encode WebAuthn approval evidence');
+        }
+
         $db->execute(
-            "INSERT INTO digital_signatures (document_id, document_type, signer_id, signature_hash, timestamp, is_valid) VALUES (?, ?, ?, ?, NOW(), 1)",
-            [$leave_request_id, 'leave_request', $approver_id, $assertion_signature]
+            "INSERT INTO digital_signatures (document_id, document_type, signer_id, signature_hash, certificate_data, timestamp, is_valid) VALUES (?, ?, ?, ?, ?, NOW(), 1)",
+            [$leave_request_id, 'leave_request', $approver_id, $approvalEvidence['signature'], $evidenceJson]
         );
 
         $db->execute(
             "UPDATE leave_requests SET digital_signature = ?, signature_timestamp = NOW() WHERE id = ?",
-            [$assertion_signature, $leave_request_id]
+            [$approvalEvidence['signature'], $leave_request_id]
         );
     }
 
@@ -181,16 +197,29 @@ class DigitalSignature {
         $db = Database::getInstance();
         
         $leave_request = $db->getRow(
-            "SELECT lr.*, ds.signature_hash, u.public_key 
+            "SELECT lr.*, ds.signature_hash, ds.certificate_data, u.public_key
              FROM leave_requests lr
-             LEFT JOIN digital_signatures ds ON lr.id = ds.document_id
-             LEFT JOIN users u ON lr.manager_id = u.id
-             WHERE lr.id = ?",
+             JOIN digital_signatures ds ON lr.id = ds.document_id AND ds.document_type = 'leave_request'
+             LEFT JOIN users u ON ds.signer_id = u.id
+             WHERE lr.id = ?
+             ORDER BY ds.timestamp DESC, ds.id DESC
+             LIMIT 1",
             [$leave_request_id]
         );
 
         if (!$leave_request || !$leave_request['signature_hash'] || !$leave_request['public_key']) {
             return false;
+        }
+
+        $evidence = json_decode($leave_request['certificate_data'] ?? '', true);
+        if (($evidence['type'] ?? null) === 'webauthn') {
+            if (!hash_equals($leave_request['signature_hash'], $evidence['signature'] ?? '')) {
+                return false;
+            }
+            if (!hash_equals(self::createLeaveRequestSnapshotHash($leave_request), $evidence['document_hash'] ?? '')) {
+                return false;
+            }
+            return WebAuthnService::verifyRecordedApproval($evidence);
         }
 
         $document_content = self::createLeaveRequestDocument($leave_request);
@@ -232,21 +261,54 @@ class DigitalSignature {
         );
     }
 
+    public static function getLeaveRequestSnapshotHash($leaveRequestId) {
+        $leaveRequest = Database::getInstance()->getRow("SELECT * FROM leave_requests WHERE id = ?", [$leaveRequestId]);
+        if (!$leaveRequest) {
+            throw new Exception('Leave request not found');
+        }
+        return self::createLeaveRequestSnapshotHash($leaveRequest);
+    }
+
+    public static function createLeaveRequestSnapshotHash(array $leaveRequest) {
+        $snapshot = [
+            'id' => (int) $leaveRequest['id'],
+            'user_id' => (int) $leaveRequest['user_id'],
+            'leave_type_id' => (int) $leaveRequest['leave_type_id'],
+            'start_date' => $leaveRequest['start_date'],
+            'end_date' => $leaveRequest['end_date'],
+            'number_of_days' => (string) $leaveRequest['number_of_days'],
+            'reason' => $leaveRequest['reason'],
+            'created_at' => $leaveRequest['created_at'],
+        ];
+        return hash('sha256', json_encode($snapshot, JSON_UNESCAPED_SLASHES));
+    }
+
     /**
-     * Get signature information
+     * Get the complete, chronological approval-signature audit trail for a leave request.
      * @param int $leave_request_id Leave request ID
      * @return array Signature details
      */
-    public static function getSignatureInfo($leave_request_id) {
+    public static function getSignatureHistory($leave_request_id) {
         $db = Database::getInstance();
-        
-        return $db->getRow(
+
+        return $db->getResults(
             "SELECT ds.*, u.full_name 
              FROM digital_signatures ds
              LEFT JOIN users u ON ds.signer_id = u.id
-             WHERE ds.document_id = ? AND ds.document_type = 'leave_request'",
+             WHERE ds.document_id = ? AND ds.document_type = 'leave_request'
+             ORDER BY ds.timestamp ASC, ds.id ASC",
             [$leave_request_id]
         );
+    }
+
+    /**
+     * Get the most recent signature for callers using the original single-record API.
+     * @param int $leave_request_id Leave request ID
+     * @return array|null Signature details
+     */
+    public static function getSignatureInfo($leave_request_id) {
+        $history = self::getSignatureHistory($leave_request_id);
+        return empty($history) ? null : $history[count($history) - 1];
     }
 }
 ?>
