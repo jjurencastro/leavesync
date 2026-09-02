@@ -214,6 +214,15 @@ p {
     background: var(--light-bg);
 }
 
+.user-menu-dropdown a.logout-link {
+    color: var(--danger-color);
+}
+
+.user-menu-dropdown a.logout-link:hover {
+    background: var(--danger-color);
+    color: white;
+}
+
 @media (max-width: 768px) {
     .app-shell {
         flex-direction: column;
