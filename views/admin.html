@@ -42,13 +42,14 @@
                             <th>Full Name</th>
                             <th>Username</th>
                             <th>Email</th>
+                            <th>Department / Position / Supervisor</th>
                             <th>Requested</th>
                             <th>Action</th>
                         </tr>
                     </thead>
                     <tbody id="pending-users-table">
                         <tr>
-                            <td colspan="5" class="text-center">Loading...</td>
+                            <td colspan="6" class="text-center">Loading...</td>
                         </tr>
                     </tbody>
                 </table>
@@ -141,10 +142,33 @@
             }
 
             initUserMenu(user);
+            await loadDepartmentPositions();
             loadPendingUsers();
             loadManageUsers();
             loadPendingDeviceRequests();
             loadLeaveRequests();
+        }
+
+        let allUsersData = [];
+        let departmentPositionsData = { departments: [], department_positions: {} };
+
+        async function loadDepartmentPositions() {
+            const result = await APIClient.get('admin.php?action=department_positions');
+            if (result.success) {
+                departmentPositionsData = result.data;
+            }
+        }
+
+        function getEligibleSupervisors(department, excludeId) {
+            return allUsersData.filter(s =>
+                s.is_active && s.id !== excludeId && (s.role === 'admin' || (s.role === 'manager' && s.department === department))
+            );
+        }
+
+        function buildOptions(items, selectedValue, valueKey, labelKey) {
+            return items.map(item =>
+                `<option value="${item[valueKey]}" ${item[valueKey] === selectedValue ? 'selected' : ''}>${item[labelKey]}</option>`
+            ).join('');
         }
 
         async function loadPendingUsers() {
@@ -153,25 +177,45 @@
             tbody.innerHTML = '';
 
             if (!result.success) {
-                tbody.innerHTML = '<tr><td colspan="5" class="text-center">Failed to load users</td></tr>';
+                tbody.innerHTML = '<tr><td colspan="6" class="text-center">Failed to load users</td></tr>';
                 return;
             }
 
+            allUsersData = result.data || [];
+
             // Only show accounts that finished setting up their password (i.e. actually requested activation).
             // Non-ADMIN departments are approved by their own Dean instead (see dashboard.html).
-            const pendingUsers = (result.data || []).filter(u => !u.is_active && u.password_set && u.department === 'ADMIN');
+            const pendingUsers = allUsersData.filter(u => !u.is_active && u.password_set && u.department === 'ADMIN');
 
             if (pendingUsers.length === 0) {
-                tbody.innerHTML = '<tr><td colspan="5" class="text-center">No pending approvals</td></tr>';
+                tbody.innerHTML = '<tr><td colspan="6" class="text-center">No pending approvals</td></tr>';
                 return;
             }
 
             pendingUsers.forEach(u => {
+                const deptSelectId = `dept-select-${u.id}`;
+                const positionSelectId = `position-select-${u.id}`;
+                const supervisorSelectId = `supervisor-select-${u.id}`;
+
+                const departmentOptions = departmentPositionsData.departments
+                    .map(d => `<option value="${d}" ${d === u.department ? 'selected' : ''}>${d}</option>`).join('');
+                const positionOptions = buildOptions(
+                    (departmentPositionsData.department_positions[u.department] || []).map(p => ({ value: p, label: p })),
+                    u.position, 'value', 'label'
+                );
+                const supervisorOptions = buildOptions(getEligibleSupervisors(u.department, u.id), u.supervisor_id, 'id', 'full_name');
+
                 const row = document.createElement('tr');
                 row.innerHTML = `
                     <td>${u.full_name}</td>
                     <td>${u.username}</td>
                     <td>${u.email}</td>
+                    <td>
+                        <select id="${deptSelectId}" class="form-control" onchange="onPendingUserDepartmentChange(${u.id})">${departmentOptions}</select>
+                        <select id="${positionSelectId}" class="form-control">${positionOptions}</select>
+                        <select id="${supervisorSelectId}" class="form-control">${supervisorOptions}</select>
+                        <button class="btn btn-small btn-secondary" onclick="updateUserDetails(${u.id})">Update</button>
+                    </td>
                     <td>${UIManager.formatDate(u.created_at)}</td>
                     <td>
                         <button class="btn btn-small btn-success" onclick="approveUser(${u.id})">Approve</button>
@@ -180,6 +224,36 @@
                 `;
                 tbody.appendChild(row);
             });
+        }
+
+        function onPendingUserDepartmentChange(id) {
+            const department = document.getElementById(`dept-select-${id}`).value;
+            const positionSelect = document.getElementById(`position-select-${id}`);
+            const supervisorSelect = document.getElementById(`supervisor-select-${id}`);
+
+            positionSelect.innerHTML = buildOptions(
+                (departmentPositionsData.department_positions[department] || []).map(p => ({ value: p, label: p })),
+                null, 'value', 'label'
+            );
+            supervisorSelect.innerHTML = buildOptions(getEligibleSupervisors(department, id), null, 'id', 'full_name');
+        }
+
+        async function updateUserDetails(id) {
+            const department = document.getElementById(`dept-select-${id}`).value;
+            const position = document.getElementById(`position-select-${id}`).value;
+            const supervisorId = document.getElementById(`supervisor-select-${id}`).value;
+            if (!supervisorId) {
+                UIManager.showAlert('Please select a supervisor', 'danger');
+                return;
+            }
+
+            const result = await APIClient.put(`admin.php?action=update_user&id=${id}`, { department, position, supervisor_id: supervisorId });
+            if (result.success) {
+                UIManager.showAlert('User details updated', 'success');
+                loadPendingUsers();
+            } else {
+                UIManager.showAlert(result.message || 'Failed to update user details', 'danger');
+            }
         }
 
         async function approveUser(id) {

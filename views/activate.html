@@ -138,11 +138,7 @@
             });
 
             if (result.success) {
-                UIManager.showAlert('Password set! Your account now awaits administrator approval. Logging you out...', 'success');
-                setTimeout(async () => {
-                    await AuthManager.logout();
-                    window.location.href = '/login?google_error=' + encodeURIComponent('Your account activation is pending administrator approval.');
-                }, 2000);
+                window.location.href = '/pending-approval';
             } else {
                 UIManager.showAlert(result.message || 'Failed to set password', 'danger');
             }

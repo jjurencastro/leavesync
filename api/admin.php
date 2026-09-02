@@ -22,6 +22,11 @@ if (!$user || $user['role'] !== 'admin') {
     echo json_encode(['success' => false, 'message' => 'Unauthorized']);
     exit;
 }
+if (empty($user['password_set']) || empty($user['is_active'])) {
+    http_response_code(403);
+    echo json_encode(['success' => false, 'message' => 'Account activation pending']);
+    exit;
+}
 
 $db = Database::getInstance();
 
@@ -29,6 +34,10 @@ try {
     switch ($action) {
         case 'users':
             echo json_encode(getUsers());
+            break;
+
+        case 'department_positions':
+            echo json_encode(['success' => true, 'data' => UserRegistration::getDepartmentOptions()]);
             break;
 
         case 'user_details':
@@ -98,11 +107,13 @@ try {
 
 function getUsers() {
     global $db;
-    
+
     $users = $db->getResults(
-        "SELECT id, username, email, full_name, department, position, role, is_active, password_set, created_at 
-         FROM users 
-         ORDER BY created_at DESC"
+        "SELECT u.id, u.username, u.email, u.full_name, u.department, u.position, u.role, u.is_active, u.password_set, u.created_at,
+                u.supervisor_id, sup.full_name AS supervisor_name
+         FROM users u
+         LEFT JOIN users sup ON u.supervisor_id = sup.id
+         ORDER BY u.created_at DESC"
     );
 
     return ['success' => true, 'data' => $users];
@@ -184,7 +195,7 @@ function updateUser($id, $data) {
 
     if (!$id) throw new Exception('User ID required');
 
-    $user = $db->getRow("SELECT id, role FROM users WHERE id = ?", [$id]);
+    $user = $db->getRow("SELECT id, role, department, position FROM users WHERE id = ?", [$id]);
     if (!$user) throw new Exception('User not found');
 
     $updates = [];
@@ -194,13 +205,20 @@ function updateUser($id, $data) {
         $updates[] = "full_name = ?";
         $values[] = $data['full_name'];
     }
-    if (isset($data['department'])) {
-        $updates[] = "department = ?";
-        $values[] = $data['department'];
-    }
-    if (isset($data['position'])) {
-        $updates[] = "position = ?";
-        $values[] = $data['position'];
+    if (isset($data['department']) || isset($data['position'])) {
+        $department = $data['department'] ?? $user['department'];
+        $position = $data['position'] ?? $user['position'];
+        if (!UserRegistration::isValidDepartmentPosition($department, $position)) {
+            throw new Exception('Please select a valid position for the chosen department');
+        }
+        if (isset($data['department'])) {
+            $updates[] = "department = ?";
+            $values[] = $department;
+        }
+        if (isset($data['position'])) {
+            $updates[] = "position = ?";
+            $values[] = $position;
+        }
     }
     if (isset($data['role'])) {
         if (!in_array($data['role'], ['employee', 'manager', 'hr', 'admin'], true)) {
@@ -218,6 +236,15 @@ function updateUser($id, $data) {
     if (isset($data['is_active'])) {
         $updates[] = "is_active = ?";
         $values[] = $data['is_active'];
+    }
+    if (isset($data['supervisor_id'])) {
+        $department = $data['department'] ?? $user['department'];
+        $supervisorId = (int) $data['supervisor_id'];
+        if (!UserRegistration::isEligibleSupervisor($supervisorId, $id, $department)) {
+            throw new Exception('Please select a valid immediate supervisor');
+        }
+        $updates[] = "supervisor_id = ?";
+        $values[] = $supervisorId;
     }
 
     if (empty($updates)) {

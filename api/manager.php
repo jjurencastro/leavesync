@@ -8,6 +8,7 @@ require_once __DIR__ . '/../config/config.php';
 require_once __DIR__ . '/../src/database/Database.php';
 require_once __DIR__ . '/../src/auth/Auth.php';
 require_once __DIR__ . '/../src/auth/DeviceChangeRequest.php';
+require_once __DIR__ . '/../src/auth/UserRegistration.php';
 require_once __DIR__ . '/../src/security/DeviceFingerprint.php';
 
 header('Content-Type: application/json');
@@ -21,6 +22,11 @@ if (!$user || $user['role'] !== 'manager') {
     echo json_encode(['success' => false, 'message' => 'Unauthorized']);
     exit;
 }
+if (empty($user['password_set']) || empty($user['is_active'])) {
+    http_response_code(403);
+    echo json_encode(['success' => false, 'message' => 'Account activation pending']);
+    exit;
+}
 
 $db = Database::getInstance();
 
@@ -28,6 +34,19 @@ try {
     switch ($action) {
         case 'pending_users':
             echo json_encode(getPendingDepartmentUsers($user));
+            break;
+
+        case 'department_positions':
+            echo json_encode(['success' => true, 'data' => UserRegistration::getDepartmentOptions()]);
+            break;
+
+        case 'supervisor_options':
+            echo json_encode(['success' => true, 'data' => UserRegistration::getEligibleSupervisors($user['id'], $user['department'])]);
+            break;
+
+        case 'update_details':
+            if ($method !== 'PUT') throw new Exception('Method not allowed');
+            echo json_encode(updateDepartmentUserDetails($_GET['id'] ?? null, $user, parseRequestPayload()));
             break;
 
         case 'approve_user':
@@ -66,10 +85,12 @@ function getPendingDepartmentUsers($user) {
     global $db;
 
     $users = $db->getResults(
-        "SELECT id, username, email, full_name, department, position, is_active, password_set, created_at
-         FROM users
-         WHERE department = ? AND id <> ? AND is_active = 0 AND password_set = 1
-         ORDER BY created_at DESC",
+        "SELECT u.id, u.username, u.email, u.full_name, u.department, u.position, u.is_active, u.password_set, u.created_at,
+                u.supervisor_id, sup.full_name AS supervisor_name
+         FROM users u
+         LEFT JOIN users sup ON u.supervisor_id = sup.id
+         WHERE u.department = ? AND u.id <> ? AND u.is_active = 0 AND u.password_set = 1
+         ORDER BY u.created_at DESC",
         [$user['department'], $user['id']]
     );
 
@@ -83,7 +104,7 @@ function assertOwnDepartmentUser($id, $user) {
         throw new Exception('User ID required');
     }
 
-    $target = $db->getRow("SELECT id, department FROM users WHERE id = ?", [$id]);
+    $target = $db->getRow("SELECT id, department, position FROM users WHERE id = ?", [$id]);
     if (!$target || $target['department'] !== $user['department']) {
         throw new Exception('User not found in your department');
     }
@@ -100,6 +121,49 @@ function approveDepartmentUser($id, $user) {
     Auth::auditLog($user['id'], 'approve_user', 'user', $id);
 
     return ['success' => true, 'message' => 'User approved'];
+}
+
+function updateDepartmentUserDetails($id, $user, $data) {
+    global $db;
+
+    $target = assertOwnDepartmentUser($id, $user);
+
+    $updates = [];
+    $values = [];
+
+    $department = $data['department'] ?? $target['department'];
+    $position = $data['position'] ?? $target['position'];
+    if (isset($data['department']) || isset($data['position'])) {
+        if (!UserRegistration::isValidDepartmentPosition($department, $position)) {
+            throw new Exception('Please select a valid position for the chosen department');
+        }
+        if (isset($data['department'])) {
+            $updates[] = "department = ?";
+            $values[] = $department;
+        }
+        if (isset($data['position'])) {
+            $updates[] = "position = ?";
+            $values[] = $position;
+        }
+    }
+    if (isset($data['supervisor_id'])) {
+        $supervisorId = (int) $data['supervisor_id'];
+        if (!UserRegistration::isEligibleSupervisor($supervisorId, $id, $department)) {
+            throw new Exception('Please select a valid immediate supervisor');
+        }
+        $updates[] = "supervisor_id = ?";
+        $values[] = $supervisorId;
+    }
+
+    if (empty($updates)) {
+        throw new Exception('No fields to update');
+    }
+
+    $values[] = $id;
+    $db->execute("UPDATE users SET " . implode(', ', $updates) . " WHERE id = ?", $values);
+    Auth::auditLog($user['id'], 'update_user_details', 'user', $id);
+
+    return ['success' => true, 'message' => 'User details updated'];
 }
 
 /**

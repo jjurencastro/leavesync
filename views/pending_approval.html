@@ -1,0 +1,50 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Pending Approval - LeaveSync</title>
+    <link rel="stylesheet" href="/css/style.css">
+</head>
+<body>
+    <div class="container auth-container">
+        <div class="card">
+            <div class="card-header">
+                <h2 class="text-center">Account Pending Approval</h2>
+            </div>
+
+            <div class="card-body">
+                <p>Your account information has been submitted and is now awaiting approval from an administrator.</p>
+                <p>You'll be able to sign in normally once your account is approved.</p>
+
+                <div id="supervisor-info" style="margin-top: 1.5rem;">
+                    <p>If you need help or have questions in the meantime, please contact your immediate supervisor:</p>
+                    <p><strong id="supervisor-name">-</strong><br><span id="supervisor-email" style="color: var(--text-light);"></span></p>
+                </div>
+
+                <button id="logout-btn" class="btn btn-secondary" style="width: 100%; margin-top: 1rem;">Log Out</button>
+            </div>
+        </div>
+    </div>
+
+    <script src="/js/app.js"></script>
+    <script>
+        (async () => {
+            const user = await checkAuth();
+            if (!user) return;
+
+            if (user.supervisor_name) {
+                document.getElementById('supervisor-name').textContent = user.supervisor_name;
+                document.getElementById('supervisor-email').textContent = user.supervisor_email || '';
+            } else {
+                document.getElementById('supervisor-info').style.display = 'none';
+            }
+        })();
+
+        document.getElementById('logout-btn').addEventListener('click', async () => {
+            await AuthManager.logout();
+            window.location.href = '/login';
+        });
+    </script>
+</body>
+</html>

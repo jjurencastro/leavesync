@@ -21,6 +21,11 @@ if (!Auth::isAuthenticated()) {
 }
 
 $user = Auth::getCurrentUser();
+if (empty($user['password_set']) || empty($user['is_active'])) {
+    http_response_code(403);
+    echo json_encode(['success' => false, 'message' => 'Account activation pending']);
+    exit;
+}
 $db = Database::getInstance();
 
 try {

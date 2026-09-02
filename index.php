@@ -24,6 +24,7 @@ if (strpos($request_uri, '..') !== false) {
 $viewRoutes = [
     '/login'                  => ['file' => 'views/login.html', 'guest' => true],
     '/activate'                => ['file' => 'views/activate.html', 'auth' => true],
+    '/pending-approval'        => ['file' => 'views/pending_approval.html', 'auth' => true],
     '/confirm-device-change'   => ['file' => 'views/confirm_device_change.html'],
     '/dashboard'               => ['file' => 'views/dashboard.html', 'auth' => true, 'allow' => ['employee', 'manager']],
     '/new-request'             => ['file' => 'views/new_request.html', 'auth' => true, 'allow' => ['employee', 'manager']],
@@ -75,6 +76,37 @@ elseif (array_key_exists($request_uri, $viewRoutes)) {
                 header('Location: /login');
                 exit;
             }
+
+            // Activation must be completed (and, after that, approved by an admin)
+            // before any page other than /activate or /pending-approval can be reached.
+            $activated = !empty($currentUser['password_set']);
+            $approved = !empty($currentUser['is_active']);
+
+            if ($request_uri === '/activate') {
+                if ($activated) {
+                    header('Location: ' . ($approved ? $landingPage : '/pending-approval'));
+                    exit;
+                }
+            } elseif ($request_uri === '/pending-approval') {
+                if (!$activated) {
+                    header('Location: /activate');
+                    exit;
+                }
+                if ($approved) {
+                    header('Location: ' . $landingPage);
+                    exit;
+                }
+            } else {
+                if (!$activated) {
+                    header('Location: /activate');
+                    exit;
+                }
+                if (!$approved) {
+                    header('Location: /pending-approval');
+                    exit;
+                }
+            }
+
             if (!empty($route['allow']) && !in_array($currentUser['role'], $route['allow'], true)) {
                 header('Location: ' . $landingPage);
                 exit;

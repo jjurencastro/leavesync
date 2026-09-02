@@ -115,6 +115,9 @@ header('X-Frame-Options: DENY');
 header('X-XSS-Protection: 1; mode=block');
 header('Content-Security-Policy: default-src \'self\'; script-src \'self\' \'unsafe-inline\'; style-src \'self\' \'unsafe-inline\'');
 header('Referrer-Policy: strict-origin-when-cross-origin');
+// Prevent the browser (and bfcache) from replaying authenticated pages/responses via back/forward navigation
+header('Cache-Control: no-store, no-cache, must-revalidate');
+header('Pragma: no-cache');
 
 // Error Reporting
 if (APP_DEBUG) {

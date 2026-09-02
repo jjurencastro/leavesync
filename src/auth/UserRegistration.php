@@ -116,19 +116,14 @@ class UserRegistration {
         if (!in_array($department, self::ALLOWED_DEPARTMENTS, true)) {
             return ['success' => false, 'message' => 'Please select a valid department'];
         }
-        if (!in_array($position, self::DEPARTMENT_POSITIONS[$department] ?? [], true)) {
+        if (!self::isValidDepartmentPosition($department, $position)) {
             return ['success' => false, 'message' => 'Please select a valid position for the chosen department'];
         }
         // Account stays pending (is_active = 0) until an admin approves it, so a
         // self-selected manager/admin-tier position has no effect until then.
         $role = self::POSITION_ROLE_MAP[$position];
 
-        $supervisor = $db->getRow(
-            "SELECT id FROM users WHERE id = ? AND id <> ? AND is_active = 1
-             AND (role = 'admin' OR (role = 'manager' AND department = ?))",
-            [$supervisor_id, $user_id, $department]
-        );
-        if (!$supervisor) {
+        if (!self::isEligibleSupervisor($supervisor_id, $user_id, $department)) {
             return ['success' => false, 'message' => 'Please select an active immediate supervisor'];
         }
 
@@ -192,21 +187,59 @@ class UserRegistration {
             "SELECT username, full_name, email FROM users WHERE id = ?",
             [$user_id]
         );
-        $supervisors = $db->getResults(
-            "SELECT id, username, full_name, department, role FROM users
-             WHERE id <> ? AND is_active = 1 AND (role = 'admin' OR role = 'manager')
-             ORDER BY full_name, username",
-            [$user_id]
-        );
 
         return [
             'success' => true,
             'data' => [
                 'user' => $user,
-                'supervisors' => $supervisors,
+                'supervisors' => self::getEligibleSupervisors($user_id),
                 'departments' => self::ALLOWED_DEPARTMENTS,
                 'department_positions' => self::DEPARTMENT_POSITIONS,
             ]
+        ];
+    }
+
+    /**
+     * @param int $excludeUserId Never offer the user as their own supervisor
+     * @param string|null $department Restrict managers to this department; null allows any (used by the activation form, which filters client-side per department)
+     */
+    public static function getEligibleSupervisors($excludeUserId, $department = null) {
+        $db = Database::getInstance();
+        if ($department !== null) {
+            return $db->getResults(
+                "SELECT id, username, full_name, department, role FROM users
+                 WHERE id <> ? AND is_active = 1 AND (role = 'admin' OR (role = 'manager' AND department = ?))
+                 ORDER BY full_name, username",
+                [$excludeUserId, $department]
+            );
+        }
+        return $db->getResults(
+            "SELECT id, username, full_name, department, role FROM users
+             WHERE id <> ? AND is_active = 1 AND (role = 'admin' OR role = 'manager')
+             ORDER BY full_name, username",
+            [$excludeUserId]
+        );
+    }
+
+    public static function isEligibleSupervisor($supervisorId, $excludeUserId, $department) {
+        $db = Database::getInstance();
+        $supervisor = $db->getRow(
+            "SELECT id FROM users WHERE id = ? AND id <> ? AND is_active = 1
+             AND (role = 'admin' OR (role = 'manager' AND department = ?))",
+            [$supervisorId, $excludeUserId, $department]
+        );
+        return (bool) $supervisor;
+    }
+
+    public static function isValidDepartmentPosition($department, $position) {
+        return in_array($department, self::ALLOWED_DEPARTMENTS, true)
+            && in_array($position, self::DEPARTMENT_POSITIONS[$department] ?? [], true);
+    }
+
+    public static function getDepartmentOptions() {
+        return [
+            'departments' => self::ALLOWED_DEPARTMENTS,
+            'department_positions' => self::DEPARTMENT_POSITIONS,
         ];
     }
 

@@ -52,7 +52,7 @@
                             <th>Full Name</th>
                             <th>Username</th>
                             <th>Email</th>
-                            <th>Position</th>
+                            <th>Department / Position / Supervisor</th>
                             <th>Requested</th>
                             <th>Action</th>
                         </tr>
@@ -248,8 +248,26 @@
 
         initDashboard();
 
+        let supervisorOptionsData = [];
+        let departmentPositionsData = { departments: [], department_positions: {} };
+
+        function buildOptions(items, selectedValue, valueKey, labelKey) {
+            return items.map(item =>
+                `<option value="${item[valueKey]}" ${item[valueKey] === selectedValue ? 'selected' : ''}>${item[labelKey]}</option>`
+            ).join('');
+        }
+
         async function loadPendingApprovals() {
-            const result = await APIClient.get('manager.php?action=pending_users');
+            const [result, supervisorOptionsResult, departmentPositionsResult] = await Promise.all([
+                APIClient.get('manager.php?action=pending_users'),
+                APIClient.get('manager.php?action=supervisor_options'),
+                APIClient.get('manager.php?action=department_positions')
+            ]);
+            supervisorOptionsData = supervisorOptionsResult.success ? (supervisorOptionsResult.data || []) : [];
+            if (departmentPositionsResult.success) {
+                departmentPositionsData = departmentPositionsResult.data;
+            }
+
             const tbody = document.getElementById('pending-approvals-table');
             tbody.innerHTML = '';
 
@@ -264,12 +282,31 @@
             }
 
             result.data.forEach(u => {
+                const deptSelectId = `dept-select-${u.id}`;
+                const positionSelectId = `position-select-${u.id}`;
+                const supervisorSelectId = `supervisor-select-${u.id}`;
+
+                const departmentOptions = departmentPositionsData.departments
+                    .map(d => `<option value="${d}" ${d === u.department ? 'selected' : ''}>${d}</option>`).join('');
+                const positionOptions = buildOptions(
+                    (departmentPositionsData.department_positions[u.department] || []).map(p => ({ value: p, label: p })),
+                    u.position, 'value', 'label'
+                );
+                const supervisorOptions = buildOptions(
+                    supervisorOptionsData.filter(s => s.id !== u.id), u.supervisor_id, 'id', 'full_name'
+                );
+
                 const row = document.createElement('tr');
                 row.innerHTML = `
                     <td>${u.full_name}</td>
                     <td>${u.username}</td>
                     <td>${u.email}</td>
-                    <td>${u.position || ''}</td>
+                    <td>
+                        <select id="${deptSelectId}" class="form-control" onchange="onPendingUserDepartmentChange(${u.id})">${departmentOptions}</select>
+                        <select id="${positionSelectId}" class="form-control">${positionOptions}</select>
+                        <select id="${supervisorSelectId}" class="form-control">${supervisorOptions}</select>
+                        <button class="btn btn-small btn-secondary" onclick="updateUserDetails(${u.id})">Update</button>
+                    </td>
                     <td>${UIManager.formatDate(u.created_at)}</td>
                     <td>
                         <button class="btn btn-small btn-success" onclick="approvePendingUser(${u.id})">Approve</button>
@@ -278,6 +315,36 @@
                 `;
                 tbody.appendChild(row);
             });
+        }
+
+        function onPendingUserDepartmentChange(id) {
+            const department = document.getElementById(`dept-select-${id}`).value;
+            const positionSelect = document.getElementById(`position-select-${id}`);
+            const supervisorSelect = document.getElementById(`supervisor-select-${id}`);
+
+            positionSelect.innerHTML = buildOptions(
+                (departmentPositionsData.department_positions[department] || []).map(p => ({ value: p, label: p })),
+                null, 'value', 'label'
+            );
+            supervisorSelect.innerHTML = buildOptions(supervisorOptionsData.filter(s => s.id !== id), null, 'id', 'full_name');
+        }
+
+        async function updateUserDetails(id) {
+            const department = document.getElementById(`dept-select-${id}`).value;
+            const position = document.getElementById(`position-select-${id}`).value;
+            const supervisorId = document.getElementById(`supervisor-select-${id}`).value;
+            if (!supervisorId) {
+                UIManager.showAlert('Please select a supervisor', 'danger');
+                return;
+            }
+
+            const result = await APIClient.put(`manager.php?action=update_details&id=${id}`, { department, position, supervisor_id: supervisorId });
+            if (result.success) {
+                UIManager.showAlert('User details updated', 'success');
+                loadPendingApprovals();
+            } else {
+                UIManager.showAlert(result.message || 'Failed to update user details', 'danger');
+            }
         }
 
         async function approvePendingUser(id) {
