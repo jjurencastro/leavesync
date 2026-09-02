@@ -67,12 +67,18 @@
 
                     <button type="submit" class="btn btn-primary" style="width: 100%;">Activate Account</button>
                 </form>
+                <button id="logout-btn" class="btn btn-secondary" style="width: 100%; margin-top: 0.5rem;">Log Out</button>
             </div>
         </div>
     </div>
 
     <script src="/js/app.js"></script>
     <script>
+        document.getElementById('logout-btn').addEventListener('click', async () => {
+            await AuthManager.logout();
+            window.location.href = '/login';
+        });
+
         (async () => {
             await checkAuth();
             const activationInfo = await AuthManager.getActivationInfo();
