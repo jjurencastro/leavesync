@@ -8,6 +8,7 @@
 require_once __DIR__ . '/../database/Database.php';
 require_once __DIR__ . '/../auth/AuditLogger.php';
 require_once __DIR__ . '/DigitalSignature.php';
+require_once __DIR__ . '/DeviceFingerprint.php';
 
 use Webauthn\PublicKeyCredentialCreationOptions;
 use Webauthn\PublicKeyCredentialRequestOptions;
@@ -138,8 +139,8 @@ class WebAuthnService {
         $db = Database::getInstance();
         $db->execute(
             "INSERT INTO webauthn_credentials
-                (user_id, credential_id, public_key, attestation_type, aaguid, transports, sign_count, label)
-             VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+                (user_id, credential_id, public_key, attestation_type, aaguid, transports, sign_count, label, device_fingerprint_hash, device_label)
+             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
             [
                 $user['id'],
                 Base64UrlSafe::encodeUnpadded($credentialRecord->publicKeyCredentialId),
@@ -149,6 +150,8 @@ class WebAuthnService {
                 json_encode($credentialRecord->transports),
                 $credentialRecord->counter,
                 $label ?: 'Passkey',
+                DeviceFingerprint::generatePasskeyBindingHash(),
+                DeviceFingerprint::getPasskeyBindingLabel(),
             ]
         );
 
@@ -160,7 +163,7 @@ class WebAuthnService {
     public static function listCredentials($user_id) {
         $db = Database::getInstance();
         return $db->getResults(
-            "SELECT id, label, created_at, last_used_at FROM webauthn_credentials WHERE user_id = ? ORDER BY created_at DESC",
+            "SELECT id, label, device_label, created_at, last_used_at FROM webauthn_credentials WHERE user_id = ? ORDER BY created_at DESC",
             [$user_id]
         );
     }
@@ -232,6 +235,11 @@ class WebAuthnService {
 
         if (!$storedCredential) {
             throw new Exception('Passkey not recognized');
+        }
+
+        if (!hash_equals($storedCredential['device_fingerprint_hash'] ?? '', DeviceFingerprint::generatePasskeyBindingHash())) {
+            AuditLogger::log($user['id'], 'webauthn_approval_device_mismatch', 'user', $user['id']);
+            throw new Exception('This passkey is registered to a different device. Register a new passkey from this device to approve.');
         }
 
         $credentialRecord = new CredentialRecord(

@@ -109,11 +109,51 @@ class DeviceFingerprint {
      * version fingerprints aren't exposed to the requesting user.
      */
     private static function maskVersion($value) {
+        return self::stripVersion($value);
+    }
+
+    /**
+     * Strip a trailing version number off a browser/OS string, e.g.
+     * "Chrome 120" -> "Chrome", "macOS 14.2" -> "macOS".
+     */
+    private static function stripVersion($value) {
         if (empty($value) || $value === 'Unknown') {
             return $value;
         }
-        $masked = trim(preg_replace('/[\d][\d.\s_]*$/', '', $value));
-        return $masked !== '' ? $masked : $value;
+        $stripped = trim(preg_replace('/[\d][\d.\s_]*$/', '', $value));
+        return $stripped !== '' ? $stripped : $value;
+    }
+
+    /**
+     * Device/browser/OS family only (no version numbers), used to bind a WebAuthn
+     * passkey to the device it was registered on without breaking on routine
+     * browser/OS updates.
+     * @return array ['device' => ..., 'browser' => ..., 'os' => ...]
+     */
+    private static function passkeyBindingComponents() {
+        return [
+            'device' => self::getDeviceType(),
+            'browser' => self::stripVersion(self::getBrowserInfo()),
+            'os' => self::stripVersion(self::getOSInfo()),
+        ];
+    }
+
+    /**
+     * Hash of the current device's family-only fingerprint, for binding a WebAuthn
+     * passkey to the device that registered it.
+     * @return string
+     */
+    public static function generatePasskeyBindingHash() {
+        return hash('sha256', json_encode(self::passkeyBindingComponents()));
+    }
+
+    /**
+     * Human-readable label for the current device, e.g. "Chrome \u2022 Windows PC".
+     * @return string
+     */
+    public static function getPasskeyBindingLabel() {
+        $c = self::passkeyBindingComponents();
+        return $c['browser'] . " \u{2022} " . $c['device'];
     }
 
     /**

@@ -225,6 +225,8 @@ CREATE TABLE IF NOT EXISTS webauthn_credentials (
     transports JSON,
     sign_count BIGINT UNSIGNED NOT NULL DEFAULT 0,
     label VARCHAR(100),
+    device_fingerprint_hash VARCHAR(64),
+    device_label VARCHAR(100),
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     last_used_at TIMESTAMP NULL,
     FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,

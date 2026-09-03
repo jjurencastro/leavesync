@@ -75,10 +75,12 @@
             </div>
             <div class="card-body">
                 <p>Register a passkey (Windows Hello, Face ID, Touch ID, etc.) to approve leave and device-change requests.</p>
+                <p class="text-muted">A passkey only works for approvals from the device it was registered on; register a separate passkey on each device you approve from.</p>
                 <table class="table" id="passkeys-table">
                     <thead>
                         <tr>
                             <th>Label</th>
+                            <th>Device</th>
                             <th>Registered</th>
                             <th>Last Used</th>
                             <th>Action</th>
@@ -86,7 +88,7 @@
                     </thead>
                     <tbody>
                         <tr>
-                            <td colspan="4" class="text-center">Loading...</td>
+                            <td colspan="5" class="text-center">Loading...</td>
                         </tr>
                     </tbody>
                 </table>
@@ -330,12 +332,12 @@
             tbody.innerHTML = '';
 
             if (!result.success) {
-                tbody.innerHTML = '<tr><td colspan="4" class="text-center">Failed to load passkeys</td></tr>';
+                tbody.innerHTML = '<tr><td colspan="5" class="text-center">Failed to load passkeys</td></tr>';
                 return;
             }
 
             if (result.data.length === 0) {
-                tbody.innerHTML = '<tr><td colspan="4" class="text-center">No passkeys registered yet</td></tr>';
+                tbody.innerHTML = '<tr><td colspan="5" class="text-center">No passkeys registered yet</td></tr>';
                 return;
             }
 
@@ -343,6 +345,7 @@
                 const row = document.createElement('tr');
                 row.innerHTML = `
                     <td>${credential.label || 'Passkey'}</td>
+                    <td>${credential.device_label || 'Unknown'}</td>
                     <td>${UIManager.formatDate(credential.created_at)}</td>
                     <td>${credential.last_used_at ? UIManager.formatDate(credential.last_used_at) : 'Never'}</td>
                     <td><button class="btn btn-small btn-danger" onclick="removePasskey(${credential.id})">Remove</button></td>
