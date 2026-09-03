@@ -60,7 +60,24 @@ class APIClient {
 
         try {
             const response = await fetch(`${API_BASE}/${endpoint}`, options);
-            const result = await response.json();
+            const responseText = await response.text();
+            let result;
+
+            if (responseText.trim() === '') {
+                result = { success: response.ok };
+            } else {
+                try {
+                    result = JSON.parse(responseText);
+                } catch (parseError) {
+                    console.error('Invalid API response:', responseText);
+                    return {
+                        success: false,
+                        message: response.ok
+                            ? 'The server returned an invalid response.'
+                            : `Request failed (${response.status}).`
+                    };
+                }
+            }
 
             if (!response.ok && response.status === 401) {
                 window.location.href = '/login';
@@ -69,7 +86,7 @@ class APIClient {
             return result;
         } catch (error) {
             console.error('API Error:', error);
-            return { success: false, message: 'Network error' };
+            return { success: false, message: 'Unable to reach the server. Please try again.' };
         }
     }
 
