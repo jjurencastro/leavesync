@@ -168,10 +168,11 @@ class UserRegistration {
      */
     private static function notifyApprovers($user_id, $department) {
         $db = Database::getInstance();
-        $applicant = $db->getRow("SELECT full_name FROM users WHERE id = ?", [$user_id]);
-        $approvers = $department === 'ADMIN'
-            ? $db->getResults("SELECT id FROM users WHERE role = 'admin' AND is_active = 1")
-            : $db->getResults("SELECT id FROM users WHERE role = 'manager' AND department = ? AND is_active = 1", [$department]);
+        $applicant = $db->getRow("SELECT full_name, supervisor_id FROM users WHERE id = ?", [$user_id]);
+        $approvers = $db->getResults(
+            "SELECT id FROM users WHERE id = ? AND is_active = 1 AND role IN ('manager', 'admin')",
+            [$applicant['supervisor_id'] ?? 0]
+        );
 
         foreach ($approvers as $approver) {
             $db->execute(

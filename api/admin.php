@@ -219,8 +219,16 @@ function updateUser($id, $data) {
             $updates[] = "position = ?";
             $values[] = $position;
         }
+        if ($position === 'Dean') {
+            $updates[] = "role = ?";
+            $values[] = 'manager';
+        }
     }
     if (isset($data['role'])) {
+        $position = $data['position'] ?? $user['position'];
+        if ($position === 'Dean' && $data['role'] !== 'manager') {
+            throw new Exception('A Dean must use the manager role');
+        }
         if (!in_array($data['role'], ['employee', 'manager', 'hr', 'admin'], true)) {
             throw new Exception('Invalid role');
         }

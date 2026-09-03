@@ -183,9 +183,14 @@
 
             allUsersData = result.data || [];
 
-            // Only show accounts that finished setting up their password (i.e. actually requested activation).
-            // Non-ADMIN departments are approved by their own Dean instead (see dashboard.html).
-            const pendingUsers = allUsersData.filter(u => !u.is_active && u.password_set && u.department === 'ADMIN');
+            // Show requests assigned to this admin, including academic accounts
+            // that need administrator approval before a Dean exists.
+            const adminIds = new Set(allUsersData
+                .filter(u => u.is_active && u.role === 'admin')
+                .map(u => String(u.id)));
+            const pendingUsers = allUsersData.filter(u =>
+                !u.is_active && u.password_set && adminIds.has(String(u.supervisor_id))
+            );
 
             if (pendingUsers.length === 0) {
                 tbody.innerHTML = '<tr><td colspan="6" class="text-center">No pending approvals</td></tr>';

@@ -4,6 +4,9 @@
 ALTER TABLE users
     MODIFY role ENUM('employee', 'manager', 'hr', 'admin') DEFAULT 'employee';
 
+-- Deans use the department-manager dashboard and approval permissions.
+UPDATE users SET role = 'manager' WHERE position = 'Dean';
+
 ALTER TABLE leave_requests
     ADD COLUMN supervisor_status ENUM('pending', 'approved', 'rejected', 'not_required') DEFAULT 'pending' AFTER status,
     ADD COLUMN hr_status ENUM('pending', 'approved', 'rejected') DEFAULT 'pending' AFTER supervisor_status,
