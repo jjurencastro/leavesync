@@ -69,12 +69,14 @@
                             <th>Username</th>
                             <th>Department</th>
                             <th>Position</th>
+                            <th>Supervisor</th>
                             <th>Tier / Role</th>
+                            <th>Action</th>
                         </tr>
                     </thead>
                     <tbody id="manage-users-table">
                         <tr>
-                            <td colspan="5" class="text-center">Loading...</td>
+                            <td colspan="7" class="text-center">Loading...</td>
                         </tr>
                     </tbody>
                 </table>
@@ -298,29 +300,78 @@
             tbody.innerHTML = '';
 
             if (!result.success) {
-                tbody.innerHTML = '<tr><td colspan="5" class="text-center">Failed to load users</td></tr>';
+                tbody.innerHTML = '<tr><td colspan="7" class="text-center">Failed to load users</td></tr>';
                 return;
             }
 
-            const activeUsers = (result.data || []).filter(u => u.is_active);
+            allUsersData = result.data || [];
+            const activeUsers = allUsersData.filter(u => u.is_active);
 
             if (activeUsers.length === 0) {
-                tbody.innerHTML = '<tr><td colspan="5" class="text-center">No active users</td></tr>';
+                tbody.innerHTML = '<tr><td colspan="7" class="text-center">No active users</td></tr>';
                 return;
             }
 
             activeUsers.forEach(u => {
+                const departmentSelectId = `managed-department-${u.id}`;
+                const positionSelectId = `managed-position-${u.id}`;
+                const supervisorSelectId = `managed-supervisor-${u.id}`;
+                const departmentOptions = departmentPositionsData.departments
+                    .map(d => `<option value="${d}" ${d === u.department ? 'selected' : ''}>${d}</option>`).join('');
+                const positionOptions = buildOptions(
+                    (departmentPositionsData.department_positions[u.department] || []).map(p => ({ value: p, label: p })),
+                    u.position, 'value', 'label'
+                );
+                const supervisorOptions = buildOptions(
+                    getEligibleSupervisors(u.department, u.id), u.supervisor_id, 'id', 'full_name'
+                );
                 const row = document.createElement('tr');
                 const options = TIER_ROLES.map(r => `<option value="${r.value}" ${r.value === u.role ? 'selected' : ''}>${r.label}</option>`).join('');
                 row.innerHTML = `
                     <td>${u.full_name}</td>
                     <td>${u.username}</td>
-                    <td>${u.department || ''}</td>
-                    <td>${u.position || ''}</td>
+                    <td><select id="${departmentSelectId}" class="form-control" onchange="onManagedUserDepartmentChange(${u.id})">${departmentOptions}</select></td>
+                    <td><select id="${positionSelectId}" class="form-control">${positionOptions}</select></td>
+                    <td><select id="${supervisorSelectId}" class="form-control" required><option value="">Select supervisor</option>${supervisorOptions}</select></td>
                     <td><select onchange="setUserTier(${u.id}, this.value)">${options}</select></td>
+                    <td><button class="btn btn-small btn-secondary" onclick="updateManagedUser(${u.id})">Save</button></td>
                 `;
                 tbody.appendChild(row);
             });
+        }
+
+        function onManagedUserDepartmentChange(id) {
+            const department = document.getElementById(`managed-department-${id}`).value;
+            const positionSelect = document.getElementById(`managed-position-${id}`);
+            const supervisorSelect = document.getElementById(`managed-supervisor-${id}`);
+
+            positionSelect.innerHTML = buildOptions(
+                (departmentPositionsData.department_positions[department] || []).map(p => ({ value: p, label: p })),
+                null, 'value', 'label'
+            );
+            supervisorSelect.innerHTML = `<option value="">Select supervisor</option>${buildOptions(getEligibleSupervisors(department, id), null, 'id', 'full_name')}`;
+        }
+
+        async function updateManagedUser(id) {
+            const department = document.getElementById(`managed-department-${id}`).value;
+            const position = document.getElementById(`managed-position-${id}`).value;
+            const supervisorId = document.getElementById(`managed-supervisor-${id}`).value;
+            if (!supervisorId) {
+                UIManager.showAlert('Please select a supervisor', 'danger');
+                return;
+            }
+            const result = await APIClient.put(`admin.php?action=update_user&id=${id}`, {
+                department,
+                position,
+                supervisor_id: supervisorId
+            });
+            if (result.success) {
+                UIManager.showAlert('User details updated', 'success');
+                loadManageUsers();
+            } else {
+                UIManager.showAlert(result.message || 'Failed to update user details', 'danger');
+                loadManageUsers();
+            }
         }
 
         async function setUserTier(id, role) {

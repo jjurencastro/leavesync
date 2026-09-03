@@ -207,9 +207,23 @@
             }
         }
 
-        function editRequest(id) {
-            // Redirect to edit form
-            window.location.href = `/views/edit_request.html?id=${id}`;
+        async function editRequest(id) {
+            const result = await LeaveRequestManager.getRequest(id);
+            if (!result.success) {
+                UIManager.showAlert(result.message || 'Failed to load leave request', 'danger');
+                return;
+            }
+
+            const reason = prompt('Update the reason for this leave request:', result.data.reason || '');
+            if (reason === null) return;
+
+            const updateResult = await LeaveRequestManager.updateRequest(id, reason.trim());
+            if (updateResult.success) {
+                UIManager.showAlert('Leave request updated', 'success');
+                loadRequests();
+            } else {
+                UIManager.showAlert(updateResult.message || 'Failed to update leave request', 'danger');
+            }
         }
     </script>
 </body>
