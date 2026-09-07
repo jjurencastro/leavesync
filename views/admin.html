@@ -378,6 +378,7 @@
             const result = await APIClient.put(`admin.php?action=update_user&id=${id}`, { role });
             if (result.success) {
                 UIManager.showAlert('Approval tier updated', 'success');
+                loadManageUsers();
             } else {
                 UIManager.showAlert(result.message || 'Failed to update tier', 'danger');
                 loadManageUsers();

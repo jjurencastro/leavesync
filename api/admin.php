@@ -52,7 +52,10 @@ try {
 
         case 'update_user':
             if ($method !== 'PUT') throw new Exception('Method not allowed');
-            echo json_encode(updateUser($_GET['id'] ?? null, parseRequestPayload()));
+            echo json_encode(
+                updateUser($_GET['id'] ?? null, parseRequestPayload()),
+                JSON_INVALID_UTF8_SUBSTITUTE
+            );
             break;
 
         case 'delete_user':
