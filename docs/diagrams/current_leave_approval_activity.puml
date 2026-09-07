@@ -1,0 +1,28 @@
+@startuml
+!pragma layout smetana
+ title Current Leave Approval Activity
+
+|Employee|
+start
+:Complete leave request in Google Form;
+:Submit leave request;
+
+|Supervisor|
+:Receive request through Google account;
+:Review leave request;
+if (Approve request?) then (yes)
+  :Enter approved leave in HRIS;
+else (no)
+  :Enter rejected leave in HRIS;
+endif
+
+|HRIS|
+if (Leave approved?) then (yes)
+  :Deduct leave days from employee balance;
+  :Record approved leave;
+else (no)
+  :Keep employee balance unchanged;
+  :Record rejected leave;
+endif
+stop
+@enduml

@@ -1,0 +1,31 @@
+@startuml
+!pragma layout smetana
+ title Current Leave Approval BPMN-Style Process
+
+start
+partition "Employee" {
+  :Complete leave request in Google Form;
+  :Submit leave request;
+}
+
+partition "Supervisor / Google Account" {
+  :Receive request;
+  :Review leave request;
+  if (Approve request?) then (Yes)
+    :Enter approved leave in HRIS;
+  else (No)
+    :Enter rejected leave in HRIS;
+  endif
+}
+
+partition "HRIS" {
+  if (Approved entry received?) then (Yes)
+    :Deduct leave days from employee balance;
+    :Record approved leave;
+  else (No)
+    :Leave balance unchanged;
+    :Record rejected leave;
+  endif
+}
+stop
+@enduml
