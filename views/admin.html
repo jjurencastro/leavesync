@@ -437,8 +437,6 @@
         }
 
         async function approveDeviceRequest(id) {
-            if (!confirm('Trust this device for the user?')) return;
-
             let assertion;
             try {
                 assertion = await WebAuthnManager.getApprovalAssertion('device_change', id);
@@ -446,6 +444,8 @@
                 UIManager.showAlert(err.message || 'Passkey approval failed', 'danger');
                 return;
             }
+
+            if (!confirm('Trust this device for the user?')) return;
 
             const result = await APIClient.put(`admin.php?action=approve_device_request&id=${id}`, { webauthn_response: assertion });
             if (result.success) {
@@ -507,7 +507,6 @@
         }
 
         async function approveLeaveRequestAdmin(id) {
-            const comments = prompt('Optional comments for the employee:') || '';
             let assertion;
             try {
                 assertion = await WebAuthnManager.getApprovalAssertion('leave_request', id);
@@ -516,6 +515,7 @@
                 return;
             }
 
+            const comments = prompt('Optional comments for the employee:') || '';
             const result = await LeaveRequestManager.approveRequest(id, comments, assertion);
             if (result.success) {
                 UIManager.showAlert('Leave request approved', 'success');

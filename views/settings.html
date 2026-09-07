@@ -355,8 +355,7 @@
         }
 
         async function registerPasskey() {
-            const label = prompt('Give this passkey a label (e.g. "Work Laptop"):') || 'Passkey';
-            const result = await WebAuthnManager.register(label);
+            const result = await WebAuthnManager.register('Passkey');
             if (result.success) {
                 UIManager.showAlert('Passkey registered', 'success');
                 loadPasskeys();

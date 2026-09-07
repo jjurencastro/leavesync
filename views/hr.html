@@ -113,7 +113,6 @@
         }
 
         async function approveLeaveRequestHR(id) {
-            const comments = prompt('Optional comments for the employee:') || '';
             let assertion;
             try {
                 assertion = await WebAuthnManager.getApprovalAssertion('leave_request', id);
@@ -122,6 +121,7 @@
                 return;
             }
 
+            const comments = prompt('Optional comments for the employee:') || '';
             const result = await LeaveRequestManager.approveRequest(id, comments, assertion);
             if (result.success) {
                 UIManager.showAlert('Leave request approved', 'success');
