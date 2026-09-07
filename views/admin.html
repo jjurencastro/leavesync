@@ -316,6 +316,8 @@
                 const departmentSelectId = `managed-department-${u.id}`;
                 const positionSelectId = `managed-position-${u.id}`;
                 const supervisorSelectId = `managed-supervisor-${u.id}`;
+                const roleSelectId = `managed-role-${u.id}`;
+                const saveButtonId = `managed-save-${u.id}`;
                 const departmentOptions = departmentPositionsData.departments
                     .map(d => `<option value="${d}" ${d === u.department ? 'selected' : ''}>${d}</option>`).join('');
                 const positionOptions = buildOptions(
@@ -331,10 +333,10 @@
                     <td>${u.full_name}</td>
                     <td>${u.username}</td>
                     <td><select id="${departmentSelectId}" class="form-control" onchange="onManagedUserDepartmentChange(${u.id})">${departmentOptions}</select></td>
-                    <td><select id="${positionSelectId}" class="form-control">${positionOptions}</select></td>
-                    <td><select id="${supervisorSelectId}" class="form-control" required><option value="">Select supervisor</option>${supervisorOptions}</select></td>
-                    <td><select onchange="setUserTier(${u.id}, this.value)">${options}</select></td>
-                    <td><button class="btn btn-small btn-secondary" onclick="updateManagedUser(${u.id})">Save</button></td>
+                    <td><select id="${positionSelectId}" class="form-control" onchange="markManagedUserDirty(${u.id})">${positionOptions}</select></td>
+                    <td><select id="${supervisorSelectId}" class="form-control" required onchange="markManagedUserDirty(${u.id})"><option value="">Select supervisor</option>${supervisorOptions}</select></td>
+                    <td><select id="${roleSelectId}" class="form-control" onchange="markManagedUserDirty(${u.id})">${options}</select></td>
+                    <td><button id="${saveButtonId}" class="btn btn-small btn-secondary" disabled onclick="updateManagedUser(${u.id})">Save</button></td>
                 `;
                 tbody.appendChild(row);
             });
@@ -350,12 +352,30 @@
                 null, 'value', 'label'
             );
             supervisorSelect.innerHTML = `<option value="">Select supervisor</option>${buildOptions(getEligibleSupervisors(department, id), null, 'id', 'full_name')}`;
+            markManagedUserDirty(id);
+        }
+
+        function markManagedUserDirty(id) {
+            const user = allUsersData.find(item => Number(item.id) === Number(id));
+            const saveButton = document.getElementById(`managed-save-${id}`);
+            if (!user || !saveButton) return;
+
+            const changed =
+                document.getElementById(`managed-department-${id}`).value !== (user.department || '') ||
+                document.getElementById(`managed-position-${id}`).value !== (user.position || '') ||
+                document.getElementById(`managed-supervisor-${id}`).value !== String(user.supervisor_id || '') ||
+                document.getElementById(`managed-role-${id}`).value !== user.role;
+
+            saveButton.disabled = !changed;
+            saveButton.classList.toggle('btn-success', changed);
+            saveButton.classList.toggle('btn-secondary', !changed);
         }
 
         async function updateManagedUser(id) {
             const department = document.getElementById(`managed-department-${id}`).value;
             const position = document.getElementById(`managed-position-${id}`).value;
             const supervisorId = document.getElementById(`managed-supervisor-${id}`).value;
+            const role = document.getElementById(`managed-role-${id}`).value;
             if (!supervisorId) {
                 UIManager.showAlert('Please select a supervisor', 'danger');
                 return;
@@ -363,24 +383,14 @@
             const result = await APIClient.put(`admin.php?action=update_user&id=${id}`, {
                 department,
                 position,
-                supervisor_id: supervisorId
+                supervisor_id: supervisorId,
+                role
             });
             if (result.success) {
                 UIManager.showAlert('User details updated', 'success');
                 loadManageUsers();
             } else {
                 UIManager.showAlert(result.message || 'Failed to update user details', 'danger');
-                loadManageUsers();
-            }
-        }
-
-        async function setUserTier(id, role) {
-            const result = await APIClient.put(`admin.php?action=update_user&id=${id}`, { role });
-            if (result.success) {
-                UIManager.showAlert('Approval tier updated', 'success');
-                loadManageUsers();
-            } else {
-                UIManager.showAlert(result.message || 'Failed to update tier', 'danger');
                 loadManageUsers();
             }
         }
