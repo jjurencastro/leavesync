@@ -201,7 +201,7 @@
                             <td>${req.number_of_days}</td>
                             <td>${user.role === 'manager' ? UIManager.getStatusBadge(req.status) : UIManager.getApprovalStageBadges(req)}</td>
                             <td>
-                                <a href="/my-requests" class="btn btn-small btn-secondary">View</a>
+                                <button class="btn btn-small btn-secondary" onclick="viewTeamRequest(${req.id})">View</button>
                                 ${canApprove ? `
                                     <button class="btn btn-small btn-success" onclick="approveTeamRequest(${req.id})">Approve</button>
                                     <button class="btn btn-small btn-danger" onclick="rejectTeamRequest(${req.id})">Reject</button>
@@ -212,6 +212,31 @@
                     });
                 }
             }
+        }
+
+        async function viewTeamRequest(id) {
+            const result = await LeaveRequestManager.getRequest(id);
+            if (!result.success) {
+                UIManager.showAlert(result.message || 'Failed to load leave request', 'danger');
+                return;
+            }
+
+            const req = result.data;
+            const content = `
+                <table class="table" style="width: 100%;">
+                    <tr><th>Employee</th><td>${req.full_name}</td></tr>
+                    <tr><th>Email</th><td>${req.email}</td></tr>
+                    <tr><th>Leave Type</th><td>${req.leave_type_name}</td></tr>
+                    <tr><th>From Date</th><td>${UIManager.formatDate(req.start_date)}</td></tr>
+                    <tr><th>To Date</th><td>${UIManager.formatDate(req.end_date)}</td></tr>
+                    <tr><th>Number of Days</th><td>${req.number_of_days}</td></tr>
+                    <tr><th>Reason</th><td>${req.reason}</td></tr>
+                    <tr><th>Status</th><td>${UIManager.getApprovalStageBadges(req)}</td></tr>
+                    ${req.manager_comments ? `<tr><th>Supervisor Comments</th><td>${req.manager_comments}</td></tr>` : ''}
+                    ${req.hr_comments ? `<tr><th>HR Comments</th><td>${req.hr_comments}</td></tr>` : ''}
+                </table>
+            `;
+            UIManager.showModal(content, 'Employee Leave Request');
         }
 
         async function approveTeamRequest(id) {
