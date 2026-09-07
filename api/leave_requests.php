@@ -182,16 +182,20 @@ function createLeaveRequest($data, $user) {
     $request_id = $db->lastInsertId();
 
     if ($isSelfExempt) {
-        // Self-exempt: credit used days directly, no pending stage needed
+        // Self-exempt: deduct the selected balance and credit used days directly.
         $db->execute(
-            "UPDATE leave_balances SET used_days = used_days + ? WHERE user_id = ? AND leave_type_id = ?",
-            [$days, $user['id'], $data['leave_type_id']]
+            "UPDATE leave_balances
+             SET balance = balance - ?, used_days = used_days + ?
+             WHERE user_id = ? AND leave_type_id = ?",
+            [$days, $days, $user['id'], $data['leave_type_id']]
         );
     } else {
-        // Update leave balance
+        // Reserve the selected leave type while the request is awaiting approval.
         $db->execute(
-            "UPDATE leave_balances SET pending_days = pending_days + ? WHERE user_id = ? AND leave_type_id = ?",
-            [$days, $user['id'], $data['leave_type_id']]
+            "UPDATE leave_balances
+             SET balance = balance - ?, pending_days = pending_days + ?
+             WHERE user_id = ? AND leave_type_id = ?",
+            [$days, $days, $user['id'], $data['leave_type_id']]
         );
 
         // Notify whoever needs to act on this first (supervisor for Tier 1, HR for Tier 2)
