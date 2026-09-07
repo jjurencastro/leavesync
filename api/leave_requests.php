@@ -98,7 +98,10 @@ function createLeaveRequest($data, $user) {
         throw new Exception('End date must be after start date');
     }
 
-    $days = $start->diff($end)->days + 1;
+    $days = countWeekdays($start, $end);
+    if ($days === 0) {
+        throw new Exception('The selected date range contains no weekdays.');
+    }
 
     $overlappingRequest = $db->getRow(
         "SELECT id, status
@@ -571,6 +574,20 @@ function getAvailableLeaveTypes($user) {
     }));
 
     return ['success' => true, 'data' => LeaveTypeOrder::sortTypes($types, 'name')];
+}
+
+function countWeekdays(DateTime $start, DateTime $end) {
+    $days = 0;
+    $current = clone $start;
+
+    while ($current <= $end) {
+        if ((int) $current->format('N') < 6) {
+            $days++;
+        }
+        $current->modify('+1 day');
+    }
+
+    return $days;
 }
 
 /**

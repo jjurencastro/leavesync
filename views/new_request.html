@@ -142,11 +142,19 @@
         document.getElementById('end-date').addEventListener('change', calculateDays);
 
         function calculateDays() {
-            const startDate = new Date(document.getElementById('start-date').value);
-            const endDate = new Date(document.getElementById('end-date').value);
+            const startValue = document.getElementById('start-date').value;
+            const endValue = document.getElementById('end-date').value;
+            const startDate = new Date(`${startValue}T00:00:00`);
+            const endDate = new Date(`${endValue}T00:00:00`);
 
-            if (startDate && endDate && endDate >= startDate) {
-                const days = Math.floor((endDate - startDate) / (1000 * 60 * 60 * 24)) + 1;
+            if (startValue && endValue && endDate >= startDate) {
+                let days = 0;
+                const currentDate = new Date(startDate);
+                while (currentDate <= endDate) {
+                    const day = currentDate.getDay();
+                    if (day !== 0 && day !== 6) days++;
+                    currentDate.setDate(currentDate.getDate() + 1);
+                }
                 document.getElementById('days-display').value = days + ' day' + (days > 1 ? 's' : '');
             }
         }
