@@ -201,7 +201,7 @@
                             <td>${req.number_of_days}</td>
                             <td>${user.role === 'manager' ? UIManager.getStatusBadge(req.status) : UIManager.getApprovalStageBadges(req)}</td>
                             <td>
-                                <button class="btn btn-small btn-secondary" onclick="viewTeamRequest(${req.id})">View</button>
+                                <button class="btn btn-small btn-secondary" onclick="viewDashboardRequest(${req.id})">View</button>
                                 ${canApprove ? `
                                     <button class="btn btn-small btn-success" onclick="approveTeamRequest(${req.id})">Approve</button>
                                     <button class="btn btn-small btn-danger" onclick="rejectTeamRequest(${req.id})">Reject</button>
@@ -214,7 +214,7 @@
             }
         }
 
-        async function viewTeamRequest(id) {
+        async function viewDashboardRequest(id) {
             const result = await LeaveRequestManager.getRequest(id);
             if (!result.success) {
                 UIManager.showAlert(result.message || 'Failed to load leave request', 'danger');
@@ -236,7 +236,7 @@
                     ${req.hr_comments ? `<tr><th>HR Comments</th><td>${req.hr_comments}</td></tr>` : ''}
                 </table>
             `;
-            UIManager.showModal(content, 'Employee Leave Request');
+            UIManager.showModal(content, 'Leave Request Details');
         }
 
         async function approveTeamRequest(id) {
