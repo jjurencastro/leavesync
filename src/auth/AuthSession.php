@@ -15,12 +15,12 @@ class AuthSession {
 
     /**
      * Create the auth session/cookie for a user who has completed all login checks.
-     * @param string $role Optional role; admins are exempt from the single-trusted-device rule for testing
+        * @param string $role Optional role retained for existing callers
      * @return string The plaintext session token
      */
     public static function createSessionForUser($user_id, $setNativeSession = false, $role = null) {
         $db = Database::getInstance();
-        $device_id = DeviceFingerprint::store($user_id, true, parseRequestPayload(), $role !== 'admin');
+        $device_id = DeviceFingerprint::store($user_id, true, parseRequestPayload(), false);
         $token = bin2hex(random_bytes(32));
         $token_hash = hash('sha256', $token);
         $expires_at = date('Y-m-d H:i:s', time() + AUTH_SESSION_LIFETIME);
@@ -99,8 +99,7 @@ class AuthSession {
                 }
             }
 
-            // Once a user has a registered trusted device, only that device may log in
-            // (temporarily exempt admins so they can test from anywhere)
+            // Once a user has a registered trusted device, only approved devices may log in.
             $requestData = parseRequestPayload();
             $trustedDevices = DeviceFingerprint::getTrustedDevices($user['id']);
             $isKnownDevice = $user['role'] === 'admin'
