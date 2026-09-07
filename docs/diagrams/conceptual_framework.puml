@@ -1,0 +1,18 @@
+@startuml
+!pragma layout smetana
+title Conceptual Framework (Input-Process-Output Model)
+
+skinparam rectangle {
+  BackgroundColor White
+  BorderColor Black
+}
+
+rectangle "INPUT\n----\nEmployee leave request data\n(type, dates, reason)\n\nEmployee account credentials\nand device fingerprint data\n\nSupervisor / HR / Admin\napproval decisions\n\nPasskey (WebAuthn)\nauthenticator assertions\n\nExisting manual leave records\n(Google Forms, HRIS)" as INPUT
+
+rectangle "PROCESS\n----\nAuthenticate user and\nverify MFA / device trust\n\nValidate leave request\n(dates, weekdays, overlap, balance)\n\nReserve leave balance for\npending request\n\nRoute request through\nsupervisor / HR approval hierarchy\n\nVerify digital signature\n(WebAuthn passkey) on approval\n\nUpdate leave balance\n(approve = deduct, reject = restore)\n\nLog actions to audit trail" as PROCESS
+
+rectangle "OUTPUT\n----\nApproved leave request with\nupdated balance\n\nRejected leave request with\nrestored balance\n\nDigitally signed,\nnon-repudiable approval record\n\nAudit log of leave transactions\n\nLeaveSync leave management system" as OUTPUT
+
+INPUT -down-> PROCESS
+PROCESS -down-> OUTPUT
+@enduml
