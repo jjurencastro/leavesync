@@ -1,0 +1,26 @@
+@startuml
+!pragma layout smetana
+ title Passkey Registration and Approval Activity
+ start
+ :Open Settings on approver device;
+ :Request registration options;
+ :Create WebAuthn credential with user verification;
+ if (Registration succeeds?) then (yes)
+   :Verify attestation;
+   :Store public key and device binding;
+ else (no)
+   :Show registration failure;
+   stop
+ endif
+ :Open leave or device-change approval;
+ :Request approval challenge;
+ :Request passkey assertion;
+ :Verify challenge, origin, credential, counter, and device binding;
+ if (Assertion valid?) then (yes)
+   :Record approval evidence;
+   :Continue approval workflow;
+ else (no)
+   :Reject approval;
+ endif
+ stop
+@enduml

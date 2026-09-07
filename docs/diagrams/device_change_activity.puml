@@ -1,0 +1,32 @@
+@startuml
+!pragma layout smetana
+ title Device Change Approval Activity
+ start
+ :Login from untrusted device;
+ :Show device differences;
+ if (User confirms request?) then (yes)
+   :Create pending device-change request;
+   if (Supervisor available?) then (yes)
+     :Route to supervisor;
+   else (no)
+     :Route to administrator;
+   endif
+   :Approver reviews device information;
+   if (Approver rejects?) then (yes)
+     :Mark request rejected;
+   else (no)
+     :Request passkey assertion;
+     :Verify approver role and passkey device binding;
+     if (Assertion valid?) then (yes)
+       :Trust requested device fingerprint;
+       :Invalidate existing sessions;
+       :Mark request approved;
+     else (no)
+       :Reject approval;
+     endif
+   endif
+ else (no)
+   :Cancel device-change request;
+ endif
+ stop
+@enduml

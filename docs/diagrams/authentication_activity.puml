@@ -1,0 +1,33 @@
+@startuml
+!pragma layout smetana
+ title LeaveSync Authentication Activity
+ start
+ :Enter username and password;
+ :Validate credentials;
+ if (Credentials valid?) then (yes)
+   if (MFA enabled?) then (yes)
+     :Enter TOTP or backup code;
+     if (MFA valid?) then (yes)
+     else (no)
+       :Reject login;
+       stop
+     endif
+   endif
+   :Build device fingerprint;
+   if (Trusted device?) then (yes)
+     :Create authenticated session;
+     :Open role landing page;
+   else (no)
+     :Show device-change confirmation;
+     if (User confirms request?) then (yes)
+       :Create pending device-change request;
+       :Notify supervisor or admin;
+     else (no)
+       :Cancel login;
+     endif
+   endif
+ else (no)
+   :Reject login;
+ endif
+ stop
+@enduml

@@ -1,0 +1,23 @@
+@startuml
+!pragma layout smetana
+ title User Role and Approval Tier Management Activity
+ start
+ :Administrator opens Manage Users;
+ :Select department, position, supervisor, or tier;
+ :Stage changes in the user row;
+ if (Any value changed?) then (yes)
+   :Enable green Save button;
+   :Submit all staged values;
+   if (Values valid?) then (yes)
+     :Update user role and reporting data;
+     :Write audit log;
+     :Reload user row;
+     :Disable Save button;
+   else (no)
+     :Show validation error;
+   endif
+ else (no)
+   :Keep gray disabled Save button;
+ endif
+ stop
+@enduml

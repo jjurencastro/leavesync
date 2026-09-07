@@ -1,0 +1,45 @@
+@startuml
+!pragma layout smetana
+ title Leave Request and Approval Activity
+ start
+ :Select leave type and date range;
+ :Count weekdays only;
+ if (Valid weekday range?) then (yes)
+   :Check overlapping pending or approved request;
+   if (Overlap exists?) then (yes)
+     :Reject duplicate date request;
+     stop
+   endif
+   :Check selected leave-type balance;
+   if (Sufficient balance?) then (yes)
+     :Verify trusted device;
+     :Create pending request;
+     :Deduct days from balance;
+     :Increase pending days;
+     if (Requester is manager?) then (yes)
+       :Notify HR;
+     else (no)
+       :Notify supervisor;
+     endif
+     :Supervisor reviews request;
+     if (Supervisor rejects?) then (yes)
+       :Restore balance;
+       :Decrease pending days;
+       stop
+     endif
+     :HR reviews request;
+     if (HR rejects?) then (yes)
+       :Restore balance;
+       :Decrease pending days;
+     else (no)
+       :Decrease pending days;
+       :Increase used days;
+     endif
+   else (no)
+     :Reject insufficient balance;
+   endif
+ else (no)
+   :Reject invalid date range;
+ endif
+ stop
+@enduml
