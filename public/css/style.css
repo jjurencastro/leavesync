@@ -55,6 +55,16 @@ p {
     padding-bottom: 2rem;
 }
 
+.toast-notification {
+    position: fixed;
+    top: 5.5rem;
+    right: 1.5rem;
+    z-index: 1100;
+    width: min(24rem, calc(100vw - 3rem));
+    margin: 0;
+    box-shadow: var(--shadow-md);
+}
+
 .narrow-container {
     max-width: 700px;
 }

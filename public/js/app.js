@@ -343,17 +343,16 @@ class WebAuthnManager {
 // UI Utilities
 class UIManager {
     static showAlert(message, type = 'info') {
-        const container = document.getElementById('alert-container') || document.querySelector('.container') || document.body;
+        const container = document.body;
 
-        // Replace any existing alert instead of stacking duplicates on top of each other
-        container.querySelectorAll(':scope > .alert').forEach(el => el.remove());
+        document.querySelectorAll('.toast-notification').forEach(el => el.remove());
         clearTimeout(UIManager._alertTimeout);
 
         const alertDiv = document.createElement('div');
-        alertDiv.className = `alert alert-${type}`;
+        alertDiv.className = `alert alert-${type} toast-notification`;
         alertDiv.textContent = message;
 
-        container.insertBefore(alertDiv, container.firstChild);
+        container.appendChild(alertDiv);
 
         UIManager._alertTimeout = setTimeout(() => alertDiv.remove(), 5000);
     }
