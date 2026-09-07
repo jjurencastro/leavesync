@@ -100,6 +100,20 @@ function createLeaveRequest($data, $user) {
 
     $days = $start->diff($end)->days + 1;
 
+    $overlappingRequest = $db->getRow(
+        "SELECT id, status
+         FROM leave_requests
+         WHERE user_id = ?
+           AND status IN ('pending', 'approved')
+           AND start_date <= ?
+           AND end_date >= ?
+         LIMIT 1",
+        [$user['id'], $data['end_date'], $data['start_date']]
+    );
+    if ($overlappingRequest) {
+        throw new Exception('You already have a pending or approved leave request for one or more of these dates.');
+    }
+
     $leaveType = $db->getRow("SELECT id, name FROM leave_types WHERE id = ?", [$data['leave_type_id']]);
     if (!$leaveType) {
         throw new Exception('Invalid leave type');
