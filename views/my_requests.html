@@ -133,78 +133,48 @@
 
         async function viewRequest(id) {
             const result = await LeaveRequestManager.getRequest(id);
-            if (result.success) {
-                const req = result.data;
-                let signatureInfo = '';
-                const signatureHistory = req.signature_history || (req.signature_info ? [req.signature_info] : []);
-                if (signatureHistory.length) {
-                    const signatureRows = signatureHistory.map((signature, index) => `
-                        <tr>
-                            <td>${index + 1}</td>
-                            <td>${signature.full_name || 'Unknown approver'}</td>
-                            <td>${UIManager.formatDate(signature.timestamp)}</td>
-                        </tr>
-                    `).join('');
-                    signatureInfo = `
-                        <div class="alert alert-info mt-2">
-                            <strong>Digital Approval History</strong>
-                            <table class="table mt-2" style="width: 100%;">
-                                <thead><tr><th>#</th><th>Signed By</th><th>Timestamp</th></tr></thead>
-                                <tbody>${signatureRows}</tbody>
-                            </table>
-                        </div>
-                    `;
-                }
-                
-                const content = `
-                    <table class="table" style="width: 100%;">
-                        <tr>
-                            <th>Leave Type</th>
-                            <td>${req.leave_type_name}</td>
-                        </tr>
-                        <tr>
-                            <th>From Date</th>
-                            <td>${UIManager.formatDate(req.start_date)}</td>
-                        </tr>
-                        <tr>
-                            <th>To Date</th>
-                            <td>${UIManager.formatDate(req.end_date)}</td>
-                        </tr>
-                        <tr>
-                            <th>Number of Days</th>
-                            <td>${req.number_of_days}</td>
-                        </tr>
-                        <tr>
-                            <th>Reason</th>
-                            <td>${req.reason}</td>
-                        </tr>
-                        <tr>
-                            <th>Status</th>
-                            <td>${UIManager.getApprovalStageBadges(req)}</td>
-                        </tr>
-                        ${req.manager_name ? `
-                        <tr>
-                            <th>Handled by</th>
-                            <td>${req.manager_name}</td>
-                        </tr>
-                        ` : ''}
-                        ${req.manager_comments ? `
-                        <tr>
-                            <th>Supervisor Comments</th>
-                            <td>${req.manager_comments}</td>
-                        </tr>
-                        ` : ''}
-                        ${req.hr_comments ? `
-                        <tr>
-                            <th>HR Comments</th>
-                            <td>${req.hr_comments}</td>
-                        </tr>
-                        ` : ''}
-                    </table>
-                    ${signatureInfo}
-                `;
-                UIManager.showModal(content, 'Leave Request Details');
+            if (!result.success) {
+                UIManager.showAlert(result.message || 'Failed to load leave request', 'danger');
+                return;
             }
+
+            const req = result.data;
+            let signatureInfo = '';
+            const signatureHistory = req.signature_history || (req.signature_info ? [req.signature_info] : []);
+            if (signatureHistory.length) {
+                const signatureRows = signatureHistory.map((signature, index) => `
+                    <tr>
+                        <td>${index + 1}</td>
+                        <td>${signature.full_name || 'Unknown approver'}</td>
+                        <td>${UIManager.formatDate(signature.timestamp)}</td>
+                    </tr>
+                `).join('');
+                signatureInfo = `
+                    <div class="alert alert-info mt-2">
+                        <strong>Digital Approval History</strong>
+                        <table class="table mt-2" style="width: 100%;">
+                            <thead><tr><th>#</th><th>Signed By</th><th>Timestamp</th></tr></thead>
+                            <tbody>${signatureRows}</tbody>
+                        </table>
+                    </div>
+                `;
+            }
+
+            const content = `
+                <table class="table" style="width: 100%;">
+                    <tr><th>Leave Type</th><td>${req.leave_type_name}</td></tr>
+                    <tr><th>From Date</th><td>${UIManager.formatDate(req.start_date)}</td></tr>
+                    <tr><th>To Date</th><td>${UIManager.formatDate(req.end_date)}</td></tr>
+                    <tr><th>Number of Days</th><td>${req.number_of_days}</td></tr>
+                    <tr><th>Reason</th><td>${req.reason}</td></tr>
+                    <tr><th>Status</th><td>${UIManager.getApprovalStageBadges(req)}</td></tr>
+                    ${req.manager_name ? `<tr><th>Handled by</th><td>${req.manager_name}</td></tr>` : ''}
+                    ${req.manager_comments ? `<tr><th>Supervisor Comments</th><td>${req.manager_comments}</td></tr>` : ''}
+                    ${req.hr_comments ? `<tr><th>HR Comments</th><td>${req.hr_comments}</td></tr>` : ''}
+                </table>
+                ${signatureInfo}
+            `;
+            UIManager.showModal(content, 'Leave Request Details');
         }
 
         async function editRequest(id) {
@@ -214,11 +184,28 @@
                 return;
             }
 
-            const reason = prompt('Update the reason for this leave request:', result.data.reason || '');
-            if (reason === null) return;
+            const req = result.data;
+            const content = `
+                <form onsubmit="submitEditRequest(event, ${id})">
+                    <label for="edit-request-reason">Reason</label>
+                    <textarea id="edit-request-reason" rows="5" required>${req.reason || ''}</textarea>
+                    <div class="flex-between mt-2">
+                        <button type="button" class="btn btn-secondary" onclick="UIManager.hideModal()">Cancel</button>
+                        <button type="submit" class="btn btn-primary">Save Changes</button>
+                    </div>
+                </form>
+            `;
+            UIManager.showModal(content, 'Edit Leave Request');
+        }
 
-            const updateResult = await LeaveRequestManager.updateRequest(id, reason.trim());
+        async function submitEditRequest(event, id) {
+            event.preventDefault();
+            const reason = document.getElementById('edit-request-reason').value.trim();
+            if (!reason) return;
+
+            const updateResult = await LeaveRequestManager.updateRequest(id, reason);
             if (updateResult.success) {
+                UIManager.hideModal();
                 UIManager.showAlert('Leave request updated', 'success');
                 loadRequests();
             } else {
