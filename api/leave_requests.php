@@ -225,15 +225,15 @@ function listLeaveRequests($user) {
     global $db;
 
     if ($user['role'] === 'manager') {
-        // Managers see requests from their direct reports (Tier 1 employees who chose them as supervisor)
+        // Managers see their own requests and requests from direct reports.
         $sql = "SELECT lr.*, u.full_name, lt.name as leave_type_name, COUNT(*) OVER() as total 
                 FROM leave_requests lr
                 JOIN users u ON lr.user_id = u.id
                 JOIN leave_types lt ON lr.leave_type_id = lt.id
-                WHERE u.supervisor_id = ?
+                WHERE u.supervisor_id = ? OR lr.user_id = ?
                 ORDER BY lr.created_at DESC
                 LIMIT 50";
-        $requests = $db->getResults($sql, [$user['id']]);
+        $requests = $db->getResults($sql, [$user['id'], $user['id']]);
     } else if ($user['role'] === 'hr') {
         // HR sees requests that have reached (or passed) the HR stage
         $sql = "SELECT lr.*, u.full_name, lt.name as leave_type_name, COUNT(*) OVER() as total 
