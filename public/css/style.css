@@ -58,10 +58,11 @@ p {
 .toast-notification {
     position: fixed;
     top: 5.5rem;
-    right: 1.5rem;
+    left: 50%;
     z-index: 1100;
     width: min(24rem, calc(100vw - 3rem));
     margin: 0;
+    transform: translateX(-50%);
     box-shadow: var(--shadow-md);
 }
 
