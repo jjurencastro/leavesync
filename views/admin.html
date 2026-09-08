@@ -161,10 +161,15 @@
             }
         }
 
-        function getEligibleSupervisors(department, excludeId) {
-            return allUsersData.filter(s =>
-                s.is_active && s.id !== excludeId && (s.role === 'admin' || (s.role === 'manager' && s.department === department))
-            );
+        // Hierarchy: ADMIN staff report to admin, Deans report to HR, other academic positions report to their department's Dean
+        function getEligibleSupervisors(department, position, excludeId) {
+            return allUsersData.filter(s => {
+                if (!s.is_active || s.id === excludeId) return false;
+                if (department === 'ADMIN') return s.role === 'admin';
+                if (position === 'Dean') return s.role === 'hr';
+                if (position) return s.role === 'manager' && s.department === department;
+                return false;
+            });
         }
 
         function buildOptions(items, selectedValue, valueKey, labelKey) {
@@ -210,7 +215,7 @@
                     (departmentPositionsData.department_positions[u.department] || []).map(p => ({ value: p, label: p })),
                     u.position, 'value', 'label'
                 );
-                const supervisorOptions = buildOptions(getEligibleSupervisors(u.department, u.id), u.supervisor_id, 'id', 'full_name');
+                const supervisorOptions = buildOptions(getEligibleSupervisors(u.department, u.position, u.id), u.supervisor_id, 'id', 'full_name');
 
                 const row = document.createElement('tr');
                 row.innerHTML = `
@@ -219,7 +224,7 @@
                     <td>${u.email}</td>
                     <td>
                         <select id="${deptSelectId}" class="form-control" onchange="onPendingUserDepartmentChange(${u.id})">${departmentOptions}</select>
-                        <select id="${positionSelectId}" class="form-control">${positionOptions}</select>
+                        <select id="${positionSelectId}" class="form-control" onchange="onPendingUserPositionChange(${u.id})">${positionOptions}</select>
                         <select id="${supervisorSelectId}" class="form-control">${supervisorOptions}</select>
                         <button class="btn btn-small btn-secondary" onclick="updateUserDetails(${u.id})">Update</button>
                     </td>
@@ -242,7 +247,14 @@
                 (departmentPositionsData.department_positions[department] || []).map(p => ({ value: p, label: p })),
                 null, 'value', 'label'
             );
-            supervisorSelect.innerHTML = buildOptions(getEligibleSupervisors(department, id), null, 'id', 'full_name');
+            supervisorSelect.innerHTML = buildOptions(getEligibleSupervisors(department, positionSelect.value, id), null, 'id', 'full_name');
+        }
+
+        function onPendingUserPositionChange(id) {
+            const department = document.getElementById(`dept-select-${id}`).value;
+            const position = document.getElementById(`position-select-${id}`).value;
+            const supervisorSelect = document.getElementById(`supervisor-select-${id}`);
+            supervisorSelect.innerHTML = buildOptions(getEligibleSupervisors(department, position, id), null, 'id', 'full_name');
         }
 
         async function updateUserDetails(id) {
@@ -325,7 +337,7 @@
                     u.position, 'value', 'label'
                 );
                 const supervisorOptions = buildOptions(
-                    getEligibleSupervisors(u.department, u.id), u.supervisor_id, 'id', 'full_name'
+                    getEligibleSupervisors(u.department, u.position, u.id), u.supervisor_id, 'id', 'full_name'
                 );
                 const row = document.createElement('tr');
                 const options = TIER_ROLES.map(r => `<option value="${r.value}" ${r.value === u.role ? 'selected' : ''}>${r.label}</option>`).join('');
@@ -333,7 +345,7 @@
                     <td>${u.full_name}</td>
                     <td>${u.username}</td>
                     <td><select id="${departmentSelectId}" class="form-control" onchange="onManagedUserDepartmentChange(${u.id})">${departmentOptions}</select></td>
-                    <td><select id="${positionSelectId}" class="form-control" onchange="markManagedUserDirty(${u.id})">${positionOptions}</select></td>
+                    <td><select id="${positionSelectId}" class="form-control" onchange="onManagedUserPositionChange(${u.id})">${positionOptions}</select></td>
                     <td><select id="${supervisorSelectId}" class="form-control" required onchange="markManagedUserDirty(${u.id})"><option value="">Select supervisor</option>${supervisorOptions}</select></td>
                     <td><select id="${roleSelectId}" class="form-control" onchange="markManagedUserDirty(${u.id})">${options}</select></td>
                     <td><button id="${saveButtonId}" class="btn btn-small btn-secondary" disabled onclick="updateManagedUser(${u.id})">Save</button></td>
@@ -351,7 +363,15 @@
                 (departmentPositionsData.department_positions[department] || []).map(p => ({ value: p, label: p })),
                 null, 'value', 'label'
             );
-            supervisorSelect.innerHTML = `<option value="">Select supervisor</option>${buildOptions(getEligibleSupervisors(department, id), null, 'id', 'full_name')}`;
+            supervisorSelect.innerHTML = `<option value="">Select supervisor</option>${buildOptions(getEligibleSupervisors(department, positionSelect.value, id), null, 'id', 'full_name')}`;
+            markManagedUserDirty(id);
+        }
+
+        function onManagedUserPositionChange(id) {
+            const department = document.getElementById(`managed-department-${id}`).value;
+            const position = document.getElementById(`managed-position-${id}`).value;
+            const supervisorSelect = document.getElementById(`managed-supervisor-${id}`);
+            supervisorSelect.innerHTML = `<option value="">Select supervisor</option>${buildOptions(getEligibleSupervisors(department, position, id), null, 'id', 'full_name')}`;
             markManagedUserDirty(id);
         }
 

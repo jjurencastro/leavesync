@@ -72,7 +72,7 @@ class AuthSession {
             }
 
             if (!$user['is_active']) {
-                return ['success' => false, 'message' => 'Your account activation is pending administrator approval.'];
+                return ['success' => false, 'message' => 'Your account activation is pending supervisor approval.'];
             }
 
             if (!password_verify($password, $user['password_hash'])) {

@@ -117,16 +117,26 @@
                 const supervisorSelect = document.getElementById('supervisor_id');
                 const populateSupervisors = () => {
                     supervisorSelect.innerHTML = '<option value="">Select an approver</option>';
+                    const department = departmentSelect.value;
+                    const position = positionSelect.value;
                     activationInfo.data.supervisors
-                        .filter((supervisor) => supervisor.role === 'admin' || supervisor.department === departmentSelect.value)
+                        .filter((supervisor) => {
+                            // Hierarchy: ADMIN staff report to admin, Deans report to HR, other academic positions report to their department's Dean
+                            if (department === 'ADMIN') return supervisor.role === 'admin';
+                            if (position === 'Dean') return supervisor.role === 'hr';
+                            if (position) return supervisor.role === 'manager' && supervisor.department === department;
+                            return false;
+                        })
                         .forEach((supervisor) => {
                             const option = document.createElement('option');
                             option.value = supervisor.id;
-                            option.textContent = supervisor.full_name + (supervisor.role === 'manager' ? ' (Dean)' : '');
+                            const suffix = supervisor.role === 'manager' ? ' (Dean)' : supervisor.role === 'hr' ? ' (HR)' : '';
+                            option.textContent = supervisor.full_name + suffix;
                             supervisorSelect.appendChild(option);
                         });
                 };
                 departmentSelect.addEventListener('change', populateSupervisors);
+                positionSelect.addEventListener('change', populateSupervisors);
                 populateSupervisors();
             }
         })();

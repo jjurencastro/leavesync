@@ -8,6 +8,9 @@ function assertTrue($condition, $message) {
     }
 }
 
+$authSessionSource = file_get_contents(__DIR__ . '/../src/auth/AuthSession.php');
+assertTrue(strpos($authSessionSource, 'pending supervisor approval') !== false, 'Inactive account message should say supervisor approval');
+
 $deviceData = [
     'screen_resolution' => '1920x1080',
     'timezone' => 'UTC',

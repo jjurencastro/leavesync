@@ -123,7 +123,7 @@ class UserRegistration {
         // self-selected manager/admin-tier position has no effect until then.
         $role = self::POSITION_ROLE_MAP[$position];
 
-        if (!self::isEligibleSupervisor($supervisor_id, $user_id, $department)) {
+        if (!self::isEligibleSupervisor($supervisor_id, $user_id, $department, $position)) {
             return ['success' => false, 'message' => 'Please select an active immediate supervisor'];
         }
 
@@ -238,31 +238,49 @@ class UserRegistration {
 
     /**
      * @param int $excludeUserId Never offer the user as their own supervisor
-     * @param string|null $department Restrict managers to this department; null allows any (used by the activation form, which filters client-side per department)
+     * @param string|null $department Restrict managers to this department; null allows any (used by the activation form, which filters client-side per department/position)
      */
     public static function getEligibleSupervisors($excludeUserId, $department = null) {
         $db = Database::getInstance();
         if ($department !== null) {
             return $db->getResults(
                 "SELECT id, username, full_name, department, role FROM users
-                 WHERE id <> ? AND is_active = 1 AND (role = 'admin' OR (role = 'manager' AND department = ?))
+                 WHERE id <> ? AND is_active = 1 AND (role = 'admin' OR role = 'hr' OR (role = 'manager' AND department = ?))
                  ORDER BY full_name, username",
                 [$excludeUserId, $department]
             );
         }
         return $db->getResults(
             "SELECT id, username, full_name, department, role FROM users
-             WHERE id <> ? AND is_active = 1 AND (role = 'admin' OR role = 'manager')
+             WHERE id <> ? AND is_active = 1 AND role IN ('admin', 'hr', 'manager')
              ORDER BY full_name, username",
             [$excludeUserId]
         );
     }
 
-    public static function isEligibleSupervisor($supervisorId, $excludeUserId, $department) {
+    // Hierarchy: ADMIN-department staff report to admin, Deans report to HR, other academic positions report to their department's Dean
+    public static function isEligibleSupervisor($supervisorId, $excludeUserId, $department, $position = null) {
         $db = Database::getInstance();
+
+        if ($department === 'ADMIN') {
+            $supervisor = $db->getRow(
+                "SELECT id FROM users WHERE id = ? AND id <> ? AND is_active = 1 AND role = 'admin'",
+                [$supervisorId, $excludeUserId]
+            );
+            return (bool) $supervisor;
+        }
+
+        if ($position === 'Dean') {
+            $supervisor = $db->getRow(
+                "SELECT id FROM users WHERE id = ? AND id <> ? AND is_active = 1 AND role = 'hr'",
+                [$supervisorId, $excludeUserId]
+            );
+            return (bool) $supervisor;
+        }
+
         $supervisor = $db->getRow(
             "SELECT id FROM users WHERE id = ? AND id <> ? AND is_active = 1
-             AND (role = 'admin' OR (role = 'manager' AND department = ?))",
+             AND role = 'manager' AND department = ?",
             [$supervisorId, $excludeUserId, $department]
         );
         return (bool) $supervisor;

@@ -148,7 +148,7 @@ function updateDepartmentUserDetails($id, $user, $data) {
     }
     if (isset($data['supervisor_id'])) {
         $supervisorId = (int) $data['supervisor_id'];
-        if (!UserRegistration::isEligibleSupervisor($supervisorId, $id, $department)) {
+        if (!UserRegistration::isEligibleSupervisor($supervisorId, $id, $department, $position)) {
             throw new Exception('Please select a valid immediate supervisor');
         }
         $updates[] = "supervisor_id = ?";
