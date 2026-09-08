@@ -125,6 +125,10 @@ class AuthManager {
         return APIClient.post('auth.php?action=set_password', data);
     }
 
+    static async cancelActivation() {
+        return APIClient.post('auth.php?action=cancel_activation', {});
+    }
+
     static async logout() {
         return APIClient.get('auth.php?action=logout');
     }

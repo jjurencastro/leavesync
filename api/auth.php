@@ -92,6 +92,16 @@ try {
             echo json_encode(Auth::changePassword($user['id'], $data['current_password'] ?? '', $data['new_password'] ?? ''));
             break;
 
+        case 'cancel_activation':
+            if ($method !== 'POST') throw new Exception('Method not allowed');
+            if (!Auth::isAuthenticated()) {
+                http_response_code(401);
+                throw new Exception('Unauthorized');
+            }
+            $user = Auth::getCurrentUser();
+            echo json_encode(Auth::cancelActivation($user['id']));
+            break;
+
         case 'activation_info':
             if (!Auth::isAuthenticated()) {
                 http_response_code(401);

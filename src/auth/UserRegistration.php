@@ -163,6 +163,42 @@ class UserRegistration {
     }
 
     /**
+     * Remove an account whose activation was abandoned before a password was set.
+     */
+    public static function cancelActivation($user_id) {
+        $db = Database::getInstance();
+        $user = $db->getRow(
+            "SELECT is_active, password_set FROM users WHERE id = ?",
+            [$user_id]
+        );
+
+        if (!$user) {
+            return ['success' => false, 'message' => 'User not found'];
+        }
+
+        if ((int) $user['is_active'] !== 0 || (int) $user['password_set'] !== 0) {
+            return ['success' => false, 'message' => 'This account can no longer be cancelled'];
+        }
+
+        $connection = $db->getConnection();
+        $connection->begin_transaction();
+
+        try {
+            $deleted = $db->execute("DELETE FROM users WHERE id = ? AND is_active = 0 AND password_set = 0", [$user_id]);
+            if (!$deleted) {
+                $connection->rollback();
+                return ['success' => false, 'message' => 'This account can no longer be cancelled'];
+            }
+            $connection->commit();
+            return ['success' => true, 'message' => 'Account activation cancelled'];
+        } catch (Exception $e) {
+            $connection->rollback();
+            error_log('Cancel activation error: ' . $e->getMessage());
+            return ['success' => false, 'message' => 'Failed to cancel account activation'];
+        }
+    }
+
+    /**
      * Alert whoever approves pending accounts for this department: the Dean for
      * academic departments, or admin for the ADMIN department (which has no Dean).
      */

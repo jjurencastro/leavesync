@@ -75,8 +75,15 @@
     <script src="/js/app.js"></script>
     <script>
         document.getElementById('logout-btn').addEventListener('click', async () => {
-            await AuthManager.logout();
-            window.location.href = '/login';
+            const button = document.getElementById('logout-btn');
+            button.disabled = true;
+            const result = await AuthManager.cancelActivation();
+            if (result.success) {
+                window.location.href = '/login';
+                return;
+            }
+            button.disabled = false;
+            UIManager.showAlert(result.message || 'Unable to cancel account activation', 'danger');
         });
 
         (async () => {
