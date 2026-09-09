@@ -125,6 +125,24 @@ class DeviceChangeRequest {
     }
 
     /**
+     * Pending requests from an HR user's own direct reports (e.g. Deans, who
+     * report to HR per the approval hierarchy). Tier is not restricted here:
+     * an HR user's direct reports are never Tier 1 employees.
+     */
+    public static function getPendingForHR($hr_id) {
+        $db = Database::getInstance();
+        return $db->getResults(
+            "SELECT dcr.id, dcr.user_id, dcr.fingerprint_hash, dcr.device_info, dcr.ip_address, dcr.browser_info,
+                    dcr.status, dcr.requested_at, u.username, u.full_name, u.email
+             FROM device_change_requests dcr
+             JOIN users u ON dcr.user_id = u.id
+             WHERE dcr.status = 'pending' AND u.supervisor_id = ?
+             ORDER BY dcr.requested_at DESC",
+            [$hr_id]
+        );
+    }
+
+    /**
      * Approve/reject a pending request, trusting the device on approval and forcing
      * a fresh login. Shared by both the admin and manager (supervisor) approval queues.
      * Approval requires a passkey assertion; rejection does not.

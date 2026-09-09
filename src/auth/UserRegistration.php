@@ -199,14 +199,15 @@ class UserRegistration {
     }
 
     /**
-     * Alert whoever approves pending accounts for this department: the Dean for
-     * academic departments, or admin for the ADMIN department (which has no Dean).
+     * Alert whoever approves the pending account: the Dean for academic
+     * departments, HR for Dean accounts (Deans report to HR), or admin for
+     * the ADMIN department (which has no Dean).
      */
     private static function notifyApprovers($user_id, $department) {
         $db = Database::getInstance();
         $applicant = $db->getRow("SELECT full_name, supervisor_id FROM users WHERE id = ?", [$user_id]);
         $approvers = $db->getResults(
-            "SELECT id FROM users WHERE id = ? AND is_active = 1 AND role IN ('manager', 'admin')",
+            "SELECT id FROM users WHERE id = ? AND is_active = 1 AND role IN ('manager', 'hr', 'admin')",
             [$applicant['supervisor_id'] ?? 0]
         );
 
