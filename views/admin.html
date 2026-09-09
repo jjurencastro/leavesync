@@ -106,10 +106,40 @@
             </div>
         </div>
         <div class="card">
-            <div class="card-header">
-                <h2>All Leave Requests</h2>
+            <div class="card-header" style="display: flex; justify-content: space-between; align-items: center; gap: 0.75rem; flex-wrap: wrap;">
+                <h2 style="margin: 0;">All Leave Requests</h2>
+                <button class="btn btn-small btn-secondary" onclick="exportLeaveRequestsCsv()">Export Excel (CSV)</button>
             </div>
             <div class="card-body">
+                <div class="leave-request-filters" style="display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap: 0.75rem; margin-bottom: 1rem;">
+                    <div class="form-group" style="margin: 0;">
+                        <label for="lr-filter-employee">Employee</label>
+                        <input type="text" id="lr-filter-employee" class="form-control" placeholder="Search name" oninput="renderLeaveRequests()">
+                    </div>
+                    <div class="form-group" style="margin: 0;">
+                        <label for="lr-filter-type">Leave Type</label>
+                        <select id="lr-filter-type" class="form-control" onchange="renderLeaveRequests()">
+                            <option value="">All types</option>
+                        </select>
+                    </div>
+                    <div class="form-group" style="margin: 0;">
+                        <label for="lr-filter-status">Status</label>
+                        <select id="lr-filter-status" class="form-control" onchange="renderLeaveRequests()">
+                            <option value="">All statuses</option>
+                            <option value="pending">Pending</option>
+                            <option value="approved">Approved</option>
+                            <option value="rejected">Rejected</option>
+                        </select>
+                    </div>
+                    <div class="form-group" style="margin: 0;">
+                        <label for="lr-filter-from">From</label>
+                        <input type="date" id="lr-filter-from" class="form-control" onchange="renderLeaveRequests()">
+                    </div>
+                    <div class="form-group" style="margin: 0;">
+                        <label for="lr-filter-to">To</label>
+                        <input type="date" id="lr-filter-to" class="form-control" onchange="renderLeaveRequests()">
+                    </div>
+                </div>
                 <table class="table">
                     <thead>
                         <tr>
@@ -492,17 +522,50 @@
             }
         }
 
+        let allLeaveRequests = [];
+
         async function loadLeaveRequests() {
             const result = await LeaveRequestManager.listRequests();
             const tbody = document.getElementById('leave-requests-table');
-            tbody.innerHTML = '';
 
             if (!result.success) {
                 tbody.innerHTML = '<tr><td colspan="7" class="text-center">Failed to load leave requests</td></tr>';
                 return;
             }
 
-            const requests = result.data || [];
+            allLeaveRequests = result.data || [];
+
+            // Populate the leave-type filter from the loaded requests
+            const typeSelect = document.getElementById('lr-filter-type');
+            const types = [...new Set(allLeaveRequests.map(r => r.leave_type_name).filter(Boolean))].sort();
+            typeSelect.innerHTML = '<option value="">All types</option>' +
+                types.map(t => `<option value="${t}">${t}</option>`).join('');
+
+            renderLeaveRequests();
+        }
+
+        function getFilteredLeaveRequests() {
+            const employee = (document.getElementById('lr-filter-employee').value || '').trim().toLowerCase();
+            const type = document.getElementById('lr-filter-type').value;
+            const status = document.getElementById('lr-filter-status').value;
+            const from = document.getElementById('lr-filter-from').value;
+            const to = document.getElementById('lr-filter-to').value;
+
+            return allLeaveRequests.filter(r => {
+                if (employee && !(r.full_name || '').toLowerCase().includes(employee)) return false;
+                if (type && r.leave_type_name !== type) return false;
+                if (status && r.status !== status) return false;
+                if (from && r.start_date < from) return false;
+                if (to && r.start_date > to) return false;
+                return true;
+            });
+        }
+
+        function renderLeaveRequests() {
+            const tbody = document.getElementById('leave-requests-table');
+            tbody.innerHTML = '';
+
+            const requests = getFilteredLeaveRequests();
 
             if (requests.length === 0) {
                 tbody.innerHTML = '<tr><td colspan="7" class="text-center">No leave requests found</td></tr>';
@@ -511,7 +574,6 @@
 
             requests.forEach(req => {
                 const row = document.createElement('tr');
-                const canApprove = req.status === 'pending';
                 row.innerHTML = `
                     <td>${req.full_name}</td>
                     <td>${req.leave_type_name}</td>
@@ -520,46 +582,76 @@
                     <td>${req.number_of_days}</td>
                     <td>${UIManager.getApprovalStageBadges(req)}</td>
                     <td>
-                        ${canApprove ? `
-                            <button class="btn btn-small btn-success" onclick="approveLeaveRequestAdmin(${req.id})">Approve</button>
-                            <button class="btn btn-small btn-danger" onclick="rejectLeaveRequestAdmin(${req.id})">Reject</button>
-                        ` : ''}
+                        <button class="btn btn-small btn-secondary" onclick="viewLeaveRequest(${req.id})">View</button>
                     </td>
                 `;
                 tbody.appendChild(row);
             });
         }
 
-        async function approveLeaveRequestAdmin(id) {
-            let assertion;
-            try {
-                assertion = await WebAuthnManager.getApprovalAssertion('leave_request', id);
-            } catch (err) {
-                UIManager.showAlert(err.message || 'Passkey approval failed', 'danger');
+        function viewLeaveRequest(id) {
+            const req = allLeaveRequests.find(r => Number(r.id) === Number(id));
+            if (!req) return;
+
+            const content = `
+                <table class="table" style="width: 100%;">
+                    <tr><th>Employee</th><td>${req.full_name}</td></tr>
+                    <tr><th>Leave Type</th><td>${req.leave_type_name}</td></tr>
+                    <tr><th>From Date</th><td>${UIManager.formatDate(req.start_date)}</td></tr>
+                    <tr><th>To Date</th><td>${UIManager.formatDate(req.end_date)}</td></tr>
+                    <tr><th>Number of Days</th><td>${req.number_of_days}</td></tr>
+                    <tr><th>Reason</th><td>${req.reason || ''}</td></tr>
+                    <tr><th>Status</th><td>${UIManager.getApprovalStageBadges(req)}</td></tr>
+                    ${req.manager_comments ? `<tr><th>Supervisor Comments</th><td>${req.manager_comments}</td></tr>` : ''}
+                    ${req.hr_comments ? `<tr><th>HR Comments</th><td>${req.hr_comments}</td></tr>` : ''}
+                </table>
+            `;
+            UIManager.showModal(content, 'Leave Request Details');
+        }
+
+        function csvEscape(value) {
+            if (value === null || value === undefined) return '';
+            const str = String(value);
+            return /[",\n\r]/.test(str) ? '"' + str.replace(/"/g, '""') + '"' : str;
+        }
+
+        function exportLeaveRequestsCsv() {
+            const rows = getFilteredLeaveRequests();
+            if (rows.length === 0) {
+                UIManager.showAlert('No leave requests to export', 'danger');
                 return;
             }
 
-            const comments = prompt('Optional comments for the employee:') || '';
-            const result = await LeaveRequestManager.approveRequest(id, comments, assertion);
-            if (result.success) {
-                UIManager.showAlert('Leave request approved', 'success');
-                loadLeaveRequests();
-            } else {
-                UIManager.showAlert(result.message || 'Failed to approve request', 'danger');
-            }
-        }
+            const headers = ['Employee', 'Leave Type', 'From Date', 'To Date', 'Days',
+                'Status', 'Supervisor Status', 'HR Status', 'Reason', 'Supervisor Comments', 'HR Comments', 'Requested On'];
+            const lines = [headers.map(csvEscape).join(',')];
 
-        async function rejectLeaveRequestAdmin(id) {
-            const comments = prompt('Reason for rejection (optional):') || '';
-            if (!confirm('Reject this leave request?')) return;
+            rows.forEach(r => {
+                lines.push([
+                    r.full_name,
+                    r.leave_type_name,
+                    r.start_date,
+                    r.end_date,
+                    r.number_of_days,
+                    r.status,
+                    r.supervisor_status,
+                    r.hr_status,
+                    r.reason,
+                    r.manager_comments,
+                    r.hr_comments,
+                    r.created_at
+                ].map(csvEscape).join(','));
+            });
 
-            const result = await LeaveRequestManager.rejectRequest(id, comments);
-            if (result.success) {
-                UIManager.showAlert('Leave request rejected', 'success');
-                loadLeaveRequests();
-            } else {
-                UIManager.showAlert(result.message || 'Failed to reject request', 'danger');
-            }
+            // BOM so Excel opens the UTF-8 file with correct encoding
+            const blob = new Blob(['\uFEFF' + lines.join('\r\n')], { type: 'text/csv;charset=utf-8;' });
+            const link = document.createElement('a');
+            link.href = URL.createObjectURL(blob);
+            link.download = `leave-requests-${new Date().toISOString().slice(0, 10)}.csv`;
+            document.body.appendChild(link);
+            link.click();
+            document.body.removeChild(link);
+            URL.revokeObjectURL(link.href);
         }
 
         initAdmin();
