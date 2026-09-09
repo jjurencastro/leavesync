@@ -171,8 +171,11 @@
                     (departmentPositionsData.department_positions[u.department] || []).map(p => ({ value: p, label: p })),
                     u.position, 'value', 'label'
                 );
+                // supervisor_id arrives as a string from the API; compare as strings
+                // so the pending user's chosen supervisor is actually selected.
                 const supervisorOptions = buildOptions(
-                    supervisorOptionsData.filter(s => s.id !== u.id), u.supervisor_id, 'id', 'full_name'
+                    supervisorOptionsData.filter(s => String(s.id) !== String(u.id)),
+                    String(u.supervisor_id ?? ''), 'id', 'full_name'
                 );
 
                 const row = document.createElement('tr');

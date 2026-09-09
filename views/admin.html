@@ -215,7 +215,9 @@
                     (departmentPositionsData.department_positions[u.department] || []).map(p => ({ value: p, label: p })),
                     u.position, 'value', 'label'
                 );
-                const supervisorOptions = buildOptions(getEligibleSupervisors(u.department, u.position, u.id), u.supervisor_id, 'id', 'full_name');
+                // supervisor_id arrives as a string from the API; compare as strings
+                // so the pending user's chosen supervisor is actually selected.
+                const supervisorOptions = buildOptions(getEligibleSupervisors(u.department, u.position, u.id), String(u.supervisor_id ?? ''), 'id', 'full_name');
 
                 const row = document.createElement('tr');
                 row.innerHTML = `
@@ -336,8 +338,10 @@
                     (departmentPositionsData.department_positions[u.department] || []).map(p => ({ value: p, label: p })),
                     u.position, 'value', 'label'
                 );
+                // supervisor_id arrives as a string from the API; compare as strings
+                // so the user's current supervisor is actually selected.
                 const supervisorOptions = buildOptions(
-                    getEligibleSupervisors(u.department, u.position, u.id), u.supervisor_id, 'id', 'full_name'
+                    getEligibleSupervisors(u.department, u.position, u.id), String(u.supervisor_id ?? ''), 'id', 'full_name'
                 );
                 const row = document.createElement('tr');
                 const options = TIER_ROLES.map(r => `<option value="${r.value}" ${r.value === u.role ? 'selected' : ''}>${r.label}</option>`).join('');
