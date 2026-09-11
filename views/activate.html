@@ -12,7 +12,7 @@
             <div class="card-header">
                 <h2 class="text-center">Activate Your Account</h2>
                 <p class="text-center" style="color: var(--text-light); margin: 0.5rem 0;">
-                    Complete your profile before requesting account activation.
+                    Set your password to finish activating your administrator-created account.
                 </p>
             </div>
 
@@ -26,33 +26,8 @@
                     </div>
 
                     <div class="form-group">
-                        <label for="gender">Gender</label>
-                        <select id="gender" required>
-                            <option value="">Select an option</option>
-                            <option value="male">Male</option>
-                            <option value="female">Female</option>
-                        </select>
-                    </div>
-
-                    <div class="form-group">
-                        <label for="department">Department</label>
-                        <select id="department" required>
-                            <option value="">Select a department</option>
-                        </select>
-                    </div>
-
-                    <div class="form-group">
-                        <label for="position">Position</label>
-                        <select id="position" required>
-                            <option value="">Select a position</option>
-                        </select>
-                    </div>
-
-                    <div class="form-group">
-                        <label for="supervisor_id">Immediate supervisor</label>
-                        <select id="supervisor_id" required>
-                            <option value="">Select an approver</option>
-                        </select>
+                        <label>Account details</label>
+                        <p id="account-details" style="margin: 0; color: var(--text-light);"></p>
                     </div>
 
                     <div class="form-group">
@@ -65,7 +40,12 @@
                         <input type="password" id="password_confirm" name="password_confirm" required minlength="8">
                     </div>
 
-                    <button type="submit" class="btn btn-primary" style="width: 100%;">Activate Account</button>
+                    <label style="display: flex; gap: 0.5rem; align-items: flex-start; margin-bottom: 1rem;">
+                        <input type="checkbox" id="trust-device" required style="margin-top: 0.25rem;">
+                        <span>I understand that the device I am using now will be registered as my trusted device.</span>
+                    </label>
+
+                    <button type="submit" class="btn btn-primary" style="width: 100%;">Set Password and Activate</button>
                 </form>
                 <button id="logout-btn" class="btn btn-danger" style="width: 100%; margin-top: 0.5rem;">Cancel</button>
             </div>
@@ -91,53 +71,9 @@
             const activationInfo = await AuthManager.getActivationInfo();
             if (activationInfo.success) {
                 document.getElementById('username').value = activationInfo.data.user.username;
-
-                const departmentPositions = activationInfo.data.department_positions;
-                const departmentSelect = document.getElementById('department');
-                const positionSelect = document.getElementById('position');
-
-                activationInfo.data.departments.forEach((department) => {
-                    const option = document.createElement('option');
-                    option.value = department;
-                    option.textContent = department;
-                    departmentSelect.appendChild(option);
-                });
-
-                const populatePositions = () => {
-                    positionSelect.innerHTML = '<option value="">Select a position</option>';
-                    (departmentPositions[departmentSelect.value] || []).forEach((position) => {
-                        const option = document.createElement('option');
-                        option.value = position;
-                        option.textContent = position;
-                        positionSelect.appendChild(option);
-                    });
-                };
-                departmentSelect.addEventListener('change', populatePositions);
-
-                const supervisorSelect = document.getElementById('supervisor_id');
-                const populateSupervisors = () => {
-                    supervisorSelect.innerHTML = '<option value="">Select an approver</option>';
-                    const department = departmentSelect.value;
-                    const position = positionSelect.value;
-                    activationInfo.data.supervisors
-                        .filter((supervisor) => {
-                            // Hierarchy: ADMIN staff report to admin, Deans report to HR, other academic positions report to their department's Dean
-                            if (department === 'ADMIN') return supervisor.role === 'admin';
-                            if (position === 'Dean') return supervisor.role === 'hr';
-                            if (position) return supervisor.role === 'manager' && supervisor.department === department;
-                            return false;
-                        })
-                        .forEach((supervisor) => {
-                            const option = document.createElement('option');
-                            option.value = supervisor.id;
-                            const suffix = supervisor.role === 'manager' ? ' (Dean)' : supervisor.role === 'hr' ? ' (HR)' : '';
-                            option.textContent = supervisor.full_name + suffix;
-                            supervisorSelect.appendChild(option);
-                        });
-                };
-                departmentSelect.addEventListener('change', populateSupervisors);
-                positionSelect.addEventListener('change', populateSupervisors);
-                populateSupervisors();
+                const user = activationInfo.data.user;
+                document.getElementById('account-details').textContent =
+                    `${user.full_name} | ${user.email}`;
             }
         })();
 
@@ -154,14 +90,11 @@
 
             const result = await AuthManager.setPassword({
                 password,
-                gender: document.getElementById('gender').value,
-                department: document.getElementById('department').value.trim(),
-                position: document.getElementById('position').value.trim(),
-                supervisor_id: document.getElementById('supervisor_id').value
+                trust_device: document.getElementById('trust-device').checked
             });
 
             if (result.success) {
-                window.location.href = '/pending-approval';
+                window.location.href = '/dashboard';
             } else {
                 UIManager.showAlert(result.message || 'Failed to set password', 'danger');
             }

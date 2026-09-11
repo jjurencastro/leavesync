@@ -122,7 +122,8 @@ class AuthManager {
     }
 
     static async setPassword(data) {
-        return APIClient.post('auth.php?action=set_password', data);
+        const fingerprint = await DeviceFingerprintManager.getFingerprint();
+        return APIClient.post('auth.php?action=set_password', { ...data, ...fingerprint });
     }
 
     static async cancelActivation() {

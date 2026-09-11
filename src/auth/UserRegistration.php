@@ -104,39 +104,40 @@ class UserRegistration {
         }
 
         $db = Database::getInstance();
-        $gender = $data['gender'] ?? '';
-        $department = trim($data['department'] ?? '');
-        $position = trim($data['position'] ?? '');
-        $supervisor_id = (int) ($data['supervisor_id'] ?? 0);
-
-        $allowedGenders = ['male', 'female'];
-        if (!in_array($gender, $allowedGenders, true)) {
-            return ['success' => false, 'message' => 'Please select a valid gender option'];
+        $user = $db->getRow(
+            "SELECT id, username, full_name, gender, department, position, supervisor_id, password_set FROM users WHERE id = ?",
+            [$user_id]
+        );
+        if (!$user || !empty($user['password_set'])) {
+            return ['success' => false, 'message' => 'This account is not awaiting activation'];
         }
-        if (!in_array($department, self::ALLOWED_DEPARTMENTS, true)) {
-            return ['success' => false, 'message' => 'Please select a valid department'];
+        if (empty($user['gender']) || empty($user['department']) || empty($user['position']) || empty($user['supervisor_id'])) {
+            return ['success' => false, 'message' => 'An administrator must complete your account profile before activation'];
         }
-        if (!self::isValidDepartmentPosition($department, $position)) {
-            return ['success' => false, 'message' => 'Please select a valid position for the chosen department'];
-        }
-        // Account stays pending (is_active = 0) until an admin approves it, so a
-        // self-selected manager/admin-tier position has no effect until then.
-        $role = self::POSITION_ROLE_MAP[$position];
-
-        if (!self::isEligibleSupervisor($supervisor_id, $user_id, $department, $position)) {
-            return ['success' => false, 'message' => 'Please select an active immediate supervisor'];
+        if (empty($data['trust_device'])) {
+            return ['success' => false, 'message' => 'Please confirm that this device will be registered as trusted'];
         }
 
         $password_hash = password_hash($password, PASSWORD_BCRYPT);
         $db->execute(
-            "UPDATE users SET password_hash = ?, password_set = 1, gender = ?, department = ?, position = ?, role = ?, supervisor_id = ? WHERE id = ?",
-            [$password_hash, $gender, $department, $position, $role, $supervisor_id, $user_id]
+            "UPDATE users SET password_hash = ?, password_set = 1, is_active = 1 WHERE id = ? AND password_set = 0",
+            [$password_hash, $user_id]
         );
 
         AuditLogger::log($user_id, 'password_set', 'user', $user_id);
-        self::notifyApprovers($user_id, $department);
+        $deviceId = DeviceFingerprint::store($user_id, true, $data, true);
+        if (!empty($_COOKIE['auth_token'])) {
+            $db->execute(
+                "UPDATE sessions SET device_id = ? WHERE token_hash = ? AND user_id = ?",
+                [$deviceId, hash('sha256', $_COOKIE['auth_token']), $user_id]
+            );
+        }
+        $db->execute(
+            "INSERT INTO notifications (user_id, title, message, notification_type, related_entity_type, related_entity_id) VALUES (?, ?, ?, ?, ?, ?)",
+            [$user_id, 'Account activated', 'Your password was set and this device was registered as a trusted device.', 'success', 'user', $user_id]
+        );
 
-        return ['success' => true, 'message' => 'Password set successfully'];
+        return ['success' => true, 'message' => 'Password set successfully. This device is now trusted.'];
     }
 
     /**
@@ -230,9 +231,6 @@ class UserRegistration {
             'success' => true,
             'data' => [
                 'user' => $user,
-                'supervisors' => self::getEligibleSupervisors($user_id),
-                'departments' => self::ALLOWED_DEPARTMENTS,
-                'department_positions' => self::DEPARTMENT_POSITIONS,
             ]
         ];
     }

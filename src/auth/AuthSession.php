@@ -18,9 +18,12 @@ class AuthSession {
         * @param string $role Optional role retained for existing callers
      * @return string The plaintext session token
      */
-    public static function createSessionForUser($user_id, $setNativeSession = false, $role = null) {
+    public static function createSessionForUser($user_id, $setNativeSession = false, $role = null, $registerDevice = true) {
         $db = Database::getInstance();
-        $device_id = DeviceFingerprint::store($user_id, true, parseRequestPayload(), false);
+        $device_id = null;
+        if ($registerDevice) {
+            $device_id = DeviceFingerprint::store($user_id, true, parseRequestPayload(), false);
+        }
         $token = bin2hex(random_bytes(32));
         $token_hash = hash('sha256', $token);
         $expires_at = date('Y-m-d H:i:s', time() + AUTH_SESSION_LIFETIME);

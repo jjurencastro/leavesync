@@ -79,31 +79,18 @@ class GoogleAuth {
         }
 
         $db = Database::getInstance();
-        $user = $db->getRow("SELECT id, username, email, password_hash, is_active, password_set, role FROM users WHERE email = ?", [$userinfo['email']]);
+        $user = $db->getRow(
+            "SELECT id, username, email, password_hash, is_active, password_set, role, full_name, gender, department, position, supervisor_id
+             FROM users WHERE LOWER(email) = LOWER(?)",
+            [$userinfo['email']]
+        );
 
         if (!$user) {
-            // Derive the username from the email's local part (before the @)
-            $username = preg_replace('/[^a-z0-9._-]/', '', strtolower(strstr($userinfo['email'], '@', true)));
-            if ($username === '') {
-                $username = 'user';
-            }
-            $baseUsername = $username;
-            $counter = 1;
-            while ($db->getRow("SELECT id FROM users WHERE username = ?", [$username])) {
-                $username = $baseUsername . $counter;
-                $counter++;
-            }
+            throw new Exception('Your Google account is not assigned to a LeaveSync user. Ask an administrator to create your account first.');
+        }
 
-            $password_hash = password_hash(bin2hex(random_bytes(24)), PASSWORD_BCRYPT);
-            $key_pair = DigitalSignature::generateKeyPair();
-            // New Google sign-ups are pending until an admin approves them
-            $registrationId = UserRegistration::reserveNextUserId();
-            $db->execute(
-                "INSERT INTO users (id, username, email, password_hash, full_name, department, public_key, is_active, password_set) VALUES (?, ?, ?, ?, ?, ?, ?, 0, 0)",
-                [$registrationId, $username, $userinfo['email'], $password_hash, $userinfo['name'] ?? $userinfo['email'], 'General', $key_pair['public_key']]
-            );
-            UserRegistration::initializeLeaveBalances($registrationId);
-            $user = $db->getRow("SELECT id, username, email, password_hash, is_active, password_set, role FROM users WHERE email = ?", [$userinfo['email']]);
+        if (!$user['password_set'] && (empty($user['gender']) || empty($user['department']) || empty($user['position']) || empty($user['supervisor_id']))) {
+            throw new Exception('Your account profile is incomplete. Ask an administrator to finish setting up your account.');
         }
 
         $needs_password_setup = empty($user['password_set']);
@@ -135,7 +122,7 @@ class GoogleAuth {
             ];
         }
 
-        $token = AuthSession::createSessionForUser($user['id'], false, $user['role']);
+        $token = AuthSession::createSessionForUser($user['id'], false, $user['role'], !$needs_password_setup);
 
         AuditLogger::log($user['id'], 'login_success_google', 'user', $user['id']);
 

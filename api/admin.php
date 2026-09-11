@@ -47,7 +47,7 @@ try {
 
         case 'create_user':
             if ($method !== 'POST') throw new Exception('Method not allowed');
-            echo json_encode(createUser($_POST));
+            echo json_encode(createUser($data = parseRequestPayload()));
             break;
 
         case 'update_user':
@@ -142,7 +142,7 @@ function getUserDetails($id) {
 function createUser($data) {
     global $db;
 
-    $required = ['username', 'email', 'password', 'full_name'];
+    $required = ['username', 'email', 'full_name', 'gender', 'department', 'position', 'supervisor_id'];
     foreach ($required as $field) {
         if (empty($data[$field])) {
             throw new Exception("$field is required");
@@ -151,6 +151,22 @@ function createUser($data) {
 
     if (!filter_var($data['email'], FILTER_VALIDATE_EMAIL) || !Auth::isAllowedEmailDomain($data['email'])) {
         throw new Exception('Email must be a @' . ALLOWED_EMAIL_DOMAIN . ' address');
+    }
+
+    if (!in_array($data['gender'], ['male', 'female'], true)) {
+        throw new Exception('Please select a valid gender option');
+    }
+    if (!UserRegistration::isValidDepartmentPosition($data['department'], $data['position'])) {
+        throw new Exception('Please select a valid position for the chosen department');
+    }
+
+    $supervisorId = (int) $data['supervisor_id'];
+    $isActiveAdminSupervisor = $db->getRow(
+        "SELECT id FROM users WHERE id = ? AND is_active = 1 AND role = 'admin'",
+        [$supervisorId]
+    );
+    if (!$isActiveAdminSupervisor && !UserRegistration::isEligibleSupervisor($supervisorId, 0, $data['department'], $data['position'])) {
+        throw new Exception('Please select a valid immediate supervisor');
     }
 
     // Check if user exists
@@ -163,15 +179,15 @@ function createUser($data) {
         throw new Exception('User already exists');
     }
 
-    // Hash password
-    $password_hash = password_hash($data['password'], PASSWORD_BCRYPT);
+    // Keep the password unusable until the employee completes Google activation.
+    $password_hash = password_hash(bin2hex(random_bytes(24)), PASSWORD_BCRYPT);
 
     // Generate RSA key pair so the user can digitally sign approvals
     $key_pair = DigitalSignature::generateKeyPair();
 
     // Insert user
-        $sql = "INSERT INTO users (id, username, email, password_hash, full_name, department, position, role, public_key, is_active)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 1)";
+        $sql = "INSERT INTO users (id, username, email, password_hash, full_name, department, position, gender, supervisor_id, role, public_key, is_active, password_set)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0, 0)";
 
         $newUserId = Auth::reserveNextUserId();
         $values = [
@@ -181,8 +197,10 @@ function createUser($data) {
         $password_hash,
         $data['full_name'],
         $data['department'] ?? 'General',
-        $data['position'] ?? null,
-        $data['role'] ?? 'employee',
+        $data['position'],
+        $data['gender'],
+        $supervisorId,
+        UserRegistration::POSITION_ROLE_MAP[$data['position']],
         $key_pair['public_key']
     ];
     $db->execute($sql, $values);

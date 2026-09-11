@@ -33,6 +33,26 @@
 
         <div class="card">
             <div class="card-header">
+                <h2>Create Employee Account</h2>
+            </div>
+            <div class="card-body">
+                <p>Enter the employee's account and organization details. They will use the matching Google email to set a password and activate the account.</p>
+                <form id="create-user-form" style="display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 0.75rem;">
+                    <div class="form-group"><label for="new-username">Assigned username</label><input id="new-username" required minlength="3"></div>
+                    <div class="form-group"><label for="new-email">Institutional email</label><input id="new-email" type="email" required></div>
+                    <div class="form-group"><label for="new-full-name">Full name</label><input id="new-full-name" required></div>
+                    <div class="form-group"><label for="new-gender">Gender</label><select id="new-gender" required><option value="">Select gender</option><option value="male">Male</option><option value="female">Female</option></select></div>
+                    <div class="form-group"><label for="new-department">Department</label><select id="new-department" required><option value="">Select department</option></select></div>
+                    <div class="form-group"><label for="new-position">Position</label><select id="new-position" required><option value="">Select position</option></select></div>
+                    <div class="form-group"><label for="new-supervisor">Immediate supervisor</label><select id="new-supervisor" required><option value="">Select supervisor</option></select></div>
+                    <div style="display: flex; align-items: end;"><button type="submit" class="btn btn-primary">Create Account</button></div>
+                </form>
+                <div id="create-user-result" style="margin-top: 0.75rem;"></div>
+            </div>
+        </div>
+
+        <div class="card">
+            <div class="card-header">
                 <h2>Pending User Approvals</h2>
             </div>
             <div class="card-body">
@@ -175,8 +195,9 @@
 
             initUserMenu(user);
             await loadDepartmentPositions();
-            loadPendingUsers();
-            loadManageUsers();
+            await loadPendingUsers();
+            await loadManageUsers();
+            setupCreateUserForm();
             loadPendingDeviceRequests();
             loadLeaveRequests();
         }
@@ -191,10 +212,62 @@
             }
         }
 
+        function setupCreateUserForm() {
+            const departmentSelect = document.getElementById('new-department');
+            departmentPositionsData.departments.forEach(department => {
+                departmentSelect.insertAdjacentHTML('beforeend', `<option value="${department}">${department}</option>`);
+            });
+            departmentSelect.addEventListener('change', updateCreateUserOptions);
+            document.getElementById('new-position').addEventListener('change', updateCreateUserSupervisors);
+            updateCreateUserOptions();
+            document.getElementById('create-user-form').addEventListener('submit', createEmployee);
+        }
+
+        function updateCreateUserOptions() {
+            const department = document.getElementById('new-department').value;
+            const positionSelect = document.getElementById('new-position');
+            positionSelect.innerHTML = '<option value="">Select position</option>' +
+                (departmentPositionsData.department_positions[department] || []).map(position => `<option value="${position}">${position}</option>`).join('');
+            updateCreateUserSupervisors();
+        }
+
+        function updateCreateUserSupervisors() {
+            const department = document.getElementById('new-department').value;
+            const position = document.getElementById('new-position').value;
+            const supervisorSelect = document.getElementById('new-supervisor');
+            supervisorSelect.innerHTML = '<option value="">Select supervisor</option>' +
+                getEligibleSupervisors(department, position, 0).map(supervisor => `<option value="${supervisor.id}">${supervisor.full_name}</option>`).join('');
+        }
+
+        async function createEmployee(event) {
+            event.preventDefault();
+            const result = await APIClient.post('admin.php?action=create_user', {
+                username: document.getElementById('new-username').value.trim(),
+                email: document.getElementById('new-email').value.trim(),
+                full_name: document.getElementById('new-full-name').value.trim(),
+                gender: document.getElementById('new-gender').value,
+                department: document.getElementById('new-department').value,
+                position: document.getElementById('new-position').value,
+                supervisor_id: document.getElementById('new-supervisor').value
+            });
+            const message = document.getElementById('create-user-result');
+            if (!result.success) {
+                UIManager.showAlert(result.message || 'Failed to create user', 'danger');
+                return;
+            }
+            message.textContent = `Account created. Assigned username: ${document.getElementById('new-username').value}`;
+            message.style.color = 'var(--success-color)';
+            document.getElementById('create-user-form').reset();
+            updateCreateUserOptions();
+            await loadPendingUsers();
+            await loadManageUsers();
+        }
+
         // Hierarchy: ADMIN staff report to admin, Deans report to HR, other academic positions report to their department's Dean
         function getEligibleSupervisors(department, position, excludeId) {
             return allUsersData.filter(s => {
                 if (!s.is_active || s.id === excludeId) return false;
+                if (s.role === 'admin') return true;
                 if (department === 'ADMIN') return s.role === 'admin';
                 if (position === 'Dean') return s.role === 'hr';
                 if (position) return s.role === 'manager' && s.department === department;
@@ -226,7 +299,7 @@
                 .filter(u => u.is_active && u.role === 'admin')
                 .map(u => String(u.id)));
             const pendingUsers = allUsersData.filter(u =>
-                !u.is_active && u.password_set && adminIds.has(String(u.supervisor_id))
+                !u.is_active && adminIds.has(String(u.supervisor_id))
             );
 
             if (pendingUsers.length === 0) {
@@ -262,7 +335,7 @@
                     </td>
                     <td>${UIManager.formatDate(u.created_at)}</td>
                     <td>
-                        <button class="btn btn-small btn-success" onclick="approveUser(${u.id})">Approve</button>
+                        ${u.password_set ? `<button class="btn btn-small btn-success" onclick="approveUser(${u.id})">Approve</button>` : '<span>Awaiting employee activation</span>'}
                         <button class="btn btn-small btn-danger" onclick="rejectUser(${u.id})">Reject</button>
                     </td>
                 `;
