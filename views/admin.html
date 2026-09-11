@@ -53,7 +53,7 @@
 
         <div class="card">
             <div class="card-header">
-                <h2>Pending User Approvals</h2>
+                <h2>Pending User Activation</h2>
             </div>
             <div class="card-body">
                 <table class="table">
@@ -266,7 +266,7 @@
         // Hierarchy: ADMIN staff report to admin, Deans report to HR, other academic positions report to their department's Dean
         function getEligibleSupervisors(department, position, excludeId) {
             return allUsersData.filter(s => {
-                if (!s.is_active || s.id === excludeId) return false;
+                if ((Number(s.is_active) === 0 && Number(s.password_set) === 1) || Number(s.id) === Number(excludeId)) return false;
                 if (s.role === 'admin') return true;
                 if (department === 'ADMIN') return s.role === 'admin';
                 if (position === 'Dean') return s.role === 'hr';
@@ -293,14 +293,7 @@
 
             allUsersData = result.data || [];
 
-            // Show requests assigned to this admin, including academic accounts
-            // that need administrator approval before a Dean exists.
-            const adminIds = new Set(allUsersData
-                .filter(u => u.is_active && u.role === 'admin')
-                .map(u => String(u.id)));
-            const pendingUsers = allUsersData.filter(u =>
-                !u.is_active && adminIds.has(String(u.supervisor_id))
-            );
+            const pendingUsers = allUsersData.filter(u => Number(u.is_active) === 0 && Number(u.password_set) === 0);
 
             if (pendingUsers.length === 0) {
                 tbody.innerHTML = '<tr><td colspan="6" class="text-center">No pending approvals</td></tr>';
@@ -335,8 +328,7 @@
                     </td>
                     <td>${UIManager.formatDate(u.created_at)}</td>
                     <td>
-                        ${u.password_set ? `<button class="btn btn-small btn-success" onclick="approveUser(${u.id})">Approve</button>` : '<span>Awaiting employee activation</span>'}
-                        <button class="btn btn-small btn-danger" onclick="rejectUser(${u.id})">Reject</button>
+                        <button class="btn btn-small btn-secondary" onclick="editPendingUser(${u.id})">Edit</button>
                     </td>
                 `;
                 tbody.appendChild(row);
@@ -392,15 +384,25 @@
             }
         }
 
-        async function rejectUser(id) {
-            if (!confirm('Reject and delete this pending user account?')) return;
+        async function editPendingUser(id) {
+            const user = allUsersData.find(item => Number(item.id) === Number(id));
+            if (!user) return;
 
-            const result = await APIClient.delete(`admin.php?action=delete_user&id=${id}`);
+            const fullName = prompt('Full name', user.full_name || '');
+            if (fullName === null) return;
+            const username = prompt('Assigned username', user.username || '');
+            if (username === null) return;
+            const email = prompt('Institutional email', user.email || '');
+            if (email === null) return;
+
+            const result = await APIClient.put(`admin.php?action=update_user&id=${id}`, {
+                full_name: fullName.trim(), username: username.trim(), email: email.trim()
+            });
             if (result.success) {
-                UIManager.showAlert('User rejected', 'success');
+                UIManager.showAlert('Pending user details updated', 'success');
                 loadPendingUsers();
             } else {
-                UIManager.showAlert(result.message || 'Failed to reject user', 'danger');
+                UIManager.showAlert(result.message || 'Failed to update pending user', 'danger');
             }
         }
 

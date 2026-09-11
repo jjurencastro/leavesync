@@ -226,6 +226,31 @@ function updateUser($id, $data) {
         $updates[] = "full_name = ?";
         $values[] = $data['full_name'];
     }
+    if (isset($data['username']) || isset($data['email'])) {
+        $username = trim($data['username'] ?? '');
+        $email = strtolower(trim($data['email'] ?? ''));
+        if (isset($data['username']) && strlen($username) < 3) {
+            throw new Exception('Username must be at least 3 characters');
+        }
+        if (isset($data['email']) && (!filter_var($email, FILTER_VALIDATE_EMAIL) || !Auth::isAllowedEmailDomain($email))) {
+            throw new Exception('Email must be a @' . ALLOWED_EMAIL_DOMAIN . ' address');
+        }
+        $duplicate = $db->getRow(
+            "SELECT id FROM users WHERE id <> ? AND (username = ? OR LOWER(email) = LOWER(?))",
+            [$id, $username, $email]
+        );
+        if ($duplicate) {
+            throw new Exception('Username or email already belongs to another user');
+        }
+        if (isset($data['username'])) {
+            $updates[] = "username = ?";
+            $values[] = $username;
+        }
+        if (isset($data['email'])) {
+            $updates[] = "email = ?";
+            $values[] = $email;
+        }
+    }
     if (isset($data['department']) || isset($data['position'])) {
         $department = $data['department'] ?? $user['department'];
         $position = $data['position'] ?? $user['position'];

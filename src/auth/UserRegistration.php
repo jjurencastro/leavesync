@@ -244,14 +244,14 @@ class UserRegistration {
         if ($department !== null) {
             return $db->getResults(
                 "SELECT id, username, full_name, department, role FROM users
-                 WHERE id <> ? AND is_active = 1 AND (role = 'admin' OR role = 'hr' OR (role = 'manager' AND department = ?))
+                 WHERE id <> ? AND (is_active = 1 OR (is_active = 0 AND password_set = 0)) AND (role = 'admin' OR role = 'hr' OR (role = 'manager' AND department = ?))
                  ORDER BY full_name, username",
                 [$excludeUserId, $department]
             );
         }
         return $db->getResults(
             "SELECT id, username, full_name, department, role FROM users
-             WHERE id <> ? AND is_active = 1 AND role IN ('admin', 'hr', 'manager')
+             WHERE id <> ? AND (is_active = 1 OR (is_active = 0 AND password_set = 0)) AND role IN ('admin', 'hr', 'manager')
              ORDER BY full_name, username",
             [$excludeUserId]
         );
@@ -263,7 +263,7 @@ class UserRegistration {
 
         if ($department === 'ADMIN') {
             $supervisor = $db->getRow(
-                "SELECT id FROM users WHERE id = ? AND id <> ? AND is_active = 1 AND role = 'admin'",
+                "SELECT id FROM users WHERE id = ? AND id <> ? AND (is_active = 1 OR (is_active = 0 AND password_set = 0)) AND role = 'admin'",
                 [$supervisorId, $excludeUserId]
             );
             return (bool) $supervisor;
@@ -271,14 +271,14 @@ class UserRegistration {
 
         if ($position === 'Dean') {
             $supervisor = $db->getRow(
-                "SELECT id FROM users WHERE id = ? AND id <> ? AND is_active = 1 AND role = 'hr'",
+                "SELECT id FROM users WHERE id = ? AND id <> ? AND (is_active = 1 OR (is_active = 0 AND password_set = 0)) AND role = 'hr'",
                 [$supervisorId, $excludeUserId]
             );
             return (bool) $supervisor;
         }
 
         $supervisor = $db->getRow(
-            "SELECT id FROM users WHERE id = ? AND id <> ? AND is_active = 1
+            "SELECT id FROM users WHERE id = ? AND id <> ? AND (is_active = 1 OR (is_active = 0 AND password_set = 0))
              AND role = 'manager' AND department = ?",
             [$supervisorId, $excludeUserId, $department]
         );
