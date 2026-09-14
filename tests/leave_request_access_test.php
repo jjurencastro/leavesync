@@ -16,18 +16,18 @@ class ApprovalChainFakeDb {
     public function getRow($sql, $params = []) {
         $normalized = $this->normalizeSql($sql);
 
-        if ($normalized === 'SELECT supervisor_id FROM users WHERE id = ?') {
+        if (strpos($normalized, 'SELECT id, supervisor_id, department, position FROM users WHERE id = ?') !== false || strpos($normalized, 'SELECT supervisor_id FROM users WHERE id = ?') !== false) {
             $userId = (int) $params[0];
             $map = [10 => 20, 20 => 30, 30 => 40];
-            return ['supervisor_id' => isset($map[$userId]) ? $map[$userId] : null];
+            return ['id' => $userId, 'supervisor_id' => isset($map[$userId]) ? $map[$userId] : null, 'department' => 'CCS', 'position' => 'Instructor'];
         }
 
-        if ($normalized === 'SELECT id, supervisor_id, role, is_active, password_set FROM users WHERE id = ?' || $normalized === 'SELECT id, supervisor_id, role, is_active FROM users WHERE id = ?') {
+        if (strpos($normalized, 'FROM users WHERE id = ?') !== false) {
             $userId = (int) $params[0];
             $map = [
-                20 => ['id' => 20, 'supervisor_id' => 30, 'role' => 'manager', 'is_active' => 1, 'password_set' => 1],
-                30 => ['id' => 30, 'supervisor_id' => 40, 'role' => 'hr', 'is_active' => 1, 'password_set' => 1],
-                40 => ['id' => 40, 'supervisor_id' => null, 'role' => 'admin', 'is_active' => 1, 'password_set' => 1],
+                20 => ['id' => 20, 'supervisor_id' => 30, 'role' => 'manager', 'position' => 'Dean', 'department' => 'CCS', 'is_active' => 1, 'password_set' => 1],
+                30 => ['id' => 30, 'supervisor_id' => 40, 'role' => 'hr', 'position' => 'HR Officer', 'department' => 'ADMIN', 'is_active' => 1, 'password_set' => 1],
+                40 => ['id' => 40, 'supervisor_id' => null, 'role' => 'admin', 'position' => 'Staff', 'department' => 'ADMIN', 'is_active' => 1, 'password_set' => 1],
             ];
             return isset($map[$userId]) ? $map[$userId] : null;
         }

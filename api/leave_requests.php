@@ -166,27 +166,22 @@ function createLeaveRequest($data, $user) {
     }
 
     $filedDate = (new DateTimeImmutable('now', new DateTimeZone('UTC')))->format('Y-m-d');
-    $employee = $db->getRow("SELECT supervisor_id FROM users WHERE id = ?", [$user['id']]);
+    $employee = $db->getRow("SELECT supervisor_id, role, department, position FROM users WHERE id = ?", [$user['id']]);
 
     // Tier 1 (employee) needs supervisor approval then HR approval; Tier 2 (manager) skips
     // straight to HR; Tier 3 (hr) / System Administrator's own leave is self-exempt.
-    $isSelfExempt = in_array($user['role'], ['hr', 'admin'], true);
+    $userRole = $user['role'] ?? ($employee['role'] ?? 'employee');
+    $isSelfExempt = in_array($userRole, ['hr', 'admin'], true);
     $assignment = null;
-    if (!$isSelfExempt && $user['role'] !== 'manager') {
+    if (!$isSelfExempt && $userRole !== 'manager') {
         $assignment = ApprovalChain::resolveFirstAvailable($db, $user['id'], $filedDate);
         if (!$assignment) {
             throw new Exception('No available supervisor could be found for this leave request');
         }
     }
 
-    $supervisorStatus = $user['role'] === 'manager' ? 'not_required' : 'pending';
-    if ($assignment && $assignment['role'] === 'hr') {
-        $supervisorStatus = 'not_required';
-    }
+    $supervisorStatus = ($userRole === 'manager' || $isSelfExempt) ? 'not_required' : 'pending';
     $status = $isSelfExempt ? 'approved' : 'pending';
-    if ($isSelfExempt) {
-        $supervisorStatus = 'not_required';
-    }
     $hrStatus = $isSelfExempt ? 'approved' : 'pending';
 
     // Create leave request
@@ -204,7 +199,7 @@ function createLeaveRequest($data, $user) {
         $status,
         $supervisorStatus,
         $hrStatus,
-        $employee['supervisor_id'] ?? null,
+        $assignment['id'] ?? ($employee['supervisor_id'] ?? null),
         $assignment['id'] ?? null
     ])) {
         throw new Exception('Failed to create leave request');
@@ -248,39 +243,59 @@ function listLeaveRequests($user) {
 
     if ($user['role'] === 'manager') {
         // Managers see their own requests and requests from direct reports.
-        $sql = "SELECT lr.*, u.full_name, lt.name as leave_type_name, COUNT(*) OVER() as total 
+        $sql = "SELECT lr.*, u.full_name, lt.name as leave_type_name,
+                       asup.full_name as assigned_supervisor_name,
+                       rsup.full_name as supervisor_name,
+                       COUNT(*) OVER() as total 
                 FROM leave_requests lr
                 JOIN users u ON lr.user_id = u.id
                 JOIN leave_types lt ON lr.leave_type_id = lt.id
+                LEFT JOIN users asup ON lr.assigned_supervisor_id = asup.id
+                LEFT JOIN users rsup ON u.supervisor_id = rsup.id
                 WHERE lr.assigned_supervisor_id = ? OR lr.manager_id = ? OR u.supervisor_id = ? OR lr.user_id = ?
                 ORDER BY lr.created_at DESC
                 LIMIT 50";
         $requests = $db->getResults($sql, [$user['id'], $user['id'], $user['id'], $user['id']]);
     } else if ($user['role'] === 'hr') {
         // HR sees requests that have reached (or passed) the HR stage
-        $sql = "SELECT lr.*, u.full_name, lt.name as leave_type_name, COUNT(*) OVER() as total 
+        $sql = "SELECT lr.*, u.full_name, lt.name as leave_type_name,
+                       asup.full_name as assigned_supervisor_name,
+                       rsup.full_name as supervisor_name,
+                       COUNT(*) OVER() as total 
                 FROM leave_requests lr
                 JOIN users u ON lr.user_id = u.id
                 JOIN leave_types lt ON lr.leave_type_id = lt.id
+                LEFT JOIN users asup ON lr.assigned_supervisor_id = asup.id
+                LEFT JOIN users rsup ON u.supervisor_id = rsup.id
                 WHERE lr.supervisor_status IN ('approved', 'not_required')
                 ORDER BY lr.created_at DESC
                 LIMIT 50";
         $requests = $db->getResults($sql, []);
     } else if ($user['role'] === 'admin') {
         // Admins see all requests
-        $sql = "SELECT lr.*, u.full_name, lt.name as leave_type_name, COUNT(*) OVER() as total 
+        $sql = "SELECT lr.*, u.full_name, lt.name as leave_type_name,
+                       asup.full_name as assigned_supervisor_name,
+                       rsup.full_name as supervisor_name,
+                       COUNT(*) OVER() as total 
                 FROM leave_requests lr
                 JOIN users u ON lr.user_id = u.id
                 JOIN leave_types lt ON lr.leave_type_id = lt.id
+                LEFT JOIN users asup ON lr.assigned_supervisor_id = asup.id
+                LEFT JOIN users rsup ON u.supervisor_id = rsup.id
                 ORDER BY lr.created_at DESC
                 LIMIT 100";
         $requests = $db->getResults($sql, []);
     } else {
         // Employees see only their requests
-        $sql = "SELECT lr.*, u.full_name, lt.name as leave_type_name, COUNT(*) OVER() as total 
+        $sql = "SELECT lr.*, u.full_name, lt.name as leave_type_name,
+                       asup.full_name as assigned_supervisor_name,
+                       rsup.full_name as supervisor_name,
+                       COUNT(*) OVER() as total 
                 FROM leave_requests lr
                 JOIN users u ON lr.user_id = u.id
                 JOIN leave_types lt ON lr.leave_type_id = lt.id
+                LEFT JOIN users asup ON lr.assigned_supervisor_id = asup.id
+                LEFT JOIN users rsup ON u.supervisor_id = rsup.id
                 WHERE lr.user_id = ?
                 ORDER BY lr.created_at DESC
                 LIMIT 50";
@@ -300,11 +315,15 @@ function getLeaveRequest($id, $user) {
 
     $request = $db->getRow(
         "SELECT lr.*, u.full_name, u.email, u.supervisor_id AS requester_supervisor_id,
-            lr.assigned_supervisor_id, lt.name as leave_type_name, m.full_name as manager_name
+            lr.assigned_supervisor_id, lt.name as leave_type_name, m.full_name as manager_name,
+            asup.full_name as assigned_supervisor_name,
+            rsup.full_name as requester_supervisor_name
          FROM leave_requests lr
          JOIN users u ON lr.user_id = u.id
          JOIN leave_types lt ON lr.leave_type_id = lt.id
          LEFT JOIN users m ON lr.manager_id = m.id
+         LEFT JOIN users asup ON lr.assigned_supervisor_id = asup.id
+         LEFT JOIN users rsup ON u.supervisor_id = rsup.id
          WHERE lr.id = ?",
         [$id]
     );

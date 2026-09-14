@@ -224,16 +224,17 @@
             const req = result.data;
             const content = `
                 <table class="table" style="width: 100%;">
-                    <tr><th>Employee</th><td>${req.full_name}</td></tr>
-                    <tr><th>Email</th><td>${req.email}</td></tr>
-                    <tr><th>Leave Type</th><td>${req.leave_type_name}</td></tr>
+                    <tr><th>Employee</th><td>${escapeAttr(req.full_name || '')}</td></tr>
+                    <tr><th>Email</th><td>${escapeAttr(req.email || '')}</td></tr>
+                    <tr><th>Leave Type</th><td>${escapeAttr(req.leave_type_name || '')}</td></tr>
+                    <tr><th>Immediate Supervisor</th><td>${escapeAttr(req.assigned_supervisor_name || req.requester_supervisor_name || req.supervisor_name || 'None assigned')}</td></tr>
                     <tr><th>From Date</th><td>${UIManager.formatDate(req.start_date)}</td></tr>
                     <tr><th>To Date</th><td>${UIManager.formatDate(req.end_date)}</td></tr>
                     <tr><th>Number of Days</th><td>${req.number_of_days}</td></tr>
-                    <tr><th>Reason</th><td>${req.reason}</td></tr>
+                    <tr><th>Reason</th><td>${escapeAttr(req.reason || '')}</td></tr>
                     <tr><th>Status</th><td>${UIManager.getApprovalStageBadges(req)}</td></tr>
-                    ${req.manager_comments ? `<tr><th>Supervisor Comments</th><td>${req.manager_comments}</td></tr>` : ''}
-                    ${req.hr_comments ? `<tr><th>HR Comments</th><td>${req.hr_comments}</td></tr>` : ''}
+                    ${req.manager_comments ? `<tr><th>Supervisor Comments</th><td>${escapeAttr(req.manager_comments)}</td></tr>` : ''}
+                    ${req.hr_comments ? `<tr><th>HR Comments</th><td>${escapeAttr(req.hr_comments)}</td></tr>` : ''}
                 </table>
             `;
             UIManager.showModal(content, 'Leave Request Details');

@@ -78,6 +78,10 @@
                         <td id="profile-position">-</td>
                     </tr>
                     <tr>
+                        <th>Immediate Supervisor</th>
+                        <td id="profile-supervisor">-</td>
+                    </tr>
+                    <tr>
                         <th>Gender</th>
                         <td id="profile-gender">-</td>
                     </tr>
@@ -120,7 +124,8 @@
                 document.getElementById('profile-email').textContent = u.email || '-';
                 document.getElementById('profile-department').textContent = u.department || '-';
                 document.getElementById('profile-position').textContent = u.position || '-';
-                document.getElementById('profile-gender').textContent = u.gender || '-';
+                document.getElementById('profile-supervisor').textContent = u.supervisor_name || 'None assigned';
+                document.getElementById('profile-gender').textContent = u.gender ? (u.gender.charAt(0).toUpperCase() + u.gender.slice(1)) : '-';
             }
         }
     </script>
