@@ -15,7 +15,7 @@ class ApprovalChain {
         while ($candidateId > 0 && !isset($visited[$candidateId])) {
             $visited[$candidateId] = true;
             $candidate = $db->getRow(
-                "SELECT id, supervisor_id, role, is_active
+                "SELECT id, supervisor_id, role, is_active, password_set
                  FROM users
                  WHERE id = ?",
                 [$candidateId]
@@ -26,7 +26,8 @@ class ApprovalChain {
             }
 
             if (in_array($candidate['role'], ['manager', 'hr', 'admin'], true)) {
-                if ((int) $candidate['is_active'] === 1 && !self::hasApprovedLeave($db, $candidate['id'], $filedDate)) {
+                $isCandidateActive = (int) $candidate['is_active'] === 1 || ((int) $candidate['is_active'] === 0 && (int) ($candidate['password_set'] ?? 0) === 0);
+                if ($isCandidateActive && !self::hasApprovedLeave($db, $candidate['id'], $filedDate)) {
                     return [
                         'id' => (int) $candidate['id'],
                         'role' => $candidate['role'],
@@ -41,9 +42,9 @@ class ApprovalChain {
         }
 
         $admins = $db->getResults(
-            "SELECT id, role
+            "SELECT id, role, is_active, password_set
              FROM users
-             WHERE role = 'admin' AND is_active = 1
+             WHERE role = 'admin' AND (is_active = 1 OR (is_active = 0 AND password_set = 0))
              ORDER BY id",
             []
         );

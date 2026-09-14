@@ -22,12 +22,12 @@ class ApprovalChainFakeDb {
             return ['supervisor_id' => isset($map[$userId]) ? $map[$userId] : null];
         }
 
-        if ($normalized === 'SELECT id, supervisor_id, role, is_active FROM users WHERE id = ?') {
+        if ($normalized === 'SELECT id, supervisor_id, role, is_active, password_set FROM users WHERE id = ?' || $normalized === 'SELECT id, supervisor_id, role, is_active FROM users WHERE id = ?') {
             $userId = (int) $params[0];
             $map = [
-                20 => ['id' => 20, 'supervisor_id' => 30, 'role' => 'manager', 'is_active' => 1],
-                30 => ['id' => 30, 'supervisor_id' => 40, 'role' => 'hr', 'is_active' => 1],
-                40 => ['id' => 40, 'supervisor_id' => null, 'role' => 'admin', 'is_active' => 1],
+                20 => ['id' => 20, 'supervisor_id' => 30, 'role' => 'manager', 'is_active' => 1, 'password_set' => 1],
+                30 => ['id' => 30, 'supervisor_id' => 40, 'role' => 'hr', 'is_active' => 1, 'password_set' => 1],
+                40 => ['id' => 40, 'supervisor_id' => null, 'role' => 'admin', 'is_active' => 1, 'password_set' => 1],
             ];
             return isset($map[$userId]) ? $map[$userId] : null;
         }

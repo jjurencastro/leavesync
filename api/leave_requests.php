@@ -252,10 +252,10 @@ function listLeaveRequests($user) {
                 FROM leave_requests lr
                 JOIN users u ON lr.user_id = u.id
                 JOIN leave_types lt ON lr.leave_type_id = lt.id
-                WHERE lr.assigned_supervisor_id = ? OR lr.user_id = ?
+                WHERE lr.assigned_supervisor_id = ? OR lr.manager_id = ? OR u.supervisor_id = ? OR lr.user_id = ?
                 ORDER BY lr.created_at DESC
                 LIMIT 50";
-        $requests = $db->getResults($sql, [$user['id'], $user['id']]);
+        $requests = $db->getResults($sql, [$user['id'], $user['id'], $user['id'], $user['id']]);
     } else if ($user['role'] === 'hr') {
         // HR sees requests that have reached (or passed) the HR stage
         $sql = "SELECT lr.*, u.full_name, lt.name as leave_type_name, COUNT(*) OVER() as total 
@@ -402,7 +402,11 @@ function approveLeaveRequest($data, $user) {
     $stage = currentApprovalStage($request);
 
     if ($stage === 'supervisor') {
-        if ($user['role'] !== 'admin' && (int) $request['assigned_supervisor_id'] !== (int) $user['id']) {
+        $canApproveSupervisor = $user['role'] === 'admin'
+            || (int) $request['assigned_supervisor_id'] === (int) $user['id']
+            || (int) ($request['requester_supervisor_id'] ?? 0) === (int) $user['id']
+            || (int) ($request['manager_id'] ?? 0) === (int) $user['id'];
+        if (!$canApproveSupervisor) {
             throw new Exception('Unauthorized to approve requests');
         }
     } elseif ($stage === 'hr') {
@@ -491,7 +495,11 @@ function rejectLeaveRequest($data, $user) {
     $stage = currentApprovalStage($request);
 
     if ($stage === 'supervisor') {
-        if ($user['role'] !== 'admin' && (int) $request['assigned_supervisor_id'] !== (int) $user['id']) {
+        $canRejectSupervisor = $user['role'] === 'admin'
+            || (int) $request['assigned_supervisor_id'] === (int) $user['id']
+            || (int) ($request['requester_supervisor_id'] ?? 0) === (int) $user['id']
+            || (int) ($request['manager_id'] ?? 0) === (int) $user['id'];
+        if (!$canRejectSupervisor) {
             throw new Exception('Unauthorized to reject requests');
         }
         $db->execute(

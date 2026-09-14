@@ -70,7 +70,7 @@
             </div>
             <div class="card-body">
                 <table class="table">
-                    <thead>
+                    <thead id="requests-table-head">
                         <tr>
                             <th>Type</th>
                             <th>From Date</th>
@@ -94,6 +94,16 @@
 
     <script src="/js/app.js"></script>
     <script>
+        function escapeAttr(str) {
+            if (str === null || str === undefined) return '';
+            return String(str)
+                .replace(/&/g, '&amp;')
+                .replace(/"/g, '&quot;')
+                .replace(/'/g, '&#39;')
+                .replace(/</g, '&lt;')
+                .replace(/>/g, '&gt;');
+        }
+
         async function initDashboard() {
             // Check authentication
             const user = await checkAuth();
@@ -114,6 +124,20 @@
                 const pendingDevicesCard = document.getElementById('pending-devices-card');
                 if (pendingDevicesCard) pendingDevicesCard.style.display = '';
                 document.getElementById('requests-card-title').textContent = 'Team Leave Requests';
+                const thead = document.getElementById('requests-table-head');
+                if (thead) {
+                    thead.innerHTML = `
+                        <tr>
+                            <th>Employee</th>
+                            <th>Type</th>
+                            <th>From Date</th>
+                            <th>To Date</th>
+                            <th>Days</th>
+                            <th>Status</th>
+                            <th>Action</th>
+                        </tr>
+                    `;
+                }
                 loadPendingDeviceRequests();
             }
 
@@ -161,15 +185,17 @@
             if (requestResult.success) {
                 const tbody = document.getElementById('requests-table');
                 tbody.innerHTML = '';
+                const colSpan = user.role === 'manager' ? 7 : 6;
 
-                if (requestResult.data.length === 0) {
-                    tbody.innerHTML = '<tr><td colspan="6" class="text-center">No leave requests found</td></tr>';
+                if (!requestResult.data || requestResult.data.length === 0) {
+                    tbody.innerHTML = `<tr><td colspan="${colSpan}" class="text-center">No leave requests found</td></tr>`;
                 } else {
-                    requestResult.data.slice(0, 5).forEach(req => {
+                    requestResult.data.slice(0, 20).forEach(req => {
                         const row = document.createElement('tr');
                         const canApprove = user.role === 'manager' && req.status === 'pending' && req.supervisor_status === 'pending';
                         row.innerHTML = `
-                            <td>${req.leave_type_name}</td>
+                            ${user.role === 'manager' ? `<td><strong>${escapeAttr(req.full_name || '')}</strong></td>` : ''}
+                            <td>${escapeAttr(req.leave_type_name || '')}</td>
                             <td>${UIManager.formatDate(req.start_date)}</td>
                             <td>${UIManager.formatDate(req.end_date)}</td>
                             <td>${req.number_of_days}</td>

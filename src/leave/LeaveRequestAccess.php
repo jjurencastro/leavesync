@@ -8,7 +8,9 @@ class LeaveRequestAccess {
         }
 
         if ($viewer['role'] === 'manager') {
-            return (int) ($request['assigned_supervisor_id'] ?? $request['requester_supervisor_id'] ?? 0) === (int) $viewer['id'];
+            return (int) ($request['assigned_supervisor_id'] ?? 0) === (int) $viewer['id']
+                || (int) ($request['requester_supervisor_id'] ?? 0) === (int) $viewer['id']
+                || (int) ($request['manager_id'] ?? 0) === (int) $viewer['id'];
         }
 
         if ($viewer['role'] === 'hr' && $request['supervisor_status'] === 'pending') {
