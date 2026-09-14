@@ -275,10 +275,23 @@
             });
         }
 
+        function escapeAttr(str) {
+            if (str === null || str === undefined) return '';
+            return String(str)
+                .replace(/&/g, '&amp;')
+                .replace(/"/g, '&quot;')
+                .replace(/'/g, '&#39;')
+                .replace(/</g, '&lt;')
+                .replace(/>/g, '&gt;');
+        }
+
         function buildOptions(items, selectedValue, valueKey, labelKey) {
-            return items.map(item =>
-                `<option value="${item[valueKey]}" ${item[valueKey] === selectedValue ? 'selected' : ''}>${item[labelKey]}</option>`
-            ).join('');
+            const sel = (selectedValue !== null && selectedValue !== undefined) ? String(selectedValue) : '';
+            return items.map(item => {
+                const val = (item[valueKey] !== null && item[valueKey] !== undefined) ? String(item[valueKey]) : '';
+                const isSelected = sel !== '' && val === sel;
+                return `<option value="${escapeAttr(val)}" ${isSelected ? 'selected' : ''}>${escapeAttr(item[labelKey])}</option>`;
+            }).join('');
         }
 
         async function loadPendingUsers() {
@@ -304,27 +317,29 @@
                 const deptSelectId = `dept-select-${u.id}`;
                 const positionSelectId = `position-select-${u.id}`;
                 const supervisorSelectId = `supervisor-select-${u.id}`;
+                const updateButtonId = `pending-update-${u.id}`;
 
                 const departmentOptions = departmentPositionsData.departments
-                    .map(d => `<option value="${d}" ${d === u.department ? 'selected' : ''}>${d}</option>`).join('');
+                    .map(d => `<option value="${escapeAttr(d)}" ${d === u.department ? 'selected' : ''}>${escapeAttr(d)}</option>`).join('');
                 const positionOptions = buildOptions(
                     (departmentPositionsData.department_positions[u.department] || []).map(p => ({ value: p, label: p })),
                     u.position, 'value', 'label'
                 );
-                // supervisor_id arrives as a string from the API; compare as strings
-                // so the pending user's chosen supervisor is actually selected.
-                const supervisorOptions = buildOptions(getEligibleSupervisors(u.department, u.position, u.id), String(u.supervisor_id ?? ''), 'id', 'full_name');
+                const supervisorOptions = buildOptions(
+                    getEligibleSupervisors(u.department, u.position, u.id),
+                    u.supervisor_id, 'id', 'full_name'
+                );
 
                 const row = document.createElement('tr');
                 row.innerHTML = `
-                    <td>${u.full_name}</td>
-                    <td>${u.username}</td>
-                    <td>${u.email}</td>
+                    <td>${escapeAttr(u.full_name)}</td>
+                    <td>${escapeAttr(u.username)}</td>
+                    <td>${escapeAttr(u.email)}</td>
                     <td>
                         <select id="${deptSelectId}" class="form-control" onchange="onPendingUserDepartmentChange(${u.id})">${departmentOptions}</select>
                         <select id="${positionSelectId}" class="form-control" onchange="onPendingUserPositionChange(${u.id})">${positionOptions}</select>
-                        <select id="${supervisorSelectId}" class="form-control">${supervisorOptions}</select>
-                        <button class="btn btn-small btn-secondary" onclick="updateUserDetails(${u.id})">Update</button>
+                        <select id="${supervisorSelectId}" class="form-control" onchange="markPendingUserDirty(${u.id})"><option value="">Select supervisor</option>${supervisorOptions}</select>
+                        <button id="${updateButtonId}" class="btn btn-small btn-secondary" disabled onclick="updateUserDetails(${u.id})">Update</button>
                     </td>
                     <td>${UIManager.formatDate(u.created_at)}</td>
                     <td>
@@ -336,22 +351,90 @@
         }
 
         function onPendingUserDepartmentChange(id) {
-            const department = document.getElementById(`dept-select-${id}`).value;
+            const user = allUsersData.find(item => Number(item.id) === Number(id));
+            const deptSelect = document.getElementById(`dept-select-${id}`);
             const positionSelect = document.getElementById(`position-select-${id}`);
             const supervisorSelect = document.getElementById(`supervisor-select-${id}`);
+            if (!deptSelect || !positionSelect || !supervisorSelect) return;
+
+            const department = deptSelect.value;
+            const currentPosition = positionSelect.value;
+            const currentSupervisor = supervisorSelect.value;
+
+            const positions = departmentPositionsData.department_positions[department] || [];
+            let selectedPosition = '';
+            if (user && department === user.department && positions.includes(user.position)) {
+                selectedPosition = user.position;
+            } else if (positions.includes(currentPosition)) {
+                selectedPosition = currentPosition;
+            } else if (positions.length > 0) {
+                selectedPosition = positions[0];
+            }
 
             positionSelect.innerHTML = buildOptions(
-                (departmentPositionsData.department_positions[department] || []).map(p => ({ value: p, label: p })),
-                null, 'value', 'label'
+                positions.map(p => ({ value: p, label: p })),
+                selectedPosition, 'value', 'label'
             );
-            supervisorSelect.innerHTML = buildOptions(getEligibleSupervisors(department, positionSelect.value, id), null, 'id', 'full_name');
+
+            const eligibleSupervisors = getEligibleSupervisors(department, positionSelect.value, id);
+            let selectedSupervisor = '';
+            const origSupervisorId = (user && user.supervisor_id !== null && user.supervisor_id !== undefined && user.supervisor_id !== '' && user.supervisor_id !== 0) ? String(user.supervisor_id) : '';
+            const eligibleIds = eligibleSupervisors.map(s => String(s.id));
+
+            if (user && department === user.department && positionSelect.value === user.position && eligibleIds.includes(origSupervisorId)) {
+                selectedSupervisor = origSupervisorId;
+            } else if (eligibleIds.includes(String(currentSupervisor))) {
+                selectedSupervisor = String(currentSupervisor);
+            }
+
+            supervisorSelect.innerHTML = `<option value="">Select supervisor</option>${buildOptions(eligibleSupervisors, selectedSupervisor, 'id', 'full_name')}`;
+            markPendingUserDirty(id);
         }
 
         function onPendingUserPositionChange(id) {
-            const department = document.getElementById(`dept-select-${id}`).value;
-            const position = document.getElementById(`position-select-${id}`).value;
+            const user = allUsersData.find(item => Number(item.id) === Number(id));
+            const deptSelect = document.getElementById(`dept-select-${id}`);
+            const positionSelect = document.getElementById(`position-select-${id}`);
             const supervisorSelect = document.getElementById(`supervisor-select-${id}`);
-            supervisorSelect.innerHTML = buildOptions(getEligibleSupervisors(department, position, id), null, 'id', 'full_name');
+            if (!deptSelect || !positionSelect || !supervisorSelect) return;
+
+            const department = deptSelect.value;
+            const position = positionSelect.value;
+            const currentSupervisor = supervisorSelect.value;
+
+            const eligibleSupervisors = getEligibleSupervisors(department, position, id);
+            let selectedSupervisor = '';
+            const origSupervisorId = (user && user.supervisor_id !== null && user.supervisor_id !== undefined && user.supervisor_id !== '' && user.supervisor_id !== 0) ? String(user.supervisor_id) : '';
+            const eligibleIds = eligibleSupervisors.map(s => String(s.id));
+
+            if (user && department === user.department && position === user.position && eligibleIds.includes(origSupervisorId)) {
+                selectedSupervisor = origSupervisorId;
+            } else if (eligibleIds.includes(String(currentSupervisor))) {
+                selectedSupervisor = String(currentSupervisor);
+            }
+
+            supervisorSelect.innerHTML = `<option value="">Select supervisor</option>${buildOptions(eligibleSupervisors, selectedSupervisor, 'id', 'full_name')}`;
+            markPendingUserDirty(id);
+        }
+
+        function markPendingUserDirty(id) {
+            const user = allUsersData.find(item => Number(item.id) === Number(id));
+            const updateButton = document.getElementById(`pending-update-${id}`);
+            if (!user || !updateButton) return;
+
+            const deptVal = document.getElementById(`dept-select-${id}`)?.value || '';
+            const posVal = document.getElementById(`position-select-${id}`)?.value || '';
+            const supVal = document.getElementById(`supervisor-select-${id}`)?.value || '';
+
+            const origDept = user.department || '';
+            const origPos = user.position || '';
+            const origSup = (user.supervisor_id !== null && user.supervisor_id !== undefined && user.supervisor_id !== '' && user.supervisor_id !== 0) ? String(user.supervisor_id) : '';
+
+            const changed = (deptVal !== origDept) || (posVal !== origPos) || (supVal !== origSup);
+
+            updateButton.disabled = !changed;
+            updateButton.classList.toggle('btn-success', changed);
+            updateButton.classList.toggle('btn-secondary', !changed);
         }
 
         async function updateUserDetails(id) {
@@ -366,9 +449,10 @@
             const result = await APIClient.put(`admin.php?action=update_user&id=${id}`, { department, position, supervisor_id: supervisorId });
             if (result.success) {
                 UIManager.showAlert('User details updated', 'success');
-                loadPendingUsers();
+                await loadPendingUsers();
             } else {
                 UIManager.showAlert(result.message || 'Failed to update user details', 'danger');
+                await loadPendingUsers();
             }
         }
 
@@ -378,29 +462,91 @@
             const result = await APIClient.put(`admin.php?action=update_user&id=${id}`, { is_active: 1 });
             if (result.success) {
                 UIManager.showAlert('User approved', 'success');
-                loadPendingUsers();
+                await loadPendingUsers();
+                await loadManageUsers();
             } else {
                 UIManager.showAlert(result.message || 'Failed to approve user', 'danger');
             }
         }
 
-        async function editPendingUser(id) {
+        function editPendingUser(id) {
             const user = allUsersData.find(item => Number(item.id) === Number(id));
             if (!user) return;
 
-            const fullName = prompt('Full name', user.full_name || '');
-            if (fullName === null) return;
-            const username = prompt('Assigned username', user.username || '');
-            if (username === null) return;
-            const email = prompt('Institutional email', user.email || '');
-            if (email === null) return;
+            const content = `
+                <form id="edit-pending-user-form" onsubmit="submitEditPendingUser(event, ${user.id})">
+                    <div class="form-group" style="margin-bottom: 1rem;">
+                        <label for="edit-pending-fullname">Full name</label>
+                        <input type="text" id="edit-pending-fullname" class="form-control" required value="${escapeAttr(user.full_name || '')}" oninput="markEditPendingUserDirty(${user.id})">
+                    </div>
+                    <div class="form-group" style="margin-bottom: 1rem;">
+                        <label for="edit-pending-username">Assigned username</label>
+                        <input type="text" id="edit-pending-username" class="form-control" required minlength="3" value="${escapeAttr(user.username || '')}" oninput="markEditPendingUserDirty(${user.id})">
+                    </div>
+                    <div class="form-group" style="margin-bottom: 1rem;">
+                        <label for="edit-pending-email">Institutional email</label>
+                        <input type="email" id="edit-pending-email" class="form-control" required value="${escapeAttr(user.email || '')}" oninput="markEditPendingUserDirty(${user.id})">
+                    </div>
+                    <div style="display: flex; justify-content: flex-end; gap: 0.5rem; margin-top: 1.25rem;">
+                        <button type="button" class="btn btn-secondary" onclick="UIManager.hideModal()">Cancel</button>
+                        <button type="submit" id="edit-pending-save-btn" class="btn btn-secondary" disabled>Save</button>
+                    </div>
+                </form>
+            `;
+            UIManager.showModal(content, 'Edit Pending User');
+        }
+
+        function markEditPendingUserDirty(id) {
+            const user = allUsersData.find(item => Number(item.id) === Number(id));
+            const saveButton = document.getElementById('edit-pending-save-btn');
+            if (!user || !saveButton) return;
+
+            const fullNameInput = document.getElementById('edit-pending-fullname');
+            const usernameInput = document.getElementById('edit-pending-username');
+            const emailInput = document.getElementById('edit-pending-email');
+            if (!fullNameInput || !usernameInput || !emailInput) return;
+
+            const fullNameVal = fullNameInput.value.trim();
+            const usernameVal = usernameInput.value.trim();
+            const emailVal = emailInput.value.trim();
+
+            const origFullName = (user.full_name || '').trim();
+            const origUsername = (user.username || '').trim();
+            const origEmail = (user.email || '').trim();
+
+            const isValid = fullNameVal !== '' && usernameVal.length >= 3 && emailVal !== '';
+            const changed = (fullNameVal !== origFullName) || (usernameVal !== origUsername) || (emailVal.toLowerCase() !== origEmail.toLowerCase());
+
+            const canSave = isValid && changed;
+            saveButton.disabled = !canSave;
+            saveButton.classList.toggle('btn-success', canSave);
+            saveButton.classList.toggle('btn-secondary', !canSave);
+        }
+
+        async function submitEditPendingUser(event, id) {
+            event.preventDefault();
+            const user = allUsersData.find(item => Number(item.id) === Number(id));
+            if (!user) return;
+
+            const fullName = (document.getElementById('edit-pending-fullname')?.value || '').trim();
+            const username = (document.getElementById('edit-pending-username')?.value || '').trim();
+            const email = (document.getElementById('edit-pending-email')?.value || '').trim();
+
+            if (!fullName || !username || !email) {
+                UIManager.showAlert('Please fill in all fields', 'danger');
+                return;
+            }
 
             const result = await APIClient.put(`admin.php?action=update_user&id=${id}`, {
-                full_name: fullName.trim(), username: username.trim(), email: email.trim()
+                full_name: fullName,
+                username: username,
+                email: email
             });
+
             if (result.success) {
+                UIManager.hideModal();
                 UIManager.showAlert('Pending user details updated', 'success');
-                loadPendingUsers();
+                await loadPendingUsers();
             } else {
                 UIManager.showAlert(result.message || 'Failed to update pending user', 'danger');
             }
@@ -438,7 +584,7 @@
                 const roleSelectId = `managed-role-${u.id}`;
                 const saveButtonId = `managed-save-${u.id}`;
                 const departmentOptions = departmentPositionsData.departments
-                    .map(d => `<option value="${d}" ${d === u.department ? 'selected' : ''}>${d}</option>`).join('');
+                    .map(d => `<option value="${escapeAttr(d)}" ${d === u.department ? 'selected' : ''}>${escapeAttr(d)}</option>`).join('');
                 const positionOptions = buildOptions(
                     (departmentPositionsData.department_positions[u.department] || []).map(p => ({ value: p, label: p })),
                     u.position, 'value', 'label'
@@ -446,17 +592,18 @@
                 // supervisor_id arrives as a string from the API; compare as strings
                 // so the user's current supervisor is actually selected.
                 const supervisorOptions = buildOptions(
-                    getEligibleSupervisors(u.department, u.position, u.id), String(u.supervisor_id ?? ''), 'id', 'full_name'
+                    getEligibleSupervisors(u.department, u.position, u.id),
+                    u.supervisor_id, 'id', 'full_name'
                 );
                 const row = document.createElement('tr');
-                const options = TIER_ROLES.map(r => `<option value="${r.value}" ${r.value === u.role ? 'selected' : ''}>${r.label}</option>`).join('');
+                const options = TIER_ROLES.map(r => `<option value="${escapeAttr(r.value)}" ${r.value === u.role ? 'selected' : ''}>${escapeAttr(r.label)}</option>`).join('');
                 row.innerHTML = `
-                    <td>${u.full_name}</td>
-                    <td>${u.username}</td>
+                    <td>${escapeAttr(u.full_name)}</td>
+                    <td>${escapeAttr(u.username)}</td>
                     <td><select id="${departmentSelectId}" class="form-control" onchange="onManagedUserDepartmentChange(${u.id})">${departmentOptions}</select></td>
                     <td><select id="${positionSelectId}" class="form-control" onchange="onManagedUserPositionChange(${u.id})">${positionOptions}</select></td>
                     <td><select id="${supervisorSelectId}" class="form-control" required onchange="markManagedUserDirty(${u.id})"><option value="">Select supervisor</option>${supervisorOptions}</select></td>
-                    <td><select id="${roleSelectId}" class="form-control" onchange="markManagedUserDirty(${u.id})">${options}</select></td>
+                    <td><select id="${roleSelectId}" class="form-control" onchange="markManagedUserDirty(${u.id})">${roleOptions}</select></td>
                     <td><button id="${saveButtonId}" class="btn btn-small btn-secondary" disabled onclick="updateManagedUser(${u.id})">Save</button></td>
                 `;
                 tbody.appendChild(row);
@@ -464,23 +611,69 @@
         }
 
         function onManagedUserDepartmentChange(id) {
-            const department = document.getElementById(`managed-department-${id}`).value;
+            const user = allUsersData.find(item => Number(item.id) === Number(id));
+            const deptSelect = document.getElementById(`managed-department-${id}`);
             const positionSelect = document.getElementById(`managed-position-${id}`);
             const supervisorSelect = document.getElementById(`managed-supervisor-${id}`);
+            if (!deptSelect || !positionSelect || !supervisorSelect) return;
+
+            const department = deptSelect.value;
+            const currentPosition = positionSelect.value;
+            const currentSupervisor = supervisorSelect.value;
+
+            const positions = departmentPositionsData.department_positions[department] || [];
+            let selectedPosition = '';
+            if (user && department === user.department && positions.includes(user.position)) {
+                selectedPosition = user.position;
+            } else if (positions.includes(currentPosition)) {
+                selectedPosition = currentPosition;
+            } else if (positions.length > 0) {
+                selectedPosition = positions[0];
+            }
 
             positionSelect.innerHTML = buildOptions(
-                (departmentPositionsData.department_positions[department] || []).map(p => ({ value: p, label: p })),
-                null, 'value', 'label'
+                positions.map(p => ({ value: p, label: p })),
+                selectedPosition, 'value', 'label'
             );
-            supervisorSelect.innerHTML = `<option value="">Select supervisor</option>${buildOptions(getEligibleSupervisors(department, positionSelect.value, id), null, 'id', 'full_name')}`;
+
+            const eligibleSupervisors = getEligibleSupervisors(department, positionSelect.value, id);
+            let selectedSupervisor = '';
+            const origSupervisorId = (user && user.supervisor_id !== null && user.supervisor_id !== undefined && user.supervisor_id !== '' && user.supervisor_id !== 0) ? String(user.supervisor_id) : '';
+            const eligibleIds = eligibleSupervisors.map(s => String(s.id));
+
+            if (user && department === user.department && positionSelect.value === user.position && eligibleIds.includes(origSupervisorId)) {
+                selectedSupervisor = origSupervisorId;
+            } else if (eligibleIds.includes(String(currentSupervisor))) {
+                selectedSupervisor = String(currentSupervisor);
+            }
+
+            supervisorSelect.innerHTML = `<option value="">Select supervisor</option>${buildOptions(eligibleSupervisors, selectedSupervisor, 'id', 'full_name')}`;
             markManagedUserDirty(id);
         }
 
         function onManagedUserPositionChange(id) {
-            const department = document.getElementById(`managed-department-${id}`).value;
-            const position = document.getElementById(`managed-position-${id}`).value;
+            const user = allUsersData.find(item => Number(item.id) === Number(id));
+            const deptSelect = document.getElementById(`managed-department-${id}`);
+            const positionSelect = document.getElementById(`managed-position-${id}`);
             const supervisorSelect = document.getElementById(`managed-supervisor-${id}`);
-            supervisorSelect.innerHTML = `<option value="">Select supervisor</option>${buildOptions(getEligibleSupervisors(department, position, id), null, 'id', 'full_name')}`;
+            if (!deptSelect || !positionSelect || !supervisorSelect) return;
+
+            const department = deptSelect.value;
+            const position = positionSelect.value;
+            const currentSupervisor = supervisorSelect.value;
+
+            const eligibleSupervisors = getEligibleSupervisors(department, position, id);
+            let selectedSupervisor = '';
+            const origSupervisorId = (user && user.supervisor_id !== null && user.supervisor_id !== undefined && user.supervisor_id !== '' && user.supervisor_id !== 0) ? String(user.supervisor_id) : '';
+            const eligibleIds = eligibleSupervisors.map(s => String(s.id));
+
+            if (user && department === user.department && position === user.position && eligibleIds.includes(origSupervisorId)) {
+                selectedSupervisor = origSupervisorId;
+            } else if (eligibleIds.includes(String(currentSupervisor))) {
+                selectedSupervisor = String(currentSupervisor);
+            }
+
+            supervisorSelect.innerHTML = `<option value="">Select supervisor</option>${buildOptions(eligibleSupervisors, selectedSupervisor, 'id', 'full_name')}`;
             markManagedUserDirty(id);
         }
 
@@ -489,11 +682,17 @@
             const saveButton = document.getElementById(`managed-save-${id}`);
             if (!user || !saveButton) return;
 
-            const changed =
-                document.getElementById(`managed-department-${id}`).value !== (user.department || '') ||
-                document.getElementById(`managed-position-${id}`).value !== (user.position || '') ||
-                document.getElementById(`managed-supervisor-${id}`).value !== String(user.supervisor_id || '') ||
-                document.getElementById(`managed-role-${id}`).value !== user.role;
+            const deptVal = document.getElementById(`managed-department-${id}`)?.value || '';
+            const posVal = document.getElementById(`managed-position-${id}`)?.value || '';
+            const supVal = document.getElementById(`managed-supervisor-${id}`)?.value || '';
+            const roleVal = document.getElementById(`managed-role-${id}`)?.value || '';
+
+            const origDept = user.department || '';
+            const origPos = user.position || '';
+            const origSup = (user.supervisor_id !== null && user.supervisor_id !== undefined && user.supervisor_id !== '' && user.supervisor_id !== 0) ? String(user.supervisor_id) : '';
+            const origRole = user.role || '';
+
+            const changed = (deptVal !== origDept) || (posVal !== origPos) || (supVal !== origSup) || (roleVal !== origRole);
 
             saveButton.disabled = !changed;
             saveButton.classList.toggle('btn-success', changed);
@@ -517,10 +716,10 @@
             });
             if (result.success) {
                 UIManager.showAlert('User details updated', 'success');
-                loadManageUsers();
+                await loadManageUsers();
             } else {
                 UIManager.showAlert(result.message || 'Failed to update user details', 'danger');
-                loadManageUsers();
+                await loadManageUsers();
             }
         }
 

@@ -33,7 +33,22 @@ use ParagonIE\ConstantTime\Base64UrlSafe;
 class WebAuthnService {
 
     const ALLOWED_ROLES = ['manager', 'hr', 'admin'];
-    const CHALLENGE_TTL_SECONDS = 300;
+    const CHALLENGE_TTL_SECONDS = 180;
+    const REQUIRED_RESIDENT_KEY = 'required';
+    const REQUIRED_USER_VERIFICATION = 'required';
+    const ALLOWED_SIGNATURE_ALGORITHMS = [-7, -257];
+
+    public static function getPasskeySecurityPolicy() {
+        return [
+            'authenticatorAttachment' => 'platform',
+            'residentKey' => self::REQUIRED_RESIDENT_KEY,
+            'userVerification' => self::REQUIRED_USER_VERIFICATION,
+            'challengeTtlSeconds' => self::CHALLENGE_TTL_SECONDS,
+            'allowedAlgorithms' => self::ALLOWED_SIGNATURE_ALGORITHMS,
+            'strictOrigin' => true,
+            'requireDeviceBinding' => true,
+        ];
+    }
 
     private static function rpId() {
         return parse_url(rtrim(APP_URL, '/'), PHP_URL_HOST);
@@ -76,6 +91,8 @@ class WebAuthnService {
 
         self::storeChallenge($user['id'], $challenge, 'registration', null, null);
 
+        $policy = self::getPasskeySecurityPolicy();
+
         return [
             'rp' => ['id' => self::rpId(), 'name' => 'LeaveSync'],
             'user' => [
@@ -84,14 +101,13 @@ class WebAuthnService {
                 'displayName' => $user['full_name'],
             ],
             'challenge' => Base64UrlSafe::encodeUnpadded($challenge),
-            'pubKeyCredParams' => [
-                ['type' => 'public-key', 'alg' => -7],   // ES256
-                ['type' => 'public-key', 'alg' => -257],  // RS256
-            ],
+            'pubKeyCredParams' => array_map(function ($alg) {
+                return ['type' => 'public-key', 'alg' => $alg];
+            }, $policy['allowedAlgorithms']),
             'authenticatorSelection' => [
-                'authenticatorAttachment' => 'platform',
-                'residentKey' => 'preferred',
-                'userVerification' => 'required',
+                'authenticatorAttachment' => $policy['authenticatorAttachment'],
+                'residentKey' => $policy['residentKey'],
+                'userVerification' => $policy['userVerification'],
             ],
             'attestation' => 'none',
             'excludeCredentials' => array_map(function ($row) {
@@ -122,15 +138,16 @@ class WebAuthnService {
             throw new Exception('Invalid passkey registration response');
         }
 
+        $policy = self::getPasskeySecurityPolicy();
+
         $options = new PublicKeyCredentialCreationOptions(
             new PublicKeyCredentialRpEntity('LeaveSync', self::rpId()),
             new PublicKeyCredentialUserEntity($user['username'], (string) $user['id'], $user['full_name']),
             Base64UrlSafe::decodeNoPadding($challengeRow['challenge']),
-            [
-                new PublicKeyCredentialParameters('public-key', -7),
-                new PublicKeyCredentialParameters('public-key', -257),
-            ],
-            new AuthenticatorSelectionCriteria('platform', 'required', 'preferred')
+            array_map(function ($alg) {
+                return new PublicKeyCredentialParameters('public-key', $alg);
+            }, $policy['allowedAlgorithms']),
+            new AuthenticatorSelectionCriteria('platform', 'required', $policy['userVerification'])
         );
 
         $validator = AuthenticatorAttestationResponseValidator::create(self::ceremonyFactory()->creationCeremony());
@@ -193,10 +210,12 @@ class WebAuthnService {
         }
         self::storeChallenge($user['id'], $challenge, 'approval', $contextType, $contextId);
 
+        $policy = self::getPasskeySecurityPolicy();
+
         return [
             'challenge' => Base64UrlSafe::encodeUnpadded($challenge),
             'rpId' => self::rpId(),
-            'userVerification' => 'required',
+            'userVerification' => $policy['userVerification'],
             'allowCredentials' => array_map(function ($credentialId) {
                 return ['type' => 'public-key', 'id' => $credentialId];
             }, $credentials),

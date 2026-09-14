@@ -105,6 +105,7 @@ CREATE TABLE IF NOT EXISTS leave_requests (
     supervisor_status ENUM('pending', 'approved', 'rejected', 'not_required') DEFAULT 'pending',
     hr_status ENUM('pending', 'approved', 'rejected') DEFAULT 'pending',
     manager_id INT,
+    assigned_supervisor_id INT,
     manager_comments TEXT,
     hr_id INT,
     hr_comments TEXT,
@@ -115,10 +116,12 @@ CREATE TABLE IF NOT EXISTS leave_requests (
     FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
     FOREIGN KEY (leave_type_id) REFERENCES leave_types(id),
     FOREIGN KEY (manager_id) REFERENCES users(id) ON DELETE SET NULL,
+    FOREIGN KEY (assigned_supervisor_id) REFERENCES users(id) ON DELETE SET NULL,
     FOREIGN KEY (hr_id) REFERENCES users(id) ON DELETE SET NULL,
     INDEX idx_user_id (user_id),
     INDEX idx_status (status),
     INDEX idx_manager_id (manager_id),
+    INDEX idx_assigned_supervisor_id (assigned_supervisor_id),
     INDEX idx_start_date (start_date),
     INDEX idx_end_date (end_date)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
