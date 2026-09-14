@@ -57,39 +57,14 @@
 
         <div class="card">
             <div class="card-header">
-                <h2>Pending User Activation</h2>
-            </div>
-            <div class="card-body">
-                <table class="table">
-                    <thead>
-                        <tr>
-                            <th>Full Name</th>
-                            <th>Username</th>
-                            <th>Email</th>
-                            <th>Department / Position / Supervisor</th>
-                            <th>Requested</th>
-                            <th>Action</th>
-                        </tr>
-                    </thead>
-                    <tbody id="pending-users-table">
-                        <tr>
-                            <td colspan="6" class="text-center">Loading...</td>
-                        </tr>
-                    </tbody>
-                </table>
-            </div>
-        </div>
-
-        <div class="card">
-            <div class="card-header">
                 <h2>Manage Users &amp; Approval Tiers</h2>
             </div>
             <div class="card-body">
-                <p>Set each active user's approval tier: Tier 1 (Employee), Tier 2 (Supervisor), Tier 3 (HR), or System Administrator.</p>
+                <p>Set each user's approval tier: Tier 1 (Employee), Tier 2 (Supervisor), Tier 3 (HR), or System Administrator.</p>
                 <table class="table">
                     <thead>
                         <tr>
-                            <th>Full Name</th>
+                            <th>Full Name / Status</th>
                             <th>Username</th>
                             <th>Department</th>
                             <th>Position</th>
@@ -195,52 +170,66 @@
             const user = await checkAuth();
             if (user.role !== 'admin') {
                 window.location.href = '/dashboard';
+                return;
             }
 
             initUserMenu(user);
             await loadDepartmentPositions();
-            await loadPendingUsers();
             await loadManageUsers();
             setupCreateUserForm();
-            loadPendingDeviceRequests();
-            loadLeaveRequests();
+            await loadPendingDeviceRequests();
+            await loadLeaveRequests();
         }
 
         let allUsersData = [];
         let departmentPositionsData = { departments: [], department_positions: {} };
 
         async function loadDepartmentPositions() {
-            const result = await APIClient.get('admin.php?action=department_positions');
-            if (result.success) {
-                departmentPositionsData = result.data;
+            try {
+                const result = await APIClient.get('admin.php?action=department_positions');
+                if (result.success) {
+                    departmentPositionsData = result.data || { departments: [], department_positions: {} };
+                }
+            } catch (err) {
+                console.error('Failed to load department positions', err);
             }
         }
 
         function setupCreateUserForm() {
             const departmentSelect = document.getElementById('new-department');
-            departmentPositionsData.departments.forEach(department => {
-                departmentSelect.insertAdjacentHTML('beforeend', `<option value="${department}">${department}</option>`);
+            if (!departmentSelect) return;
+            departmentSelect.innerHTML = '<option value="">Select department</option>';
+            (departmentPositionsData.departments || []).forEach(department => {
+                departmentSelect.insertAdjacentHTML('beforeend', `<option value="${escapeAttr(department)}">${escapeAttr(department)}</option>`);
             });
-            departmentSelect.addEventListener('change', updateCreateUserOptions);
-            document.getElementById('new-position').addEventListener('change', updateCreateUserSupervisors);
+            departmentSelect.onchange = updateCreateUserOptions;
+            const positionSelect = document.getElementById('new-position');
+            if (positionSelect) {
+                positionSelect.onchange = updateCreateUserSupervisors;
+            }
             updateCreateUserOptions();
-            document.getElementById('create-user-form').addEventListener('submit', createEmployee);
+            const form = document.getElementById('create-user-form');
+            if (form) {
+                form.onsubmit = createEmployee;
+            }
         }
 
         function updateCreateUserOptions() {
-            const department = document.getElementById('new-department').value;
+            const department = document.getElementById('new-department')?.value || '';
             const positionSelect = document.getElementById('new-position');
+            if (!positionSelect) return;
             positionSelect.innerHTML = '<option value="">Select position</option>' +
-                (departmentPositionsData.department_positions[department] || []).map(position => `<option value="${position}">${position}</option>`).join('');
+                (departmentPositionsData.department_positions[department] || []).map(position => `<option value="${escapeAttr(position)}">${escapeAttr(position)}</option>`).join('');
             updateCreateUserSupervisors();
         }
 
         function updateCreateUserSupervisors() {
-            const department = document.getElementById('new-department').value;
-            const position = document.getElementById('new-position').value;
+            const department = document.getElementById('new-department')?.value || '';
+            const position = document.getElementById('new-position')?.value || '';
             const supervisorSelect = document.getElementById('new-supervisor');
+            if (!supervisorSelect) return;
             supervisorSelect.innerHTML = '<option value="">Select supervisor</option>' +
-                getEligibleSupervisors(department, position, 0).map(supervisor => `<option value="${supervisor.id}">${supervisor.full_name}</option>`).join('');
+                getEligibleSupervisors(department, position, 0).map(supervisor => `<option value="${supervisor.id}">${escapeAttr(supervisor.full_name)}</option>`).join('');
         }
 
         async function createEmployee(event) {
@@ -263,7 +252,6 @@
             message.style.color = 'var(--success-color)';
             document.getElementById('create-user-form').reset();
             updateCreateUserOptions();
-            await loadPendingUsers();
             await loadManageUsers();
         }
 
@@ -524,7 +512,6 @@
             if (result.success) {
                 UIManager.hideModal();
                 UIManager.showAlert(result.message || 'Accounts created successfully', 'success');
-                await loadPendingUsers();
                 await loadManageUsers();
             } else {
                 if (submitBtn) {
@@ -569,216 +556,41 @@
             }).join('');
         }
 
-        async function loadPendingUsers() {
-            const result = await APIClient.get('admin.php?action=users');
-            const tbody = document.getElementById('pending-users-table');
-            tbody.innerHTML = '';
-
-            if (!result.success) {
-                tbody.innerHTML = '<tr><td colspan="6" class="text-center">Failed to load users</td></tr>';
-                return;
-            }
-
-            allUsersData = result.data || [];
-
-            const pendingUsers = allUsersData.filter(u => Number(u.is_active) === 0 && Number(u.password_set) === 0);
-
-            if (pendingUsers.length === 0) {
-                tbody.innerHTML = '<tr><td colspan="6" class="text-center">No pending approvals</td></tr>';
-                return;
-            }
-
-            pendingUsers.forEach(u => {
-                const deptSelectId = `dept-select-${u.id}`;
-                const positionSelectId = `position-select-${u.id}`;
-                const supervisorSelectId = `supervisor-select-${u.id}`;
-                const updateButtonId = `pending-update-${u.id}`;
-
-                const departmentOptions = departmentPositionsData.departments
-                    .map(d => `<option value="${escapeAttr(d)}" ${d === u.department ? 'selected' : ''}>${escapeAttr(d)}</option>`).join('');
-                const positionOptions = buildOptions(
-                    (departmentPositionsData.department_positions[u.department] || []).map(p => ({ value: p, label: p })),
-                    u.position, 'value', 'label'
-                );
-                const supervisorOptions = buildOptions(
-                    getEligibleSupervisors(u.department, u.position, u.id),
-                    u.supervisor_id, 'id', 'full_name'
-                );
-
-                const row = document.createElement('tr');
-                row.innerHTML = `
-                    <td>${escapeAttr(u.full_name)}</td>
-                    <td>${escapeAttr(u.username)}</td>
-                    <td>${escapeAttr(u.email)}</td>
-                    <td>
-                        <select id="${deptSelectId}" class="form-control" onchange="onPendingUserDepartmentChange(${u.id})">${departmentOptions}</select>
-                        <select id="${positionSelectId}" class="form-control" onchange="onPendingUserPositionChange(${u.id})">${positionOptions}</select>
-                        <select id="${supervisorSelectId}" class="form-control" onchange="markPendingUserDirty(${u.id})"><option value="">Select supervisor</option>${supervisorOptions}</select>
-                        <button id="${updateButtonId}" class="btn btn-small btn-secondary" disabled onclick="updateUserDetails(${u.id})">Update</button>
-                    </td>
-                    <td>${UIManager.formatDate(u.created_at)}</td>
-                    <td>
-                        <button class="btn btn-small btn-secondary" onclick="editPendingUser(${u.id})">Edit</button>
-                    </td>
-                `;
-                tbody.appendChild(row);
-            });
-        }
-
-        function onPendingUserDepartmentChange(id) {
-            const user = allUsersData.find(item => Number(item.id) === Number(id));
-            const deptSelect = document.getElementById(`dept-select-${id}`);
-            const positionSelect = document.getElementById(`position-select-${id}`);
-            const supervisorSelect = document.getElementById(`supervisor-select-${id}`);
-            if (!deptSelect || !positionSelect || !supervisorSelect) return;
-
-            const department = deptSelect.value;
-            const currentPosition = positionSelect.value;
-            const currentSupervisor = supervisorSelect.value;
-
-            const positions = departmentPositionsData.department_positions[department] || [];
-            let selectedPosition = '';
-            if (user && department === user.department && positions.includes(user.position)) {
-                selectedPosition = user.position;
-            } else if (positions.includes(currentPosition)) {
-                selectedPosition = currentPosition;
-            } else if (positions.length > 0) {
-                selectedPosition = positions[0];
-            }
-
-            positionSelect.innerHTML = buildOptions(
-                positions.map(p => ({ value: p, label: p })),
-                selectedPosition, 'value', 'label'
-            );
-
-            const eligibleSupervisors = getEligibleSupervisors(department, positionSelect.value, id);
-            let selectedSupervisor = '';
-            const origSupervisorId = (user && user.supervisor_id !== null && user.supervisor_id !== undefined && user.supervisor_id !== '' && user.supervisor_id !== 0) ? String(user.supervisor_id) : '';
-            const eligibleIds = eligibleSupervisors.map(s => String(s.id));
-
-            if (user && department === user.department && positionSelect.value === user.position && eligibleIds.includes(origSupervisorId)) {
-                selectedSupervisor = origSupervisorId;
-            } else if (eligibleIds.includes(String(currentSupervisor))) {
-                selectedSupervisor = String(currentSupervisor);
-            }
-
-            supervisorSelect.innerHTML = `<option value="">Select supervisor</option>${buildOptions(eligibleSupervisors, selectedSupervisor, 'id', 'full_name')}`;
-            markPendingUserDirty(id);
-        }
-
-        function onPendingUserPositionChange(id) {
-            const user = allUsersData.find(item => Number(item.id) === Number(id));
-            const deptSelect = document.getElementById(`dept-select-${id}`);
-            const positionSelect = document.getElementById(`position-select-${id}`);
-            const supervisorSelect = document.getElementById(`supervisor-select-${id}`);
-            if (!deptSelect || !positionSelect || !supervisorSelect) return;
-
-            const department = deptSelect.value;
-            const position = positionSelect.value;
-            const currentSupervisor = supervisorSelect.value;
-
-            const eligibleSupervisors = getEligibleSupervisors(department, position, id);
-            let selectedSupervisor = '';
-            const origSupervisorId = (user && user.supervisor_id !== null && user.supervisor_id !== undefined && user.supervisor_id !== '' && user.supervisor_id !== 0) ? String(user.supervisor_id) : '';
-            const eligibleIds = eligibleSupervisors.map(s => String(s.id));
-
-            if (user && department === user.department && position === user.position && eligibleIds.includes(origSupervisorId)) {
-                selectedSupervisor = origSupervisorId;
-            } else if (eligibleIds.includes(String(currentSupervisor))) {
-                selectedSupervisor = String(currentSupervisor);
-            }
-
-            supervisorSelect.innerHTML = `<option value="">Select supervisor</option>${buildOptions(eligibleSupervisors, selectedSupervisor, 'id', 'full_name')}`;
-            markPendingUserDirty(id);
-        }
-
-        function markPendingUserDirty(id) {
-            const user = allUsersData.find(item => Number(item.id) === Number(id));
-            const updateButton = document.getElementById(`pending-update-${id}`);
-            if (!user || !updateButton) return;
-
-            const deptVal = document.getElementById(`dept-select-${id}`)?.value || '';
-            const posVal = document.getElementById(`position-select-${id}`)?.value || '';
-            const supVal = document.getElementById(`supervisor-select-${id}`)?.value || '';
-
-            const origDept = user.department || '';
-            const origPos = user.position || '';
-            const origSup = (user.supervisor_id !== null && user.supervisor_id !== undefined && user.supervisor_id !== '' && user.supervisor_id !== 0) ? String(user.supervisor_id) : '';
-
-            const changed = (deptVal !== origDept) || (posVal !== origPos) || (supVal !== origSup);
-
-            updateButton.disabled = !changed;
-            updateButton.classList.toggle('btn-success', changed);
-            updateButton.classList.toggle('btn-secondary', !changed);
-        }
-
-        async function updateUserDetails(id) {
-            const department = document.getElementById(`dept-select-${id}`).value;
-            const position = document.getElementById(`position-select-${id}`).value;
-            const supervisorId = document.getElementById(`supervisor-select-${id}`).value;
-            if (!supervisorId) {
-                UIManager.showAlert('Please select a supervisor', 'danger');
-                return;
-            }
-
-            const result = await APIClient.put(`admin.php?action=update_user&id=${id}`, { department, position, supervisor_id: supervisorId });
-            if (result.success) {
-                UIManager.showAlert('User details updated', 'success');
-                await loadPendingUsers();
-            } else {
-                UIManager.showAlert(result.message || 'Failed to update user details', 'danger');
-                await loadPendingUsers();
-            }
-        }
-
-        async function approveUser(id) {
-            if (!confirm('Approve this user account?')) return;
-
-            const result = await APIClient.put(`admin.php?action=update_user&id=${id}`, { is_active: 1 });
-            if (result.success) {
-                UIManager.showAlert('User approved', 'success');
-                await loadPendingUsers();
-                await loadManageUsers();
-            } else {
-                UIManager.showAlert(result.message || 'Failed to approve user', 'danger');
-            }
-        }
-
-        function editPendingUser(id) {
+        function editUserAccount(id) {
             const user = allUsersData.find(item => Number(item.id) === Number(id));
             if (!user) return;
 
             const content = `
-                <form id="edit-pending-user-form" onsubmit="submitEditPendingUser(event, ${user.id})">
+                <form id="edit-user-form" onsubmit="submitEditUser(event, ${user.id})">
                     <div class="form-group" style="margin-bottom: 1rem;">
-                        <label for="edit-pending-fullname">Full name</label>
-                        <input type="text" id="edit-pending-fullname" class="form-control" required value="${escapeAttr(user.full_name || '')}" oninput="markEditPendingUserDirty(${user.id})">
+                        <label for="edit-fullname">Full name</label>
+                        <input type="text" id="edit-fullname" class="form-control" required value="${escapeAttr(user.full_name || '')}" oninput="markEditUserDirty(${user.id})">
                     </div>
                     <div class="form-group" style="margin-bottom: 1rem;">
-                        <label for="edit-pending-username">Assigned username</label>
-                        <input type="text" id="edit-pending-username" class="form-control" required minlength="3" value="${escapeAttr(user.username || '')}" oninput="markEditPendingUserDirty(${user.id})">
+                        <label for="edit-username">Assigned username</label>
+                        <input type="text" id="edit-username" class="form-control" required minlength="3" value="${escapeAttr(user.username || '')}" oninput="markEditUserDirty(${user.id})">
                     </div>
                     <div class="form-group" style="margin-bottom: 1rem;">
-                        <label for="edit-pending-email">Institutional email</label>
-                        <input type="email" id="edit-pending-email" class="form-control" required value="${escapeAttr(user.email || '')}" oninput="markEditPendingUserDirty(${user.id})">
+                        <label for="edit-email">Institutional email</label>
+                        <input type="email" id="edit-email" class="form-control" required value="${escapeAttr(user.email || '')}" oninput="markEditUserDirty(${user.id})">
                     </div>
                     <div style="display: flex; justify-content: flex-end; gap: 0.5rem; margin-top: 1.25rem;">
                         <button type="button" class="btn btn-secondary" onclick="UIManager.hideModal()">Cancel</button>
-                        <button type="submit" id="edit-pending-save-btn" class="btn btn-secondary" disabled>Save</button>
+                        <button type="submit" id="edit-user-save-btn" class="btn btn-secondary" disabled>Save</button>
                     </div>
                 </form>
             `;
-            UIManager.showModal(content, 'Edit Pending User');
+            UIManager.showModal(content, 'Edit Account Details');
         }
 
-        function markEditPendingUserDirty(id) {
+        function markEditUserDirty(id) {
             const user = allUsersData.find(item => Number(item.id) === Number(id));
-            const saveButton = document.getElementById('edit-pending-save-btn');
+            const saveButton = document.getElementById('edit-user-save-btn');
             if (!user || !saveButton) return;
 
-            const fullNameInput = document.getElementById('edit-pending-fullname');
-            const usernameInput = document.getElementById('edit-pending-username');
-            const emailInput = document.getElementById('edit-pending-email');
+            const fullNameInput = document.getElementById('edit-fullname');
+            const usernameInput = document.getElementById('edit-username');
+            const emailInput = document.getElementById('edit-email');
             if (!fullNameInput || !usernameInput || !emailInput) return;
 
             const fullNameVal = fullNameInput.value.trim();
@@ -798,14 +610,14 @@
             saveButton.classList.toggle('btn-secondary', !canSave);
         }
 
-        async function submitEditPendingUser(event, id) {
+        async function submitEditUser(event, id) {
             event.preventDefault();
             const user = allUsersData.find(item => Number(item.id) === Number(id));
             if (!user) return;
 
-            const fullName = (document.getElementById('edit-pending-fullname')?.value || '').trim();
-            const username = (document.getElementById('edit-pending-username')?.value || '').trim();
-            const email = (document.getElementById('edit-pending-email')?.value || '').trim();
+            const fullName = (document.getElementById('edit-fullname')?.value || '').trim();
+            const username = (document.getElementById('edit-username')?.value || '').trim();
+            const email = (document.getElementById('edit-email')?.value || '').trim();
 
             if (!fullName || !username || !email) {
                 UIManager.showAlert('Please fill in all fields', 'danger');
@@ -820,10 +632,10 @@
 
             if (result.success) {
                 UIManager.hideModal();
-                UIManager.showAlert('Pending user details updated', 'success');
-                await loadPendingUsers();
+                UIManager.showAlert('Account details updated', 'success');
+                await loadManageUsers();
             } else {
-                UIManager.showAlert(result.message || 'Failed to update pending user', 'danger');
+                UIManager.showAlert(result.message || 'Failed to update user', 'danger');
             }
         }
 
@@ -835,54 +647,68 @@
         ];
 
         async function loadManageUsers() {
-            const result = await APIClient.get('admin.php?action=users');
             const tbody = document.getElementById('manage-users-table');
-            tbody.innerHTML = '';
+            if (!tbody) return;
+            try {
+                const result = await APIClient.get('admin.php?action=users');
+                tbody.innerHTML = '';
 
-            if (!result.success) {
+                if (!result.success) {
+                    tbody.innerHTML = '<tr><td colspan="7" class="text-center">Failed to load users</td></tr>';
+                    return;
+                }
+
+                allUsersData = result.data || [];
+
+                if (allUsersData.length === 0) {
+                    tbody.innerHTML = '<tr><td colspan="7" class="text-center">No users found</td></tr>';
+                    return;
+                }
+
+                allUsersData.forEach(u => {
+                    const departmentSelectId = `managed-department-${u.id}`;
+                    const positionSelectId = `managed-position-${u.id}`;
+                    const supervisorSelectId = `managed-supervisor-${u.id}`;
+                    const roleSelectId = `managed-role-${u.id}`;
+                    const saveButtonId = `managed-save-${u.id}`;
+                    const departmentOptions = departmentPositionsData.departments
+                        .map(d => `<option value="${escapeAttr(d)}" ${d === u.department ? 'selected' : ''}>${escapeAttr(d)}</option>`).join('');
+                    const positionOptions = buildOptions(
+                        (departmentPositionsData.department_positions[u.department] || []).map(p => ({ value: p, label: p })),
+                        u.position, 'value', 'label'
+                    );
+                    // supervisor_id arrives as a string from the API; compare as strings
+                    // so the user's current supervisor is actually selected.
+                    const supervisorOptions = buildOptions(
+                        getEligibleSupervisors(u.department, u.position, u.id),
+                        u.supervisor_id, 'id', 'full_name'
+                    );
+                    const row = document.createElement('tr');
+                    const roleOptions = TIER_ROLES.map(r => `<option value="${escapeAttr(r.value)}" ${r.value === u.role ? 'selected' : ''}>${escapeAttr(r.label)}</option>`).join('');
+                    const statusBadge = Number(u.is_active) === 1
+                        ? `<span style="background: #e6f7ec; color: #166534; font-size: 0.75rem; padding: 2px 6px; border-radius: 4px; font-weight: 600;">Active</span>`
+                        : `<span style="background: #fef3c7; color: #92400e; font-size: 0.75rem; padding: 2px 6px; border-radius: 4px; font-weight: 600;">Pending Activation</span>`;
+
+                    row.innerHTML = `
+                        <td>${escapeAttr(u.full_name)}<br>${statusBadge}</td>
+                        <td>${escapeAttr(u.username)}</td>
+                        <td><select id="${departmentSelectId}" class="form-control" onchange="onManagedUserDepartmentChange(${u.id})">${departmentOptions}</select></td>
+                        <td><select id="${positionSelectId}" class="form-control" onchange="onManagedUserPositionChange(${u.id})">${positionOptions}</select></td>
+                        <td><select id="${supervisorSelectId}" class="form-control" required onchange="markManagedUserDirty(${u.id})"><option value="">Select supervisor</option>${supervisorOptions}</select></td>
+                        <td><select id="${roleSelectId}" class="form-control" onchange="markManagedUserDirty(${u.id})">${roleOptions}</select></td>
+                        <td>
+                            <div style="display: flex; gap: 0.35rem; align-items: center;">
+                                <button id="${saveButtonId}" class="btn btn-small btn-secondary" disabled onclick="updateManagedUser(${u.id})">Save</button>
+                                <button class="btn btn-small btn-secondary" onclick="editUserAccount(${u.id})">Edit</button>
+                            </div>
+                        </td>
+                    `;
+                    tbody.appendChild(row);
+                });
+            } catch (err) {
+                console.error('Failed to render manage users', err);
                 tbody.innerHTML = '<tr><td colspan="7" class="text-center">Failed to load users</td></tr>';
-                return;
             }
-
-            allUsersData = result.data || [];
-            const activeUsers = allUsersData.filter(u => Number(u.is_active) === 1);
-
-            if (activeUsers.length === 0) {
-                tbody.innerHTML = '<tr><td colspan="7" class="text-center">No active users</td></tr>';
-                return;
-            }
-
-            activeUsers.forEach(u => {
-                const departmentSelectId = `managed-department-${u.id}`;
-                const positionSelectId = `managed-position-${u.id}`;
-                const supervisorSelectId = `managed-supervisor-${u.id}`;
-                const roleSelectId = `managed-role-${u.id}`;
-                const saveButtonId = `managed-save-${u.id}`;
-                const departmentOptions = departmentPositionsData.departments
-                    .map(d => `<option value="${escapeAttr(d)}" ${d === u.department ? 'selected' : ''}>${escapeAttr(d)}</option>`).join('');
-                const positionOptions = buildOptions(
-                    (departmentPositionsData.department_positions[u.department] || []).map(p => ({ value: p, label: p })),
-                    u.position, 'value', 'label'
-                );
-                // supervisor_id arrives as a string from the API; compare as strings
-                // so the user's current supervisor is actually selected.
-                const supervisorOptions = buildOptions(
-                    getEligibleSupervisors(u.department, u.position, u.id),
-                    u.supervisor_id, 'id', 'full_name'
-                );
-                const row = document.createElement('tr');
-                const roleOptions = TIER_ROLES.map(r => `<option value="${escapeAttr(r.value)}" ${r.value === u.role ? 'selected' : ''}>${escapeAttr(r.label)}</option>`).join('');
-                row.innerHTML = `
-                    <td>${escapeAttr(u.full_name)}</td>
-                    <td>${escapeAttr(u.username)}</td>
-                    <td><select id="${departmentSelectId}" class="form-control" onchange="onManagedUserDepartmentChange(${u.id})">${departmentOptions}</select></td>
-                    <td><select id="${positionSelectId}" class="form-control" onchange="onManagedUserPositionChange(${u.id})">${positionOptions}</select></td>
-                    <td><select id="${supervisorSelectId}" class="form-control" required onchange="markManagedUserDirty(${u.id})"><option value="">Select supervisor</option>${supervisorOptions}</select></td>
-                    <td><select id="${roleSelectId}" class="form-control" onchange="markManagedUserDirty(${u.id})">${roleOptions}</select></td>
-                    <td><button id="${saveButtonId}" class="btn btn-small btn-secondary" disabled onclick="updateManagedUser(${u.id})">Save</button></td>
-                `;
-                tbody.appendChild(row);
-            });
         }
 
         function onManagedUserDepartmentChange(id) {
