@@ -845,7 +845,7 @@
             }
 
             allUsersData = result.data || [];
-            const activeUsers = allUsersData.filter(u => u.is_active);
+            const activeUsers = allUsersData.filter(u => Number(u.is_active) === 1);
 
             if (activeUsers.length === 0) {
                 tbody.innerHTML = '<tr><td colspan="7" class="text-center">No active users</td></tr>';
@@ -871,7 +871,7 @@
                     u.supervisor_id, 'id', 'full_name'
                 );
                 const row = document.createElement('tr');
-                const options = TIER_ROLES.map(r => `<option value="${escapeAttr(r.value)}" ${r.value === u.role ? 'selected' : ''}>${escapeAttr(r.label)}</option>`).join('');
+                const roleOptions = TIER_ROLES.map(r => `<option value="${escapeAttr(r.value)}" ${r.value === u.role ? 'selected' : ''}>${escapeAttr(r.label)}</option>`).join('');
                 row.innerHTML = `
                     <td>${escapeAttr(u.full_name)}</td>
                     <td>${escapeAttr(u.username)}</td>
