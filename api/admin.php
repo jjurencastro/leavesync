@@ -50,6 +50,11 @@ try {
             echo json_encode(createUser($data = parseRequestPayload()));
             break;
 
+        case 'bulk_create_users':
+            if ($method !== 'POST') throw new Exception('Method not allowed');
+            echo json_encode(bulkCreateUsers(parseRequestPayload()));
+            break;
+
         case 'update_user':
             if ($method !== 'PUT') throw new Exception('Method not allowed');
             echo json_encode(
@@ -209,6 +214,148 @@ function createUser($data) {
     Auth::auditLog($_SESSION['user_id'], 'create_user', 'user', $newUserId);
 
     return ['success' => true, 'message' => 'User created', 'id' => $newUserId];
+}
+
+function bulkCreateUsers($payload) {
+    global $db;
+
+    $users = $payload['users'] ?? null;
+    if (!is_array($users) || empty($users)) {
+        throw new Exception('No user records provided for bulk import');
+    }
+
+    if (count($users) > 500) {
+        throw new Exception('A maximum of 500 users can be imported in a single batch');
+    }
+
+    $existingUsers = $db->getResults("SELECT id, username, LOWER(email) AS email FROM users");
+    $existingUsernames = [];
+    $existingEmails = [];
+    foreach ($existingUsers as $u) {
+        $existingUsernames[strtolower($u['username'])] = true;
+        $existingEmails[strtolower($u['email'])] = true;
+    }
+
+    $batchUsernames = [];
+    $batchEmails = [];
+    $validatedRows = [];
+    $errors = [];
+
+    foreach ($users as $idx => $row) {
+        $rowNum = $idx + 1;
+        $username = trim($row['username'] ?? '');
+        $email = strtolower(trim($row['email'] ?? ''));
+        $fullName = trim($row['full_name'] ?? '');
+        $gender = strtolower(trim($row['gender'] ?? ''));
+        $department = trim($row['department'] ?? '');
+        $position = trim($row['position'] ?? '');
+        $supervisorIdentifier = trim($row['supervisor'] ?? ($row['supervisor_id'] ?? ''));
+
+        $rowErrors = [];
+
+        if (empty($username)) {
+            $rowErrors[] = 'Username is required';
+        } elseif (strlen($username) < 3) {
+            $rowErrors[] = 'Username must be at least 3 characters';
+        } elseif (isset($existingUsernames[strtolower($username)]) || isset($batchUsernames[strtolower($username)])) {
+            $rowErrors[] = "Username '{$username}' already exists";
+        }
+
+        if (empty($email)) {
+            $rowErrors[] = 'Email is required';
+        } elseif (!filter_var($email, FILTER_VALIDATE_EMAIL) || !Auth::isAllowedEmailDomain($email)) {
+            $rowErrors[] = 'Email must be a valid @' . ALLOWED_EMAIL_DOMAIN . ' address';
+        } elseif (isset($existingEmails[strtolower($email)]) || isset($batchEmails[strtolower($email)])) {
+            $rowErrors[] = "Email '{$email}' already exists";
+        }
+
+        if (empty($fullName)) {
+            $rowErrors[] = 'Full name is required';
+        }
+
+        if (!in_array($gender, ['male', 'female'], true)) {
+            $rowErrors[] = 'Gender must be male or female';
+        }
+
+        if (!UserRegistration::isValidDepartmentPosition($department, $position)) {
+            $rowErrors[] = "Invalid position '{$position}' for department '{$department}'";
+        }
+
+        $supervisorUser = null;
+        if (empty($supervisorIdentifier)) {
+            $rowErrors[] = 'Immediate supervisor is required';
+        } else {
+            $supervisorUser = UserRegistration::resolveEligibleSupervisor($supervisorIdentifier, 0, $department, $position);
+            if (!$supervisorUser) {
+                $rowErrors[] = "Supervisor '{$supervisorIdentifier}' is not eligible or not found for department '{$department}'";
+            }
+        }
+
+        if (!empty($rowErrors)) {
+            $errors[] = [
+                'row' => $rowNum,
+                'username' => $username,
+                'email' => $email,
+                'full_name' => $fullName,
+                'errors' => $rowErrors
+            ];
+        } else {
+            $batchUsernames[strtolower($username)] = true;
+            $batchEmails[strtolower($email)] = true;
+            $validatedRows[] = [
+                'username' => $username,
+                'email' => $email,
+                'full_name' => $fullName,
+                'gender' => $gender,
+                'department' => $department,
+                'position' => $position,
+                'supervisor_id' => (int)$supervisorUser['id']
+            ];
+        }
+    }
+
+    if (!empty($errors)) {
+        return [
+            'success' => false,
+            'message' => 'Bulk import validation failed with ' . count($errors) . ' invalid row(s)',
+            'errors' => $errors,
+            'valid_count' => count($validatedRows),
+            'total_count' => count($users)
+        ];
+    }
+
+    $createdIds = [];
+    foreach ($validatedRows as $validData) {
+        $password_hash = password_hash(bin2hex(random_bytes(24)), PASSWORD_BCRYPT);
+        $key_pair = DigitalSignature::generateKeyPair();
+        $newUserId = Auth::reserveNextUserId();
+
+        $sql = "INSERT INTO users (id, username, email, password_hash, full_name, department, position, gender, supervisor_id, role, public_key, is_active, password_set)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0, 0)";
+        $values = [
+            $newUserId,
+            $validData['username'],
+            $validData['email'],
+            $password_hash,
+            $validData['full_name'],
+            $validData['department'],
+            $validData['position'],
+            $validData['gender'],
+            $validData['supervisor_id'],
+            UserRegistration::POSITION_ROLE_MAP[$validData['position']],
+            $key_pair['public_key']
+        ];
+        $db->execute($sql, $values);
+        UserRegistration::initializeLeaveBalances($newUserId);
+        Auth::auditLog($_SESSION['user_id'], 'bulk_create_user', 'user', $newUserId);
+        $createdIds[] = $newUserId;
+    }
+
+    return [
+        'success' => true,
+        'message' => count($createdIds) . ' user accounts created successfully',
+        'created_count' => count($createdIds)
+    ];
 }
 
 function updateUser($id, $data) {

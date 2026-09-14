@@ -258,8 +258,8 @@ class UserRegistration {
     }
 
     // Hierarchy: ADMIN-department staff report to admin, Deans report to HR, other academic positions report to their department's Dean
-    public static function isEligibleSupervisor($supervisorId, $excludeUserId, $department, $position = null) {
-        $db = Database::getInstance();
+    public static function isEligibleSupervisor($supervisorId, $excludeUserId, $department, $position = null, $customDb = null) {
+        $db = $customDb ?: Database::getInstance();
 
         if ($department === 'ADMIN') {
             $supervisor = $db->getRow(
@@ -283,6 +283,45 @@ class UserRegistration {
             [$supervisorId, $excludeUserId, $department]
         );
         return (bool) $supervisor;
+    }
+
+    /**
+     * Resolve a supervisor identifier (ID, email, or username) to an eligible supervisor user record.
+     * @param string|int $identifier Numeric user ID, email address, or username
+     * @param int $excludeUserId
+     * @param string $department
+     * @param string|null $position
+     * @param object|null $customDb Optional custom database mock
+     * @return array|null User row if valid and eligible, null otherwise
+     */
+    public static function resolveEligibleSupervisor($identifier, $excludeUserId, $department, $position = null, $customDb = null) {
+        $db = $customDb ?: Database::getInstance();
+        $identifier = trim((string)$identifier);
+        if ($identifier === '') return null;
+
+        if (is_numeric($identifier)) {
+            $user = $db->getRow("SELECT id, username, email, full_name, role, department FROM users WHERE id = ?", [(int)$identifier]);
+        } else {
+            $user = $db->getRow(
+                "SELECT id, username, email, full_name, role, department FROM users WHERE LOWER(email) = LOWER(?) OR LOWER(username) = LOWER(?)",
+                [$identifier, $identifier]
+            );
+        }
+
+        if (!$user) return null;
+
+        $supervisorId = (int)$user['id'];
+        if ($supervisorId === (int)$excludeUserId) return null;
+
+        if ($user['role'] === 'admin') {
+            return $user;
+        }
+
+        if (self::isEligibleSupervisor($supervisorId, $excludeUserId, $department, $position, $customDb)) {
+            return $user;
+        }
+
+        return null;
     }
 
     public static function isValidDepartmentPosition($department, $position) {
