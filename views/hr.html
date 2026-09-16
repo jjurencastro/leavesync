@@ -31,21 +31,9 @@
 
     <div class="container page-container">
         <h1>HR Dashboard</h1>
-        <p>Use the menu on the left to review leave requests and device change requests.</p>
 
-        <div class="quick-links" style="display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 1rem; margin-top: 1.5rem;">
-            <a class="card" style="text-decoration: none; color: inherit; display: block;" href="/hr/leave-requests">
-                <div class="card-body">
-                    <h3 style="margin: 0 0 0.5rem;">Leave Requests Awaiting Approval</h3>
-                    <p style="margin: 0; color: var(--text-muted, #64748b);">Review and act on leave requests routed to HR.</p>
-                </div>
-            </a>
-            <a class="card" style="text-decoration: none; color: inherit; display: block;" href="/hr/device-requests">
-                <div class="card-body">
-                    <h3 style="margin: 0 0 0.5rem;">Device Change Requests</h3>
-                    <p style="margin: 0; color: var(--text-muted, #64748b);">Approve or reject pending trusted-device change requests.</p>
-                </div>
-            </a>
+        <div class="dashboard-grid" id="hr-stats-grid">
+            <div class="stat-card"><h3>Loading...</h3><div class="stat-value">-</div></div>
         </div>
     </div>
         </div>
@@ -63,6 +51,43 @@
 
             initUserMenu(user);
             initSidebarMenu();
+            await loadHRStatistics();
+        }
+
+        async function loadHRStatistics() {
+            const grid = document.getElementById('hr-stats-grid');
+            const [requestsResult, deviceResult] = await Promise.all([
+                LeaveRequestManager.listRequests(),
+                APIClient.get('hr.php?action=device_requests')
+            ]);
+
+            if (!requestsResult.success) {
+                grid.innerHTML = '<p class="text-center">Failed to load statistics</p>';
+                return;
+            }
+
+            const requests = requestsResult.data || [];
+            const pendingHRApproval = requests.filter(r => r.status === 'pending' && r.hr_status === 'pending').length;
+            const approved = requests.filter(r => r.status === 'approved').length;
+            const rejected = requests.filter(r => r.status === 'rejected').length;
+            const pendingDeviceRequests = deviceResult.success ? (deviceResult.data || []).length : 0;
+
+            const cards = [
+                { label: 'Total Leave Requests', value: requests.length, href: '/hr/leave-requests' },
+                { label: 'Pending HR Approval', value: pendingHRApproval, href: '/hr/leave-requests', urgent: true },
+                { label: 'Approved Leave Requests', value: approved, href: '/hr/leave-requests' },
+                { label: 'Rejected Leave Requests', value: rejected, href: '/hr/leave-requests' },
+                { label: 'Pending Device Change Requests', value: pendingDeviceRequests, href: '/hr/device-requests', urgent: true }
+            ];
+
+            grid.innerHTML = cards.map(c => `
+                <a class="stat-card-link" href="${c.href}">
+                    <div class="stat-card">
+                        <h3>${c.label}</h3>
+                        <div class="stat-value${c.urgent && c.value > 0 ? ' urgent' : ''}">${c.value}</div>
+                    </div>
+                </a>
+            `).join('');
         }
 
         initHR();

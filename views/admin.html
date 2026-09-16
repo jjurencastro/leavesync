@@ -82,20 +82,22 @@
             const pendingDeviceRequests = deviceResult.success ? (deviceResult.data || []).length : 0;
 
             const cards = [
-                { label: 'Total Employees', value: users.length },
-                { label: 'Pending Account Activations', value: pendingActivations },
-                { label: 'Total Leave Requests', value: stats.total_leave_requests ?? 0 },
-                { label: 'Pending Leave Requests', value: stats.pending_requests ?? 0 },
-                { label: 'Approved Leave Requests', value: stats.approved_requests ?? 0 },
-                { label: 'Rejected Leave Requests', value: stats.rejected_requests ?? 0 },
-                { label: 'Pending Device Change Requests', value: pendingDeviceRequests }
+                { label: 'Total Employees', value: users.length, href: '/admin/manage-users' },
+                { label: 'Pending Account Activations', value: pendingActivations, href: '/admin/manage-users', urgent: true },
+                { label: 'Total Leave Requests', value: stats.total_leave_requests ?? 0, href: '/admin/leave-requests' },
+                { label: 'Pending Leave Requests', value: stats.pending_requests ?? 0, href: '/admin/leave-requests', urgent: true },
+                { label: 'Approved Leave Requests', value: stats.approved_requests ?? 0, href: '/admin/leave-requests' },
+                { label: 'Rejected Leave Requests', value: stats.rejected_requests ?? 0, href: '/admin/leave-requests' },
+                { label: 'Pending Device Change Requests', value: pendingDeviceRequests, href: '/admin/device-requests', urgent: true }
             ];
 
             grid.innerHTML = cards.map(c => `
-                <div class="stat-card">
-                    <h3>${c.label}</h3>
-                    <div class="stat-value">${c.value}</div>
-                </div>
+                <a class="stat-card-link" href="${c.href}">
+                    <div class="stat-card">
+                        <h3>${c.label}</h3>
+                        <div class="stat-value${c.urgent && c.value > 0 ? ' urgent' : ''}">${c.value}</div>
+                    </div>
+                </a>
             `).join('');
         }
 

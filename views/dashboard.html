@@ -57,6 +57,16 @@
             </div>
         </div>
 
+        <div class="card" id="device-requests-notice-card" style="display: none;">
+            <div class="card-header" style="display: flex; justify-content: space-between; align-items: center; gap: 0.75rem; flex-wrap: wrap;">
+                <h2 style="margin: 0;">Device Change Requests</h2>
+                <a href="/device-requests" class="btn btn-small btn-primary">View Device Requests</a>
+            </div>
+            <div class="card-body">
+                <p id="device-requests-summary" style="margin: 0;">Loading...</p>
+            </div>
+        </div>
+
         <div class="card" id="recent-requests-card">
             <div class="card-header">
                 <h2>Recent Leave Requests</h2>
@@ -115,6 +125,9 @@
             initUserMenu(user);
             initSidebarMenu();
             applyManagerSidebarLinks(user.role);
+            if (user.role === 'manager') {
+                loadDeviceRequestsNotice();
+            }
 
             // Load leave balances, one card per applicable leave type
             const balanceResult = await LeaveRequestManager.getLeaveBalance();
@@ -195,6 +208,20 @@
                         tbody.appendChild(row);
                     });
                 }
+            }
+        }
+
+        async function loadDeviceRequestsNotice() {
+            const noticeCard = document.getElementById('device-requests-notice-card');
+            const summary = document.getElementById('device-requests-summary');
+            const result = await APIClient.get('manager.php?action=device_requests');
+            const pendingCount = result.success ? (result.data || []).length : 0;
+
+            if (noticeCard) noticeCard.style.display = '';
+            if (summary) {
+                summary.innerHTML = pendingCount > 0
+                    ? `<strong style="color: var(--danger-color);">${pendingCount}</strong> device change request${pendingCount === 1 ? '' : 's'} ${pendingCount === 1 ? 'is' : 'are'} pending your approval.`
+                    : 'No device change requests are currently pending your approval.';
             }
         }
 
