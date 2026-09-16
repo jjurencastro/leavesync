@@ -29,6 +29,8 @@ $viewRoutes = [
     '/dashboard'               => ['file' => 'views/dashboard.html', 'auth' => true, 'allow' => ['employee', 'manager']],
     '/new-request'             => ['file' => 'views/new_request.html', 'auth' => true, 'allow' => ['employee', 'manager']],
     '/my-requests'             => ['file' => 'views/my_requests.html', 'auth' => true, 'allow' => ['employee', 'manager']],
+    '/team-requests'           => ['file' => 'views/team_leave_requests.html', 'auth' => true, 'allow' => ['manager']],
+    '/device-requests'         => ['file' => 'views/manager_device_requests.html', 'auth' => true, 'allow' => ['manager']],
     '/my-info'                 => ['file' => 'views/my_info.html', 'auth' => true],
     '/settings'                => ['file' => 'views/settings.html', 'auth' => true],
     '/admin'                   => ['file' => 'views/admin.html', 'auth' => true, 'allow' => ['admin']],

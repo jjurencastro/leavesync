@@ -212,6 +212,7 @@
                     '<a href="/my-info" class="sidebar-link">My Info</a>';
             }
             document.getElementById('sidebar-nav').style.visibility = 'visible';
+            applyManagerSidebarLinks(user.role);
             initSidebarMenu();
 
             // Only supervisors/HR/admins approve requests, so only they need passkeys

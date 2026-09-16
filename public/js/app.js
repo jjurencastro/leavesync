@@ -489,6 +489,24 @@ function initSidebarMenu() {
     });
 }
 
+// Managers get extra "Team Leave Requests" (in the dropdown) and "Device Change
+// Requests" (before My Info) links; call after checkAuth on shared employee/manager pages
+function applyManagerSidebarLinks(role, activePage) {
+    if (role !== 'manager') return;
+
+    const submenu = document.getElementById('leave-requests-submenu');
+    if (submenu) {
+        const activeClass = activePage === 'team-requests' ? ' active' : '';
+        submenu.insertAdjacentHTML('beforeend', `<a href="/team-requests" class="sidebar-sublink${activeClass}">Team Leave Requests</a>`);
+    }
+
+    const myInfoLink = document.querySelector('.sidebar-nav > a[href="/my-info"]');
+    if (myInfoLink) {
+        const activeClass = activePage === 'device-requests' ? ' active' : '';
+        myInfoLink.insertAdjacentHTML('beforebegin', `<a href="/device-requests" class="sidebar-link${activeClass}">Device Change Requests</a>`);
+    }
+}
+
 // Initialize on page load
 document.addEventListener('DOMContentLoaded', async () => {
     // Send device fingerprint on page load

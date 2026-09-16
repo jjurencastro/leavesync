@@ -90,6 +90,7 @@
             }
             initUserMenu(currentUser);
             initSidebarMenu();
+            applyManagerSidebarLinks(currentUser?.role);
             loadRequests();
         })();
 

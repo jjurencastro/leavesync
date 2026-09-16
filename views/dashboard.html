@@ -47,36 +47,13 @@
             </div>
         </div>
 
-        <div class="card" id="pending-devices-card" style="display: none;">
+        <div class="card" id="recent-requests-card">
             <div class="card-header">
-                <h2>Pending Device Change Requests</h2>
+                <h2>Recent Leave Requests</h2>
             </div>
             <div class="card-body">
                 <table class="table">
                     <thead>
-                        <tr>
-                            <th>User</th>
-                            <th>What Changed</th>
-                            <th>Requested</th>
-                            <th>Action</th>
-                        </tr>
-                    </thead>
-                    <tbody id="pending-devices-table">
-                        <tr>
-                            <td colspan="4" class="text-center">Loading...</td>
-                        </tr>
-                    </tbody>
-                </table>
-            </div>
-        </div>
-
-        <div class="card">
-            <div class="card-header">
-                <h2 id="requests-card-title">Recent Leave Requests</h2>
-            </div>
-            <div class="card-body">
-                <table class="table">
-                    <thead id="requests-table-head">
                         <tr>
                             <th>Type</th>
                             <th>From Date</th>
@@ -125,30 +102,15 @@
                 return;
             }
 
-            // Deans approve pending team device changes and requests here
+            // Managers use dedicated Team Leave Requests / Device Change Requests pages instead
             if (user.role === 'manager') {
-                const pendingDevicesCard = document.getElementById('pending-devices-card');
-                if (pendingDevicesCard) pendingDevicesCard.style.display = '';
-                document.getElementById('requests-card-title').textContent = 'Team Leave Requests';
-                const thead = document.getElementById('requests-table-head');
-                if (thead) {
-                    thead.innerHTML = `
-                        <tr>
-                            <th>Employee</th>
-                            <th>Type</th>
-                            <th>From Date</th>
-                            <th>To Date</th>
-                            <th>Days</th>
-                            <th>Status</th>
-                            <th>Action</th>
-                        </tr>
-                    `;
-                }
-                loadPendingDeviceRequests();
+                const recentRequestsCard = document.getElementById('recent-requests-card');
+                if (recentRequestsCard) recentRequestsCard.style.display = 'none';
             }
 
             initUserMenu(user);
             initSidebarMenu();
+            applyManagerSidebarLinks(user.role);
 
             // Load leave balances, one card per applicable leave type
             const balanceResult = await LeaveRequestManager.getLeaveBalance();
@@ -187,36 +149,31 @@
                 balancesGrid.innerHTML = '<p class="text-center">No leave credits found</p>';
             }
 
-            // Load recent requests
-            const requestResult = await LeaveRequestManager.listRequests();
-            if (requestResult.success) {
-                const tbody = document.getElementById('requests-table');
-                tbody.innerHTML = '';
-                const colSpan = user.role === 'manager' ? 7 : 6;
+            // Load recent requests (employees only; managers use the Team Leave Requests page)
+            if (user.role !== 'manager') {
+                const requestResult = await LeaveRequestManager.listRequests();
+                if (requestResult.success) {
+                    const tbody = document.getElementById('requests-table');
+                    tbody.innerHTML = '';
 
-                if (!requestResult.data || requestResult.data.length === 0) {
-                    tbody.innerHTML = `<tr><td colspan="${colSpan}" class="text-center">No leave requests found</td></tr>`;
-                } else {
-                    requestResult.data.slice(0, 20).forEach(req => {
-                        const row = document.createElement('tr');
-                        const canApprove = user.role === 'manager' && req.status === 'pending' && req.supervisor_status === 'pending';
-                        row.innerHTML = `
-                            ${user.role === 'manager' ? `<td><strong>${escapeAttr(req.full_name || '')}</strong></td>` : ''}
-                            <td>${escapeAttr(req.leave_type_name || '')}</td>
-                            <td>${UIManager.formatDate(req.start_date)}</td>
-                            <td>${UIManager.formatDate(req.end_date)}</td>
-                            <td>${req.number_of_days}</td>
-                            <td>${user.role === 'manager' ? UIManager.getStatusBadge(req.status) : UIManager.getApprovalStageBadges(req)}</td>
-                            <td>
-                                <button class="btn btn-small btn-secondary" onclick="viewDashboardRequest(${req.id})">View</button>
-                                ${canApprove ? `
-                                    <button class="btn btn-small btn-success" onclick="approveTeamRequest(${req.id})">Approve</button>
-                                    <button class="btn btn-small btn-danger" onclick="rejectTeamRequest(${req.id})">Reject</button>
-                                ` : ''}
-                            </td>
-                        `;
-                        tbody.appendChild(row);
-                    });
+                    if (!requestResult.data || requestResult.data.length === 0) {
+                        tbody.innerHTML = '<tr><td colspan="6" class="text-center">No leave requests found</td></tr>';
+                    } else {
+                        requestResult.data.slice(0, 20).forEach(req => {
+                            const row = document.createElement('tr');
+                            row.innerHTML = `
+                                <td>${escapeAttr(req.leave_type_name || '')}</td>
+                                <td>${UIManager.formatDate(req.start_date)}</td>
+                                <td>${UIManager.formatDate(req.end_date)}</td>
+                                <td>${req.number_of_days}</td>
+                                <td>${UIManager.getApprovalStageBadges(req)}</td>
+                                <td>
+                                    <button class="btn btn-small btn-secondary" onclick="viewDashboardRequest(${req.id})">View</button>
+                                </td>
+                            `;
+                            tbody.appendChild(row);
+                        });
+                    }
                 }
             }
         }
@@ -245,111 +202,6 @@
                 </table>
             `;
             UIManager.showModal(content, 'Leave Request Details');
-        }
-
-        async function approveTeamRequest(id) {
-            let assertion;
-            try {
-                assertion = await WebAuthnManager.getApprovalAssertion('leave_request', id);
-            } catch (err) {
-                UIManager.showAlert(err.message || 'Passkey approval failed', 'danger');
-                return;
-            }
-
-            const comments = prompt('Optional comments for the employee:') || '';
-            const result = await LeaveRequestManager.approveRequest(id, comments, assertion);
-            if (result.success) {
-                UIManager.showAlert('Leave request approved', 'success');
-                initDashboard();
-            } else {
-                UIManager.showAlert(result.message || 'Failed to approve request', 'danger');
-            }
-        }
-
-        async function rejectTeamRequest(id) {
-            const comments = prompt('Reason for rejection (optional):') || '';
-            if (!confirm('Reject this leave request?')) return;
-
-            const result = await LeaveRequestManager.rejectRequest(id, comments);
-            if (result.success) {
-                UIManager.showAlert('Leave request rejected', 'success');
-                initDashboard();
-            } else {
-                UIManager.showAlert(result.message || 'Failed to reject request', 'danger');
-            }
-        }
-
-        async function loadPendingDeviceRequests() {
-            const result = await APIClient.get('manager.php?action=device_requests');
-            const tbody = document.getElementById('pending-devices-table');
-            tbody.innerHTML = '';
-
-            if (!result.success) {
-                tbody.innerHTML = '<tr><td colspan="4" class="text-center">Failed to load device requests</td></tr>';
-                return;
-            }
-
-            const requests = result.data || [];
-
-            if (requests.length === 0) {
-                tbody.innerHTML = '<tr><td colspan="4" class="text-center">No pending device requests</td></tr>';
-                return;
-            }
-
-            requests.forEach(r => {
-                const changes = r.changes || {};
-                const changeKeys = Object.keys(changes);
-                const changeSummary = changeKeys.length === 0
-                    ? 'No trusted device on file yet'
-                    : changeKeys.map(key => {
-                        const c = changes[key];
-                        return `<strong>${c.label}:</strong> ${c.old} &rarr; ${c.new}`;
-                    }).join('<br>');
-
-                const row = document.createElement('tr');
-                row.innerHTML = `
-                    <td>${r.full_name} (${r.username})</td>
-                    <td>${changeSummary}</td>
-                    <td>${UIManager.formatDate(r.requested_at)}</td>
-                    <td>
-                        <button class="btn btn-small btn-success" onclick="approveDeviceRequest(${r.id})">Approve</button>
-                        <button class="btn btn-small btn-danger" onclick="rejectDeviceRequest(${r.id})">Reject</button>
-                    </td>
-                `;
-                tbody.appendChild(row);
-            });
-        }
-
-        async function approveDeviceRequest(id) {
-            let assertion;
-            try {
-                assertion = await WebAuthnManager.getApprovalAssertion('device_change', id);
-            } catch (err) {
-                UIManager.showAlert(err.message || 'Passkey approval failed', 'danger');
-                return;
-            }
-
-            if (!confirm('Trust this device for the user?')) return;
-
-            const result = await APIClient.put(`manager.php?action=approve_device_request&id=${id}`, { webauthn_response: assertion });
-            if (result.success) {
-                UIManager.showAlert('Device approved', 'success');
-                loadPendingDeviceRequests();
-            } else {
-                UIManager.showAlert(result.message || 'Failed to approve device', 'danger');
-            }
-        }
-
-        async function rejectDeviceRequest(id) {
-            if (!confirm('Reject this device change request?')) return;
-
-            const result = await APIClient.put(`manager.php?action=reject_device_request&id=${id}`, {});
-            if (result.success) {
-                UIManager.showAlert('Device request rejected', 'success');
-                loadPendingDeviceRequests();
-            } else {
-                UIManager.showAlert(result.message || 'Failed to reject device request', 'danger');
-            }
         }
 
         initDashboard();

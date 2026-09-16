@@ -137,6 +137,7 @@
                     '<a href="/my-info" class="sidebar-link active">My Info</a>';
             }
             document.getElementById('sidebar-nav').style.visibility = 'visible';
+            applyManagerSidebarLinks(user.role);
             initSidebarMenu();
         })();
 

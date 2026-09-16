@@ -108,6 +108,7 @@
             }
             initUserMenu(user);
             initSidebarMenu();
+            applyManagerSidebarLinks(user?.role);
 
             const typesResult = await LeaveRequestManager.getLeaveTypes();
             if (typesResult.success) {
