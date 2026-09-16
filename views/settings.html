@@ -113,6 +113,7 @@
                     <thead>
                         <tr>
                             <th>Browser</th>
+                            <th>OS / Device</th>
                             <th>IP Address</th>
                             <th>Last Used</th>
                             <th>Action</th>
@@ -120,7 +121,7 @@
                     </thead>
                     <tbody>
                         <tr>
-                            <td colspan="4" class="text-center">Loading...</td>
+                            <td colspan="5" class="text-center">Loading...</td>
                         </tr>
                     </tbody>
                 </table>
@@ -234,12 +235,20 @@
                 const tbody = document.querySelector('#devices-table tbody');
                 tbody.innerHTML = '';
 
-                if (devicesResult.data.length === 0) {
-                    tbody.innerHTML = '<tr><td colspan="4" class="text-center">No trusted devices</td></tr>';
+                if (devicesResult.data.length === 0) {5" class="text-center">No trusted devices</td></tr>';
                 } else {
                     devicesResult.data.forEach(device => {
+                        let osDevice = 'Unknown';
+                        try {
+                            const info = JSON.parse(device.device_info || '{}');
+                            osDevice = [info.os, info.device].filter(Boolean).join(' / ') || 'Unknown';
+                        } catch (err) {
+                            osDevice = 'Unknown';
+                        }
                         const row = document.createElement('tr');
                         row.innerHTML = `
+                            <td>${device.browser_info}</td>
+                            <td>${osDevice
                             <td>${device.browser_info}</td>
                             <td>${device.ip_address}</td>
                             <td>${UIManager.formatDate(device.last_used)}</td>

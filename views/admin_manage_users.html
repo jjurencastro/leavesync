@@ -252,6 +252,24 @@
             { value: 'admin', label: 'System Administrator' }
         ];
 
+        async function deleteUserAccount(id) {
+            const user = allUsersData.find(item => Number(item.id) === Number(id));
+            if (!user) return;
+            if (user.role === 'admin') {
+                UIManager.showAlert('The admin account cannot be deleted', 'danger');
+                return;
+            }
+            if (!confirm(`Are you sure you want to delete ${user.full_name}? This cannot be undone.`)) return;
+
+            const result = await APIClient.delete(`admin.php?action=delete_user&id=${id}`);
+            if (result.success) {
+                UIManager.showAlert('User deleted', 'success');
+                await loadManageUsers();
+            } else {
+                UIManager.showAlert(result.message || 'Failed to delete user', 'danger');
+            }
+        }
+
         function populateDepartmentFilterOptions() {
             const select = document.getElementById('mu-filter-department');
             if (!select) return;
@@ -346,6 +364,7 @@
                         <div style="display: flex; gap: 0.35rem; align-items: center;">
                             <button id="${saveButtonId}" class="btn btn-small btn-secondary" disabled onclick="updateManagedUser(${u.id})">Save</button>
                             <button class="btn btn-small btn-secondary" onclick="editUserAccount(${u.id})">Edit</button>
+                            <button class="btn btn-small btn-danger" onclick="deleteUserAccount(${u.id})">Delete</button>
                         </div>
                     </td>
                 `;
