@@ -173,7 +173,7 @@
         function downloadCsvTemplate() {
             // Server-generated: an .xlsx with dropdown lists for gender/department/position/supervisor
             // pulled live from the database (falls back to a plain CSV if the server can't build one).
-            window.location.href = 'admin.php?action=download_template';
+            window.location.href = '/api/admin.php?action=download_template';
         }
 
         let parsedBulkUsers = [];
