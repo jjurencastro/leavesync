@@ -9,9 +9,17 @@
 <body>
     <div class="app-shell">
         <aside class="sidebar">
-            <div class="sidebar-brand">LeaveSync</div>
+            <a class="sidebar-brand" href="/hr">LeaveSync</a>
             <nav class="sidebar-nav">
-                <a href="/hr" class="sidebar-link active">HR Dashboard</a>
+                <div class="sidebar-group">
+                    <button type="button" class="sidebar-link sidebar-group-toggle open" data-toggle-target="hr-submenu">
+                        <span>HR Dashboard</span> <span class="caret">&#9662;</span>
+                    </button>
+                    <div class="sidebar-submenu open" id="hr-submenu">
+                        <a href="/hr/leave-requests" class="sidebar-sublink">Leave Requests</a>
+                        <a href="/hr/device-requests" class="sidebar-sublink">Device Change Requests</a>
+                    </div>
+                </div>
                 <a href="/my-info" class="sidebar-link">My Info</a>
             </nav>
         </aside>
@@ -30,54 +38,21 @@
 
     <div class="container page-container">
         <h1>HR Dashboard</h1>
+        <p>Use the menu on the left to review leave requests and device change requests.</p>
 
-        <div class="card">
-            <div class="card-header">
-                <h2>Pending Device Change Requests</h2>
-            </div>
-            <div class="card-body">
-                <table class="table">
-                    <thead>
-                        <tr>
-                            <th>User</th>
-                            <th>What Changed</th>
-                            <th>Requested</th>
-                            <th>Action</th>
-                        </tr>
-                    </thead>
-                    <tbody id="pending-devices-table">
-                        <tr>
-                            <td colspan="4" class="text-center">Loading...</td>
-                        </tr>
-                    </tbody>
-                </table>
-            </div>
-        </div>
-
-        <div class="card">
-            <div class="card-header">
-                <h2>Leave Requests Awaiting HR Approval</h2>
-            </div>
-            <div class="card-body">
-                <table class="table">
-                    <thead>
-                        <tr>
-                            <th>Employee</th>
-                            <th>Type</th>
-                            <th>From Date</th>
-                            <th>To Date</th>
-                            <th>Days</th>
-                            <th>Supervisor / HR Status</th>
-                            <th>Action</th>
-                        </tr>
-                    </thead>
-                    <tbody id="leave-requests-table">
-                        <tr>
-                            <td colspan="7" class="text-center">Loading...</td>
-                        </tr>
-                    </tbody>
-                </table>
-            </div>
+        <div class="quick-links" style="display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 1rem; margin-top: 1.5rem;">
+            <a class="card" style="text-decoration: none; color: inherit; display: block;" href="/hr/leave-requests">
+                <div class="card-body">
+                    <h3 style="margin: 0 0 0.5rem;">Leave Requests Awaiting Approval</h3>
+                    <p style="margin: 0; color: var(--text-muted, #64748b);">Review and act on leave requests routed to HR.</p>
+                </div>
+            </a>
+            <a class="card" style="text-decoration: none; color: inherit; display: block;" href="/hr/device-requests">
+                <div class="card-body">
+                    <h3 style="margin: 0 0 0.5rem;">Device Change Requests</h3>
+                    <p style="margin: 0; color: var(--text-muted, #64748b);">Approve or reject pending trusted-device change requests.</p>
+                </div>
+            </a>
         </div>
     </div>
         </div>
@@ -94,151 +69,7 @@
             }
 
             initUserMenu(user);
-            loadPendingDeviceRequests();
-            loadLeaveRequests();
-        }
-
-        async function loadPendingDeviceRequests() {
-            const result = await APIClient.get('hr.php?action=device_requests');
-            const tbody = document.getElementById('pending-devices-table');
-            tbody.innerHTML = '';
-
-            if (!result.success) {
-                tbody.innerHTML = '<tr><td colspan="4" class="text-center">Failed to load device requests</td></tr>';
-                return;
-            }
-
-            const requests = result.data || [];
-
-            if (requests.length === 0) {
-                tbody.innerHTML = '<tr><td colspan="4" class="text-center">No pending device requests</td></tr>';
-                return;
-            }
-
-            requests.forEach(r => {
-                const changes = r.changes || {};
-                const changeKeys = Object.keys(changes);
-                const changeSummary = changeKeys.length === 0
-                    ? 'No trusted device on file yet'
-                    : changeKeys.map(key => {
-                        const c = changes[key];
-                        return `<strong>${c.label}:</strong> ${c.old} &rarr; ${c.new}`;
-                    }).join('<br>');
-
-                const row = document.createElement('tr');
-                row.innerHTML = `
-                    <td>${r.full_name} (${r.username})</td>
-                    <td>${changeSummary}</td>
-                    <td>${UIManager.formatDate(r.requested_at)}</td>
-                    <td>
-                        <button class="btn btn-small btn-success" onclick="approveDeviceRequest(${r.id})">Approve</button>
-                        <button class="btn btn-small btn-danger" onclick="rejectDeviceRequest(${r.id})">Reject</button>
-                    </td>
-                `;
-                tbody.appendChild(row);
-            });
-        }
-
-        async function approveDeviceRequest(id) {
-            let assertion;
-            try {
-                assertion = await WebAuthnManager.getApprovalAssertion('device_change', id);
-            } catch (err) {
-                UIManager.showAlert(err.message || 'Passkey approval failed', 'danger');
-                return;
-            }
-
-            if (!confirm('Trust this device for the user?')) return;
-
-            const result = await APIClient.put(`hr.php?action=approve_device_request&id=${id}`, { webauthn_response: assertion });
-            if (result.success) {
-                UIManager.showAlert('Device approved', 'success');
-                loadPendingDeviceRequests();
-            } else {
-                UIManager.showAlert(result.message || 'Failed to approve device', 'danger');
-            }
-        }
-
-        async function rejectDeviceRequest(id) {
-            if (!confirm('Reject this device change request?')) return;
-
-            const result = await APIClient.put(`hr.php?action=reject_device_request&id=${id}`, {});
-            if (result.success) {
-                UIManager.showAlert('Device request rejected', 'success');
-                loadPendingDeviceRequests();
-            } else {
-                UIManager.showAlert(result.message || 'Failed to reject device request', 'danger');
-            }
-        }
-
-        async function loadLeaveRequests() {
-            const result = await LeaveRequestManager.listRequests();
-            const tbody = document.getElementById('leave-requests-table');
-            tbody.innerHTML = '';
-
-            if (!result.success) {
-                tbody.innerHTML = '<tr><td colspan="7" class="text-center">Failed to load leave requests</td></tr>';
-                return;
-            }
-
-            const requests = result.data || [];
-
-            if (requests.length === 0) {
-                tbody.innerHTML = '<tr><td colspan="7" class="text-center">No leave requests found</td></tr>';
-                return;
-            }
-
-            requests.forEach(req => {
-                const row = document.createElement('tr');
-                const canApprove = req.status === 'pending' && req.hr_status === 'pending';
-                row.innerHTML = `
-                    <td>${req.full_name}</td>
-                    <td>${req.leave_type_name}</td>
-                    <td>${UIManager.formatDate(req.start_date)}</td>
-                    <td>${UIManager.formatDate(req.end_date)}</td>
-                    <td>${req.number_of_days}</td>
-                    <td>${UIManager.getApprovalStageBadges(req)}</td>
-                    <td>
-                        ${canApprove ? `
-                            <button class="btn btn-small btn-success" onclick="approveLeaveRequestHR(${req.id})">Approve</button>
-                            <button class="btn btn-small btn-danger" onclick="rejectLeaveRequestHR(${req.id})">Reject</button>
-                        ` : ''}
-                    </td>
-                `;
-                tbody.appendChild(row);
-            });
-        }
-
-        async function approveLeaveRequestHR(id) {
-            let assertion;
-            try {
-                assertion = await WebAuthnManager.getApprovalAssertion('leave_request', id);
-            } catch (err) {
-                UIManager.showAlert(err.message || 'Passkey approval failed', 'danger');
-                return;
-            }
-
-            const comments = prompt('Optional comments for the employee:') || '';
-            const result = await LeaveRequestManager.approveRequest(id, comments, assertion);
-            if (result.success) {
-                UIManager.showAlert('Leave request approved', 'success');
-                loadLeaveRequests();
-            } else {
-                UIManager.showAlert(result.message || 'Failed to approve request', 'danger');
-            }
-        }
-
-        async function rejectLeaveRequestHR(id) {
-            const comments = prompt('Reason for rejection (optional):') || '';
-            if (!confirm('Reject this leave request?')) return;
-
-            const result = await LeaveRequestManager.rejectRequest(id, comments);
-            if (result.success) {
-                UIManager.showAlert('Leave request rejected', 'success');
-                loadLeaveRequests();
-            } else {
-                UIManager.showAlert(result.message || 'Failed to reject request', 'danger');
-            }
+            initSidebarMenu();
         }
 
         initHR();

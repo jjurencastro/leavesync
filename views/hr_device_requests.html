@@ -1,0 +1,159 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Device Change Requests - LeaveSync</title>
+    <link rel="stylesheet" href="/css/style.css">
+</head>
+<body>
+    <div class="app-shell">
+        <aside class="sidebar">
+            <a class="sidebar-brand" href="/hr">LeaveSync</a>
+            <nav class="sidebar-nav">
+                <div class="sidebar-group">
+                    <button type="button" class="sidebar-link sidebar-group-toggle open" data-toggle-target="hr-submenu">
+                        <span>HR Dashboard</span> <span class="caret">&#9662;</span>
+                    </button>
+                    <div class="sidebar-submenu open" id="hr-submenu">
+                        <a href="/hr/leave-requests" class="sidebar-sublink">Leave Requests</a>
+                        <a href="/hr/device-requests" class="sidebar-sublink active">Device Change Requests</a>
+                    </div>
+                </div>
+                <a href="/my-info" class="sidebar-link">My Info</a>
+            </nav>
+        </aside>
+        <div class="main-area">
+            <header class="topbar">
+                <div class="user-menu">
+                    <button class="user-menu-toggle" id="user-menu-toggle">
+                        <span id="user-fullname">Loading...</span> <span>&#9662;</span>
+                    </button>
+                    <div class="user-menu-dropdown" id="user-menu-dropdown">
+                        <a href="/settings">Settings</a>
+                        <a href="#" class="logout-link" onclick="logout()">Logout</a>
+                    </div>
+                </div>
+            </header>
+
+    <div class="container page-container">
+        <h1>Pending Device Change Requests</h1>
+
+        <div class="card">
+            <div class="card-header">
+                <h2>Pending Device Change Requests</h2>
+            </div>
+            <div class="card-body">
+                <table class="table">
+                    <thead>
+                        <tr>
+                            <th>User</th>
+                            <th>What Changed</th>
+                            <th>Requested</th>
+                            <th>Action</th>
+                        </tr>
+                    </thead>
+                    <tbody id="pending-devices-table">
+                        <tr>
+                            <td colspan="4" class="text-center">Loading...</td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+        </div>
+    </div>
+
+    <script src="/js/app.js"></script>
+    <script>
+        // Check authentication and verify hr role
+        async function initHR() {
+            const user = await checkAuth();
+            if (user.role !== 'hr') {
+                window.location.href = '/dashboard';
+                return;
+            }
+
+            initUserMenu(user);
+            initSidebarMenu();
+            await loadPendingDeviceRequests();
+        }
+
+        async function loadPendingDeviceRequests() {
+            const result = await APIClient.get('hr.php?action=device_requests');
+            const tbody = document.getElementById('pending-devices-table');
+            tbody.innerHTML = '';
+
+            if (!result.success) {
+                tbody.innerHTML = '<tr><td colspan="4" class="text-center">Failed to load device requests</td></tr>';
+                return;
+            }
+
+            const requests = result.data || [];
+
+            if (requests.length === 0) {
+                tbody.innerHTML = '<tr><td colspan="4" class="text-center">No pending device requests</td></tr>';
+                return;
+            }
+
+            requests.forEach(r => {
+                const changes = r.changes || {};
+                const changeKeys = Object.keys(changes);
+                const changeSummary = changeKeys.length === 0
+                    ? 'No trusted device on file yet'
+                    : changeKeys.map(key => {
+                        const c = changes[key];
+                        return `<strong>${c.label}:</strong> ${c.old} &rarr; ${c.new}`;
+                    }).join('<br>');
+
+                const row = document.createElement('tr');
+                row.innerHTML = `
+                    <td>${r.full_name} (${r.username})</td>
+                    <td>${changeSummary}</td>
+                    <td>${UIManager.formatDate(r.requested_at)}</td>
+                    <td>
+                        <button class="btn btn-small btn-success" onclick="approveDeviceRequest(${r.id})">Approve</button>
+                        <button class="btn btn-small btn-danger" onclick="rejectDeviceRequest(${r.id})">Reject</button>
+                    </td>
+                `;
+                tbody.appendChild(row);
+            });
+        }
+
+        async function approveDeviceRequest(id) {
+            let assertion;
+            try {
+                assertion = await WebAuthnManager.getApprovalAssertion('device_change', id);
+            } catch (err) {
+                UIManager.showAlert(err.message || 'Passkey approval failed', 'danger');
+                return;
+            }
+
+            if (!confirm('Trust this device for the user?')) return;
+
+            const result = await APIClient.put(`hr.php?action=approve_device_request&id=${id}`, { webauthn_response: assertion });
+            if (result.success) {
+                UIManager.showAlert('Device approved', 'success');
+                loadPendingDeviceRequests();
+            } else {
+                UIManager.showAlert(result.message || 'Failed to approve device', 'danger');
+            }
+        }
+
+        async function rejectDeviceRequest(id) {
+            if (!confirm('Reject this device change request?')) return;
+
+            const result = await APIClient.put(`hr.php?action=reject_device_request&id=${id}`, {});
+            if (result.success) {
+                UIManager.showAlert('Device request rejected', 'success');
+                loadPendingDeviceRequests();
+            } else {
+                UIManager.showAlert(result.message || 'Failed to reject device request', 'danger');
+            }
+        }
+
+        initHR();
+    </script>
+</body>
+</html>

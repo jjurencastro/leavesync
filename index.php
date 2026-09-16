@@ -37,6 +37,8 @@ $viewRoutes = [
     '/admin/manage-users'      => ['file' => 'views/admin_manage_users.html', 'auth' => true, 'allow' => ['admin']],
     '/admin/device-requests'   => ['file' => 'views/admin_device_requests.html', 'auth' => true, 'allow' => ['admin']],
     '/hr'                      => ['file' => 'views/hr.html', 'auth' => true, 'allow' => ['hr']],
+    '/hr/leave-requests'       => ['file' => 'views/hr_leave_requests.html', 'auth' => true, 'allow' => ['hr']],
+    '/hr/device-requests'      => ['file' => 'views/hr_device_requests.html', 'auth' => true, 'allow' => ['hr']],
 ];
 
 // Where each role lands after login / when bounced off a page it can't access
