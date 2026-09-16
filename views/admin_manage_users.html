@@ -1,0 +1,475 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Manage Users &amp; Approval Tiers - LeaveSync</title>
+    <link rel="stylesheet" href="/css/style.css">
+</head>
+<body>
+    <div class="app-shell">
+        <aside class="sidebar">
+            <div class="sidebar-brand">LeaveSync</div>
+            <nav class="sidebar-nav">
+                <a href="/admin" class="sidebar-link">Admin Dashboard</a>
+                <a href="/my-info" class="sidebar-link">My Info</a>
+            </nav>
+        </aside>
+        <div class="main-area">
+            <header class="topbar">
+                <div class="hamburger-menu">
+                    <button class="hamburger-toggle" id="hamburger-toggle" aria-label="Menu">
+                        <span></span><span></span><span></span>
+                    </button>
+                    <div class="hamburger-dropdown" id="hamburger-dropdown">
+                        <div class="hamburger-section-title">Leave Requests</div>
+                        <a href="/admin/leave-requests">All Leave Requests</a>
+                        <div class="hamburger-section-title">Manage Users</div>
+                        <a href="/admin/create-employee">Create Employee Account</a>
+                        <a href="/admin/manage-users" class="active">Manage Users &amp; Approval Tiers</a>
+                        <a href="/admin/device-requests">Device Change Requests</a>
+                    </div>
+                </div>
+                <div class="user-menu">
+                    <button class="user-menu-toggle" id="user-menu-toggle">
+                        <span id="user-fullname">Loading...</span> <span>&#9662;</span>
+                    </button>
+                    <div class="user-menu-dropdown" id="user-menu-dropdown">
+                        <a href="/settings">Settings</a>
+                        <a href="#" class="logout-link" onclick="logout()">Logout</a>
+                    </div>
+                </div>
+            </header>
+
+    <div class="container page-container">
+        <h1>Manage Users &amp; Approval Tiers</h1>
+
+        <div class="card">
+            <div class="card-header">
+                <h2>Manage Users &amp; Approval Tiers</h2>
+            </div>
+            <div class="card-body">
+                <p>Set each user's approval tier: Tier 1 (Employee), Tier 2 (Supervisor), Tier 3 (HR), or System Administrator.</p>
+                <div class="manage-users-filters" style="display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap: 0.75rem; margin-bottom: 1rem;">
+                    <div class="form-group" style="margin: 0;">
+                        <label for="mu-filter-search">Name / Username</label>
+                        <input type="text" id="mu-filter-search" class="form-control" placeholder="Search name or username" oninput="renderManageUsers()">
+                    </div>
+                    <div class="form-group" style="margin: 0;">
+                        <label for="mu-filter-department">Department</label>
+                        <select id="mu-filter-department" class="form-control" onchange="renderManageUsers()">
+                            <option value="">All departments</option>
+                        </select>
+                    </div>
+                    <div class="form-group" style="margin: 0;">
+                        <label for="mu-filter-role">Tier / Role</label>
+                        <select id="mu-filter-role" class="form-control" onchange="renderManageUsers()">
+                            <option value="">All tiers</option>
+                            <option value="employee">Tier 1 — Employee</option>
+                            <option value="manager">Tier 2 — Supervisor</option>
+                            <option value="hr">Tier 3 — HR</option>
+                            <option value="admin">System Administrator</option>
+                        </select>
+                    </div>
+                    <div class="form-group" style="margin: 0;">
+                        <label for="mu-filter-status">Status</label>
+                        <select id="mu-filter-status" class="form-control" onchange="renderManageUsers()">
+                            <option value="">All statuses</option>
+                            <option value="active">Active</option>
+                            <option value="pending">Pending Activation</option>
+                        </select>
+                    </div>
+                </div>
+                <table class="table">
+                    <thead>
+                        <tr>
+                            <th>Full Name / Status</th>
+                            <th>Username</th>
+                            <th>Department</th>
+                            <th>Position</th>
+                            <th>Supervisor</th>
+                            <th>Tier / Role</th>
+                            <th>Action</th>
+                        </tr>
+                    </thead>
+                    <tbody id="manage-users-table">
+                        <tr>
+                            <td colspan="7" class="text-center">Loading...</td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+        </div>
+    </div>
+
+    <script src="/js/app.js"></script>
+    <script>
+        // Check authentication and verify admin role
+        async function initAdmin() {
+            const user = await checkAuth();
+            if (user.role !== 'admin') {
+                window.location.href = '/dashboard';
+                return;
+            }
+
+            initUserMenu(user);
+            initHamburgerMenu();
+            await loadDepartmentPositions();
+            await loadManageUsers();
+        }
+
+        let allUsersData = [];
+        let departmentPositionsData = { departments: [], department_positions: {} };
+
+        async function loadDepartmentPositions() {
+            try {
+                const result = await APIClient.get('admin.php?action=department_positions');
+                if (result.success) {
+                    departmentPositionsData = result.data || { departments: [], department_positions: {} };
+                }
+            } catch (err) {
+                console.error('Failed to load department positions', err);
+            }
+        }
+
+        // Hierarchy: ADMIN staff report to admin, Deans report to HR, other academic positions report to their department's Dean
+        function getEligibleSupervisors(department, position, excludeId) {
+            return allUsersData.filter(s => {
+                if ((Number(s.is_active) === 0 && Number(s.password_set) === 1) || Number(s.id) === Number(excludeId)) return false;
+                if (s.role === 'admin') return true;
+                if (department === 'ADMIN') return s.role === 'admin';
+                if (position === 'Dean') return s.role === 'hr';
+                if (position) return s.role === 'manager' && s.department === department;
+                return false;
+            });
+        }
+
+        function escapeAttr(str) {
+            if (str === null || str === undefined) return '';
+            return String(str)
+                .replace(/&/g, '&amp;')
+                .replace(/"/g, '&quot;')
+                .replace(/'/g, '&#39;')
+                .replace(/</g, '&lt;')
+                .replace(/>/g, '&gt;');
+        }
+
+        function buildOptions(items, selectedValue, valueKey, labelKey) {
+            const sel = (selectedValue !== null && selectedValue !== undefined) ? String(selectedValue) : '';
+            return items.map(item => {
+                const val = (item[valueKey] !== null && item[valueKey] !== undefined) ? String(item[valueKey]) : '';
+                const isSelected = sel !== '' && val === sel;
+                return `<option value="${escapeAttr(val)}" ${isSelected ? 'selected' : ''}>${escapeAttr(item[labelKey])}</option>`;
+            }).join('');
+        }
+
+        function editUserAccount(id) {
+            const user = allUsersData.find(item => Number(item.id) === Number(id));
+            if (!user) return;
+
+            const content = `
+                <form id="edit-user-form" onsubmit="submitEditUser(event, ${user.id})">
+                    <div class="form-group" style="margin-bottom: 1rem;">
+                        <label for="edit-fullname">Full name</label>
+                        <input type="text" id="edit-fullname" class="form-control" required value="${escapeAttr(user.full_name || '')}" oninput="markEditUserDirty(${user.id})">
+                    </div>
+                    <div class="form-group" style="margin-bottom: 1rem;">
+                        <label for="edit-username">Assigned username</label>
+                        <input type="text" id="edit-username" class="form-control" required minlength="3" value="${escapeAttr(user.username || '')}" oninput="markEditUserDirty(${user.id})">
+                    </div>
+                    <div class="form-group" style="margin-bottom: 1rem;">
+                        <label for="edit-email">Institutional email</label>
+                        <input type="email" id="edit-email" class="form-control" required value="${escapeAttr(user.email || '')}" oninput="markEditUserDirty(${user.id})">
+                    </div>
+                    <div style="display: flex; justify-content: flex-end; gap: 0.5rem; margin-top: 1.25rem;">
+                        <button type="button" class="btn btn-secondary" onclick="UIManager.hideModal()">Cancel</button>
+                        <button type="submit" id="edit-user-save-btn" class="btn btn-secondary" disabled>Save</button>
+                    </div>
+                </form>
+            `;
+            UIManager.showModal(content, 'Edit Account Details');
+        }
+
+        function markEditUserDirty(id) {
+            const user = allUsersData.find(item => Number(item.id) === Number(id));
+            const saveButton = document.getElementById('edit-user-save-btn');
+            if (!user || !saveButton) return;
+
+            const fullNameInput = document.getElementById('edit-fullname');
+            const usernameInput = document.getElementById('edit-username');
+            const emailInput = document.getElementById('edit-email');
+            if (!fullNameInput || !usernameInput || !emailInput) return;
+
+            const fullNameVal = fullNameInput.value.trim();
+            const usernameVal = usernameInput.value.trim();
+            const emailVal = emailInput.value.trim();
+
+            const origFullName = (user.full_name || '').trim();
+            const origUsername = (user.username || '').trim();
+            const origEmail = (user.email || '').trim();
+
+            const isValid = fullNameVal !== '' && usernameVal.length >= 3 && emailVal !== '';
+            const changed = (fullNameVal !== origFullName) || (usernameVal !== origUsername) || (emailVal.toLowerCase() !== origEmail.toLowerCase());
+
+            const canSave = isValid && changed;
+            saveButton.disabled = !canSave;
+            saveButton.classList.toggle('btn-success', canSave);
+            saveButton.classList.toggle('btn-secondary', !canSave);
+        }
+
+        async function submitEditUser(event, id) {
+            event.preventDefault();
+            const user = allUsersData.find(item => Number(item.id) === Number(id));
+            if (!user) return;
+
+            const fullName = (document.getElementById('edit-fullname')?.value || '').trim();
+            const username = (document.getElementById('edit-username')?.value || '').trim();
+            const email = (document.getElementById('edit-email')?.value || '').trim();
+
+            if (!fullName || !username || !email) {
+                UIManager.showAlert('Please fill in all fields', 'danger');
+                return;
+            }
+
+            const result = await APIClient.put(`admin.php?action=update_user&id=${id}`, {
+                full_name: fullName,
+                username: username,
+                email: email
+            });
+
+            if (result.success) {
+                UIManager.hideModal();
+                UIManager.showAlert('Account details updated', 'success');
+                await loadManageUsers();
+            } else {
+                UIManager.showAlert(result.message || 'Failed to update user', 'danger');
+            }
+        }
+
+        const TIER_ROLES = [
+            { value: 'employee', label: 'Tier 1 — Employee' },
+            { value: 'manager', label: 'Tier 2 — Supervisor' },
+            { value: 'hr', label: 'Tier 3 — HR' },
+            { value: 'admin', label: 'System Administrator' }
+        ];
+
+        function populateDepartmentFilterOptions() {
+            const select = document.getElementById('mu-filter-department');
+            if (!select) return;
+            const current = select.value;
+            const departments = [...new Set(allUsersData.map(u => u.department).filter(Boolean))].sort();
+            select.innerHTML = '<option value="">All departments</option>' +
+                departments.map(d => `<option value="${escapeAttr(d)}">${escapeAttr(d)}</option>`).join('');
+            select.value = current;
+        }
+
+        function getFilteredUsers() {
+            const search = (document.getElementById('mu-filter-search')?.value || '').trim().toLowerCase();
+            const department = document.getElementById('mu-filter-department')?.value || '';
+            const role = document.getElementById('mu-filter-role')?.value || '';
+            const status = document.getElementById('mu-filter-status')?.value || '';
+
+            return allUsersData.filter(u => {
+                if (search && !((u.full_name || '').toLowerCase().includes(search) || (u.username || '').toLowerCase().includes(search))) return false;
+                if (department && u.department !== department) return false;
+                if (role && u.role !== role) return false;
+                if (status === 'active' && Number(u.is_active) !== 1) return false;
+                if (status === 'pending' && Number(u.is_active) === 1) return false;
+                return true;
+            });
+        }
+
+        async function loadManageUsers() {
+            const tbody = document.getElementById('manage-users-table');
+            if (!tbody) return;
+            try {
+                const result = await APIClient.get('admin.php?action=users');
+                tbody.innerHTML = '';
+
+                if (!result.success) {
+                    tbody.innerHTML = '<tr><td colspan="7" class="text-center">Failed to load users</td></tr>';
+                    return;
+                }
+
+                allUsersData = result.data || [];
+                populateDepartmentFilterOptions();
+                renderManageUsers();
+            } catch (err) {
+                console.error('Failed to render manage users', err);
+                tbody.innerHTML = '<tr><td colspan="7" class="text-center">Failed to load users</td></tr>';
+            }
+        }
+
+        function renderManageUsers() {
+            const tbody = document.getElementById('manage-users-table');
+            if (!tbody) return;
+            tbody.innerHTML = '';
+
+            const users = getFilteredUsers();
+
+            if (users.length === 0) {
+                tbody.innerHTML = '<tr><td colspan="7" class="text-center">No users found</td></tr>';
+                return;
+            }
+
+            users.forEach(u => {
+                const departmentSelectId = `managed-department-${u.id}`;
+                const positionSelectId = `managed-position-${u.id}`;
+                const supervisorSelectId = `managed-supervisor-${u.id}`;
+                const roleSelectId = `managed-role-${u.id}`;
+                const saveButtonId = `managed-save-${u.id}`;
+                const departmentOptions = departmentPositionsData.departments
+                    .map(d => `<option value="${escapeAttr(d)}" ${d === u.department ? 'selected' : ''}>${escapeAttr(d)}</option>`).join('');
+                const positionOptions = buildOptions(
+                    (departmentPositionsData.department_positions[u.department] || []).map(p => ({ value: p, label: p })),
+                    u.position, 'value', 'label'
+                );
+                // supervisor_id arrives as a string from the API; compare as strings
+                // so the user's current supervisor is actually selected.
+                const supervisorOptions = buildOptions(
+                    getEligibleSupervisors(u.department, u.position, u.id),
+                    u.supervisor_id, 'id', 'full_name'
+                );
+                const row = document.createElement('tr');
+                const roleOptions = TIER_ROLES.map(r => `<option value="${escapeAttr(r.value)}" ${r.value === u.role ? 'selected' : ''}>${escapeAttr(r.label)}</option>`).join('');
+                const statusBadge = Number(u.is_active) === 1
+                    ? `<span style="background: #e6f7ec; color: #166534; font-size: 0.75rem; padding: 2px 6px; border-radius: 4px; font-weight: 600;">Active</span>`
+                    : `<span style="background: #fef3c7; color: #92400e; font-size: 0.75rem; padding: 2px 6px; border-radius: 4px; font-weight: 600;">Pending Activation</span>`;
+
+                row.innerHTML = `
+                    <td>${escapeAttr(u.full_name)}<br>${statusBadge}</td>
+                    <td>${escapeAttr(u.username)}</td>
+                    <td><select id="${departmentSelectId}" class="form-control" onchange="onManagedUserDepartmentChange(${u.id})">${departmentOptions}</select></td>
+                    <td><select id="${positionSelectId}" class="form-control" onchange="onManagedUserPositionChange(${u.id})">${positionOptions}</select></td>
+                    <td><select id="${supervisorSelectId}" class="form-control" required onchange="markManagedUserDirty(${u.id})"><option value="">Select supervisor</option>${supervisorOptions}</select></td>
+                    <td><select id="${roleSelectId}" class="form-control" onchange="markManagedUserDirty(${u.id})">${roleOptions}</select></td>
+                    <td>
+                        <div style="display: flex; gap: 0.35rem; align-items: center;">
+                            <button id="${saveButtonId}" class="btn btn-small btn-secondary" disabled onclick="updateManagedUser(${u.id})">Save</button>
+                            <button class="btn btn-small btn-secondary" onclick="editUserAccount(${u.id})">Edit</button>
+                        </div>
+                    </td>
+                `;
+                tbody.appendChild(row);
+            });
+        }
+
+        function onManagedUserDepartmentChange(id) {
+            const user = allUsersData.find(item => Number(item.id) === Number(id));
+            const deptSelect = document.getElementById(`managed-department-${id}`);
+            const positionSelect = document.getElementById(`managed-position-${id}`);
+            const supervisorSelect = document.getElementById(`managed-supervisor-${id}`);
+            if (!deptSelect || !positionSelect || !supervisorSelect) return;
+
+            const department = deptSelect.value;
+            const currentPosition = positionSelect.value;
+            const currentSupervisor = supervisorSelect.value;
+
+            const positions = departmentPositionsData.department_positions[department] || [];
+            let selectedPosition = '';
+            if (user && department === user.department && positions.includes(user.position)) {
+                selectedPosition = user.position;
+            } else if (positions.includes(currentPosition)) {
+                selectedPosition = currentPosition;
+            } else if (positions.length > 0) {
+                selectedPosition = positions[0];
+            }
+
+            positionSelect.innerHTML = buildOptions(
+                positions.map(p => ({ value: p, label: p })),
+                selectedPosition, 'value', 'label'
+            );
+
+            const eligibleSupervisors = getEligibleSupervisors(department, positionSelect.value, id);
+            let selectedSupervisor = '';
+            const origSupervisorId = (user && user.supervisor_id !== null && user.supervisor_id !== undefined && user.supervisor_id !== '' && user.supervisor_id !== 0) ? String(user.supervisor_id) : '';
+            const eligibleIds = eligibleSupervisors.map(s => String(s.id));
+
+            if (user && department === user.department && positionSelect.value === user.position && eligibleIds.includes(origSupervisorId)) {
+                selectedSupervisor = origSupervisorId;
+            } else if (eligibleIds.includes(String(currentSupervisor))) {
+                selectedSupervisor = String(currentSupervisor);
+            }
+
+            supervisorSelect.innerHTML = `<option value="">Select supervisor</option>${buildOptions(eligibleSupervisors, selectedSupervisor, 'id', 'full_name')}`;
+            markManagedUserDirty(id);
+        }
+
+        function onManagedUserPositionChange(id) {
+            const user = allUsersData.find(item => Number(item.id) === Number(id));
+            const deptSelect = document.getElementById(`managed-department-${id}`);
+            const positionSelect = document.getElementById(`managed-position-${id}`);
+            const supervisorSelect = document.getElementById(`managed-supervisor-${id}`);
+            if (!deptSelect || !positionSelect || !supervisorSelect) return;
+
+            const department = deptSelect.value;
+            const position = positionSelect.value;
+            const currentSupervisor = supervisorSelect.value;
+
+            const eligibleSupervisors = getEligibleSupervisors(department, position, id);
+            let selectedSupervisor = '';
+            const origSupervisorId = (user && user.supervisor_id !== null && user.supervisor_id !== undefined && user.supervisor_id !== '' && user.supervisor_id !== 0) ? String(user.supervisor_id) : '';
+            const eligibleIds = eligibleSupervisors.map(s => String(s.id));
+
+            if (user && department === user.department && position === user.position && eligibleIds.includes(origSupervisorId)) {
+                selectedSupervisor = origSupervisorId;
+            } else if (eligibleIds.includes(String(currentSupervisor))) {
+                selectedSupervisor = String(currentSupervisor);
+            }
+
+            supervisorSelect.innerHTML = `<option value="">Select supervisor</option>${buildOptions(eligibleSupervisors, selectedSupervisor, 'id', 'full_name')}`;
+            markManagedUserDirty(id);
+        }
+
+        function markManagedUserDirty(id) {
+            const user = allUsersData.find(item => Number(item.id) === Number(id));
+            const saveButton = document.getElementById(`managed-save-${id}`);
+            if (!user || !saveButton) return;
+
+            const deptVal = document.getElementById(`managed-department-${id}`)?.value || '';
+            const posVal = document.getElementById(`managed-position-${id}`)?.value || '';
+            const supVal = document.getElementById(`managed-supervisor-${id}`)?.value || '';
+            const roleVal = document.getElementById(`managed-role-${id}`)?.value || '';
+
+            const origDept = user.department || '';
+            const origPos = user.position || '';
+            const origSup = (user.supervisor_id !== null && user.supervisor_id !== undefined && user.supervisor_id !== '' && user.supervisor_id !== 0) ? String(user.supervisor_id) : '';
+            const origRole = user.role || '';
+
+            const changed = (deptVal !== origDept) || (posVal !== origPos) || (supVal !== origSup) || (roleVal !== origRole);
+
+            saveButton.disabled = !changed;
+            saveButton.classList.toggle('btn-success', changed);
+            saveButton.classList.toggle('btn-secondary', !changed);
+        }
+
+        async function updateManagedUser(id) {
+            const department = document.getElementById(`managed-department-${id}`).value;
+            const position = document.getElementById(`managed-position-${id}`).value;
+            const supervisorId = document.getElementById(`managed-supervisor-${id}`).value;
+            const role = document.getElementById(`managed-role-${id}`).value;
+            if (!supervisorId) {
+                UIManager.showAlert('Please select a supervisor', 'danger');
+                return;
+            }
+            const result = await APIClient.put(`admin.php?action=update_user&id=${id}`, {
+                department,
+                position,
+                supervisor_id: supervisorId,
+                role
+            });
+            if (result.success) {
+                UIManager.showAlert('User details updated', 'success');
+                await loadManageUsers();
+            } else {
+                UIManager.showAlert(result.message || 'Failed to update user details', 'danger');
+                await loadManageUsers();
+            }
+        }
+
+        initAdmin();
+    </script>
+</body>
+</html>

@@ -1,0 +1,477 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Create Employee Account - LeaveSync</title>
+    <link rel="stylesheet" href="/css/style.css">
+</head>
+<body>
+    <div class="app-shell">
+        <aside class="sidebar">
+            <div class="sidebar-brand">LeaveSync</div>
+            <nav class="sidebar-nav">
+                <a href="/admin" class="sidebar-link">Admin Dashboard</a>
+                <a href="/my-info" class="sidebar-link">My Info</a>
+            </nav>
+        </aside>
+        <div class="main-area">
+            <header class="topbar">
+                <div class="hamburger-menu">
+                    <button class="hamburger-toggle" id="hamburger-toggle" aria-label="Menu">
+                        <span></span><span></span><span></span>
+                    </button>
+                    <div class="hamburger-dropdown" id="hamburger-dropdown">
+                        <div class="hamburger-section-title">Leave Requests</div>
+                        <a href="/admin/leave-requests">All Leave Requests</a>
+                        <div class="hamburger-section-title">Manage Users</div>
+                        <a href="/admin/create-employee" class="active">Create Employee Account</a>
+                        <a href="/admin/manage-users">Manage Users &amp; Approval Tiers</a>
+                        <a href="/admin/device-requests">Device Change Requests</a>
+                    </div>
+                </div>
+                <div class="user-menu">
+                    <button class="user-menu-toggle" id="user-menu-toggle">
+                        <span id="user-fullname">Loading...</span> <span>&#9662;</span>
+                    </button>
+                    <div class="user-menu-dropdown" id="user-menu-dropdown">
+                        <a href="/settings">Settings</a>
+                        <a href="#" class="logout-link" onclick="logout()">Logout</a>
+                    </div>
+                </div>
+            </header>
+
+    <div class="container page-container">
+        <h1>Create Employee Account</h1>
+
+        <div class="card">
+            <div class="card-header" style="display: flex; justify-content: space-between; align-items: center; gap: 0.75rem; flex-wrap: wrap;">
+                <h2 style="margin: 0;">Create Employee Account</h2>
+                <div style="display: flex; gap: 0.5rem; flex-wrap: wrap;">
+                    <button type="button" class="btn btn-small btn-secondary" onclick="downloadCsvTemplate()">Download CSV Template</button>
+                    <button type="button" class="btn btn-small btn-primary" onclick="openBulkUploadModal()">Bulk Upload CSV</button>
+                </div>
+            </div>
+            <div class="card-body">
+                <p>Enter the employee's account and organization details. They will use the matching Google email to set a password and activate the account.</p>
+                <form id="create-user-form" style="display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 0.75rem;">
+                    <div class="form-group"><label for="new-username">Assigned username</label><input id="new-username" required minlength="3"></div>
+                    <div class="form-group"><label for="new-email">Institutional email</label><input id="new-email" type="email" required></div>
+                    <div class="form-group"><label for="new-full-name">Full name</label><input id="new-full-name" required></div>
+                    <div class="form-group"><label for="new-gender">Gender</label><select id="new-gender" required><option value="">Select gender</option><option value="male">Male</option><option value="female">Female</option></select></div>
+                    <div class="form-group"><label for="new-department">Department</label><select id="new-department" required><option value="">Select department</option></select></div>
+                    <div class="form-group"><label for="new-position">Position</label><select id="new-position" required><option value="">Select position</option></select></div>
+                    <div class="form-group"><label for="new-supervisor">Immediate supervisor</label><select id="new-supervisor" required><option value="">Select supervisor</option></select></div>
+                    <div style="display: flex; align-items: end;"><button type="submit" class="btn btn-primary">Create Account</button></div>
+                </form>
+                <div id="create-user-result" style="margin-top: 0.75rem;"></div>
+            </div>
+        </div>
+    </div>
+        </div>
+    </div>
+
+    <script src="/js/app.js"></script>
+    <script>
+        // Check authentication and verify admin role
+        async function initAdmin() {
+            const user = await checkAuth();
+            if (user.role !== 'admin') {
+                window.location.href = '/dashboard';
+                return;
+            }
+
+            initUserMenu(user);
+            initHamburgerMenu();
+            await loadDepartmentPositions();
+            await loadUsersData();
+            setupCreateUserForm();
+        }
+
+        let allUsersData = [];
+        let departmentPositionsData = { departments: [], department_positions: {} };
+
+        async function loadDepartmentPositions() {
+            try {
+                const result = await APIClient.get('admin.php?action=department_positions');
+                if (result.success) {
+                    departmentPositionsData = result.data || { departments: [], department_positions: {} };
+                }
+            } catch (err) {
+                console.error('Failed to load department positions', err);
+            }
+        }
+
+        async function loadUsersData() {
+            try {
+                const result = await APIClient.get('admin.php?action=users');
+                if (result.success) {
+                    allUsersData = result.data || [];
+                }
+            } catch (err) {
+                console.error('Failed to load users', err);
+            }
+        }
+
+        function setupCreateUserForm() {
+            const departmentSelect = document.getElementById('new-department');
+            if (!departmentSelect) return;
+            departmentSelect.innerHTML = '<option value="">Select department</option>';
+            (departmentPositionsData.departments || []).forEach(department => {
+                departmentSelect.insertAdjacentHTML('beforeend', `<option value="${escapeAttr(department)}">${escapeAttr(department)}</option>`);
+            });
+            departmentSelect.onchange = updateCreateUserOptions;
+            const positionSelect = document.getElementById('new-position');
+            if (positionSelect) {
+                positionSelect.onchange = updateCreateUserSupervisors;
+            }
+            updateCreateUserOptions();
+            const form = document.getElementById('create-user-form');
+            if (form) {
+                form.onsubmit = createEmployee;
+            }
+        }
+
+        function updateCreateUserOptions() {
+            const department = document.getElementById('new-department')?.value || '';
+            const positionSelect = document.getElementById('new-position');
+            if (!positionSelect) return;
+            positionSelect.innerHTML = '<option value="">Select position</option>' +
+                (departmentPositionsData.department_positions[department] || []).map(position => `<option value="${escapeAttr(position)}">${escapeAttr(position)}</option>`).join('');
+            updateCreateUserSupervisors();
+        }
+
+        function updateCreateUserSupervisors() {
+            const department = document.getElementById('new-department')?.value || '';
+            const position = document.getElementById('new-position')?.value || '';
+            const supervisorSelect = document.getElementById('new-supervisor');
+            if (!supervisorSelect) return;
+            supervisorSelect.innerHTML = '<option value="">Select supervisor</option>' +
+                getEligibleSupervisors(department, position, 0).map(supervisor => `<option value="${supervisor.id}">${escapeAttr(supervisor.full_name)}</option>`).join('');
+        }
+
+        async function createEmployee(event) {
+            event.preventDefault();
+            const result = await APIClient.post('admin.php?action=create_user', {
+                username: document.getElementById('new-username').value.trim(),
+                email: document.getElementById('new-email').value.trim(),
+                full_name: document.getElementById('new-full-name').value.trim(),
+                gender: document.getElementById('new-gender').value,
+                department: document.getElementById('new-department').value,
+                position: document.getElementById('new-position').value,
+                supervisor_id: document.getElementById('new-supervisor').value
+            });
+            const message = document.getElementById('create-user-result');
+            if (!result.success) {
+                UIManager.showAlert(result.message || 'Failed to create user', 'danger');
+                return;
+            }
+            message.textContent = `Account created. Assigned username: ${document.getElementById('new-username').value}`;
+            message.style.color = 'var(--success-color)';
+            document.getElementById('create-user-form').reset();
+            updateCreateUserOptions();
+            await loadUsersData();
+        }
+
+        function downloadCsvTemplate() {
+            const headers = ['username', 'email', 'full_name', 'gender', 'department', 'position', 'supervisor'];
+            const sampleRows = [
+                ['jdelacruz', 'jdelacruz@g.batstate-u.edu.ph', 'Juan Dela Cruz', 'male', 'CCS', 'Instructor', 'admin'],
+                ['mreyes', 'mreyes@g.batstate-u.edu.ph', 'Maria Reyes', 'female', 'ADMIN', 'HR Officer', 'admin'],
+                ['rsantos', 'rsantos@g.batstate-u.edu.ph', 'Roberto Santos', 'male', 'CTE', 'Dean', 'hr']
+            ];
+            const lines = [
+                headers.join(','),
+                ...sampleRows.map(row => row.map(csvEscape).join(','))
+            ];
+            const blob = new Blob(['\uFEFF' + lines.join('\r\n')], { type: 'text/csv;charset=utf-8;' });
+            const link = document.createElement('a');
+            link.href = URL.createObjectURL(blob);
+            link.download = 'leavesync_user_upload_template.csv';
+            document.body.appendChild(link);
+            link.click();
+            document.body.removeChild(link);
+            URL.revokeObjectURL(link.href);
+        }
+
+        let parsedBulkUsers = [];
+
+        function openBulkUploadModal() {
+            parsedBulkUsers = [];
+            const content = `
+                <div style="display: flex; flex-direction: column; gap: 1rem;">
+                    <p style="margin: 0; color: var(--text-muted, #64748b); font-size: 0.9rem;">
+                        Upload a CSV file containing employee account records. The supervisor column accepts the supervisor's username or institutional email.
+                    </p>
+                    <div style="display: flex; gap: 0.5rem; align-items: center; flex-wrap: wrap;">
+                        <input type="file" id="bulk-csv-file" accept=".csv,text/csv" class="form-control" style="flex: 1; min-width: 220px;" onchange="handleBulkCsvSelect(event)">
+                        <button type="button" class="btn btn-secondary btn-small" onclick="downloadCsvTemplate()">Download Template</button>
+                    </div>
+                    <div id="bulk-upload-preview" style="max-height: 320px; overflow-y: auto; border: 1px solid var(--border-color); border-radius: 6px; padding: 0.5rem; display: none;">
+                    </div>
+                    <div id="bulk-upload-summary" style="font-size: 0.9rem; font-weight: 500;"></div>
+                    <div style="display: flex; justify-content: flex-end; gap: 0.5rem; margin-top: 0.5rem;">
+                        <button type="button" class="btn btn-secondary" onclick="UIManager.hideModal()">Cancel</button>
+                        <button type="button" id="bulk-import-submit-btn" class="btn btn-secondary" disabled onclick="submitBulkUsers()">Import Accounts</button>
+                    </div>
+                </div>
+            `;
+            UIManager.showModal(content, 'Bulk Upload Employee Accounts');
+        }
+
+        function parseCsvLine(text) {
+            const result = [];
+            let cur = '';
+            let inQuotes = false;
+            for (let i = 0; i < text.length; i++) {
+                const char = text[i];
+                if (char === '"') {
+                    if (inQuotes && text[i + 1] === '"') {
+                        cur += '"';
+                        i++;
+                    } else {
+                        inQuotes = !inQuotes;
+                    }
+                } else if (char === ',' && !inQuotes) {
+                    result.push(cur.trim());
+                    cur = '';
+                } else {
+                    cur += char;
+                }
+            }
+            result.push(cur.trim());
+            return result;
+        }
+
+        function parseCsvText(csvText) {
+            const rawLines = csvText.split(/\r\n|\n|\r/);
+            const lines = rawLines.map(l => l.trim()).filter(l => l.length > 0);
+            if (lines.length < 2) {
+                return { headers: [], rows: [] };
+            }
+            const headers = parseCsvLine(lines[0]).map(h => h.toLowerCase().replace(/[^a-z0-9_]/g, ''));
+            const rows = [];
+            for (let i = 1; i < lines.length; i++) {
+                const values = parseCsvLine(lines[i]);
+                if (values.length === 0 || (values.length === 1 && values[0] === '')) continue;
+                const rowObj = {};
+                headers.forEach((h, idx) => {
+                    rowObj[h] = values[idx] || '';
+                });
+                rows.push(rowObj);
+            }
+            return { headers, rows };
+        }
+
+        function resolveSupervisorClient(identifier, department, position) {
+            if (!identifier) return null;
+            const identStr = String(identifier).trim().toLowerCase();
+            const eligible = getEligibleSupervisors(department, position, 0);
+            return eligible.find(s =>
+                String(s.id) === identStr ||
+                (s.username && s.username.toLowerCase() === identStr) ||
+                (s.email && s.email.toLowerCase() === identStr)
+            ) || null;
+        }
+
+        async function handleBulkCsvSelect(event) {
+            const file = event.target.files[0];
+            const previewDiv = document.getElementById('bulk-upload-preview');
+            const summaryDiv = document.getElementById('bulk-upload-summary');
+            const submitBtn = document.getElementById('bulk-import-submit-btn');
+
+            if (!file) {
+                if (previewDiv) previewDiv.style.display = 'none';
+                if (summaryDiv) summaryDiv.textContent = '';
+                if (submitBtn) { submitBtn.disabled = true; submitBtn.classList.add('btn-secondary'); submitBtn.classList.remove('btn-success'); }
+                return;
+            }
+
+            const text = await file.text();
+            const { headers, rows } = parseCsvText(text);
+
+            const requiredHeaders = ['username', 'email', 'full_name', 'gender', 'department', 'position', 'supervisor'];
+            const missingHeaders = requiredHeaders.filter(rh => !headers.includes(rh) && !(rh === 'supervisor' && headers.includes('supervisor_id')));
+            if (missingHeaders.length > 0) {
+                previewDiv.style.display = 'block';
+                previewDiv.innerHTML = `<p style="color: var(--danger-color); margin: 0;">Missing required CSV column headers: ${missingHeaders.join(', ')}</p>`;
+                summaryDiv.textContent = 'Invalid CSV format';
+                summaryDiv.style.color = 'var(--danger-color)';
+                submitBtn.disabled = true;
+                submitBtn.classList.add('btn-secondary');
+                submitBtn.classList.remove('btn-success');
+                return;
+            }
+
+            const existingUsernames = new Set(allUsersData.map(u => (u.username || '').toLowerCase()));
+            const existingEmails = new Set(allUsersData.map(u => (u.email || '').toLowerCase()));
+            const seenBatchUsernames = new Set();
+            const seenBatchEmails = new Set();
+
+            parsedBulkUsers = [];
+            let validCount = 0;
+            let invalidCount = 0;
+
+            const previewRowsHtml = rows.map((r, idx) => {
+                const rowNum = idx + 1;
+                const username = (r.username || '').trim();
+                const email = (r.email || '').trim().toLowerCase();
+                const fullName = (r.full_name || '').trim();
+                const gender = (r.gender || '').trim().toLowerCase();
+                const department = (r.department || '').trim();
+                const position = (r.position || '').trim();
+                const supervisorIdent = (r.supervisor || r.supervisor_id || '').trim();
+
+                const errors = [];
+                if (!username) errors.push('Username required');
+                else if (username.length < 3) errors.push('Username < 3 chars');
+                else if (existingUsernames.has(username.toLowerCase()) || seenBatchUsernames.has(username.toLowerCase())) errors.push('Duplicate username');
+
+                if (!email) errors.push('Email required');
+                else if (!email.includes('@')) errors.push('Invalid email format');
+                else if (existingEmails.has(email) || seenBatchEmails.has(email)) errors.push('Duplicate email');
+
+                if (!fullName) errors.push('Full name required');
+                if (!['male', 'female'].includes(gender)) errors.push('Gender must be male/female');
+
+                const validPositions = departmentPositionsData.department_positions[department] || [];
+                if (!departmentPositionsData.departments.includes(department)) errors.push(`Unknown dept '${department}'`);
+                else if (!validPositions.includes(position)) errors.push(`Invalid pos '${position}' for ${department}`);
+
+                const matchedSupervisor = resolveSupervisorClient(supervisorIdent, department, position);
+                if (!supervisorIdent) errors.push('Supervisor required');
+                else if (!matchedSupervisor) errors.push(`Supervisor '${supervisorIdent}' invalid/not found`);
+
+                const isValid = errors.length === 0;
+                if (isValid) {
+                    seenBatchUsernames.add(username.toLowerCase());
+                    seenBatchEmails.add(email.toLowerCase());
+                    validCount++;
+                    parsedBulkUsers.push({
+                        username,
+                        email,
+                        full_name: fullName,
+                        gender,
+                        department,
+                        position,
+                        supervisor: supervisorIdent,
+                        supervisor_id: matchedSupervisor.id
+                    });
+                } else {
+                    invalidCount++;
+                }
+
+                const badge = isValid
+                    ? `<span style="background: #e6f7ec; color: #166534; font-size: 0.75rem; padding: 2px 6px; border-radius: 4px; font-weight: 600;">Valid</span>`
+                    : `<span style="background: #fee2e2; color: #991b1b; font-size: 0.75rem; padding: 2px 6px; border-radius: 4px; font-weight: 600;" title="${escapeAttr(errors.join(', '))}">Invalid</span>`;
+
+                return `
+                    <tr style="${!isValid ? 'background-color: #fff5f5;' : ''}">
+                        <td style="padding: 4px 8px; font-size: 0.85rem;">#${rowNum}</td>
+                        <td style="padding: 4px 8px; font-size: 0.85rem;">${escapeAttr(fullName)}</td>
+                        <td style="padding: 4px 8px; font-size: 0.85rem;">${escapeAttr(username)}</td>
+                        <td style="padding: 4px 8px; font-size: 0.85rem;">${escapeAttr(email)}</td>
+                        <td style="padding: 4px 8px; font-size: 0.85rem;">${escapeAttr(department)} / ${escapeAttr(position)}</td>
+                        <td style="padding: 4px 8px; font-size: 0.85rem;">${escapeAttr(matchedSupervisor ? matchedSupervisor.full_name : supervisorIdent)}</td>
+                        <td style="padding: 4px 8px; font-size: 0.85rem;">${badge} ${!isValid ? `<span style="color: #991b1b; font-size: 0.75rem; display: block;">${escapeAttr(errors.join(', '))}</span>` : ''}</td>
+                    </tr>
+                `;
+            }).join('');
+
+            previewDiv.style.display = 'block';
+            previewDiv.innerHTML = `
+                <table style="width: 100%; border-collapse: collapse;">
+                    <thead>
+                        <tr style="text-align: left; border-bottom: 1px solid var(--border-color); font-size: 0.8rem; color: var(--text-muted, #64748b);">
+                            <th style="padding: 4px 8px;">Row</th>
+                            <th style="padding: 4px 8px;">Name</th>
+                            <th style="padding: 4px 8px;">Username</th>
+                            <th style="padding: 4px 8px;">Email</th>
+                            <th style="padding: 4px 8px;">Dept / Position</th>
+                            <th style="padding: 4px 8px;">Supervisor</th>
+                            <th style="padding: 4px 8px;">Status</th>
+                        </tr>
+                    </thead>
+                    <tbody>${previewRowsHtml}</tbody>
+                </table>
+            `;
+
+            if (invalidCount > 0) {
+                summaryDiv.innerHTML = `<span style="color: var(--danger-color);">${invalidCount} invalid row(s) found. Fix all rows before importing.</span> (${validCount} valid / ${rows.length} total)`;
+                submitBtn.disabled = true;
+                submitBtn.classList.add('btn-secondary');
+                submitBtn.classList.remove('btn-success');
+            } else if (validCount === 0) {
+                summaryDiv.textContent = 'No records found in CSV';
+                submitBtn.disabled = true;
+                submitBtn.classList.add('btn-secondary');
+                submitBtn.classList.remove('btn-success');
+            } else {
+                summaryDiv.innerHTML = `<span style="color: var(--success-color);">${validCount} record(s) ready to import.</span>`;
+                submitBtn.disabled = false;
+                submitBtn.classList.remove('btn-secondary');
+                submitBtn.classList.add('btn-success');
+            }
+        }
+
+        async function submitBulkUsers() {
+            if (!parsedBulkUsers || parsedBulkUsers.length === 0) return;
+
+            const submitBtn = document.getElementById('bulk-import-submit-btn');
+            if (submitBtn) {
+                submitBtn.disabled = true;
+                submitBtn.textContent = 'Importing...';
+            }
+
+            const result = await APIClient.post('admin.php?action=bulk_create_users', {
+                users: parsedBulkUsers
+            });
+
+            if (result.success) {
+                UIManager.hideModal();
+                UIManager.showAlert(result.message || 'Accounts created successfully', 'success');
+                await loadUsersData();
+            } else {
+                if (submitBtn) {
+                    submitBtn.disabled = false;
+                    submitBtn.textContent = 'Import Accounts';
+                }
+                const errorMsg = result.errors && result.errors.length > 0
+                    ? result.errors.map(e => `Row ${e.row}: ${e.errors.join(', ')}`).join('<br>')
+                    : (result.message || 'Failed to import users');
+                UIManager.showAlert(errorMsg, 'danger');
+            }
+        }
+
+        // Hierarchy: ADMIN staff report to admin, Deans report to HR, other academic positions report to their department's Dean
+        function getEligibleSupervisors(department, position, excludeId) {
+            return allUsersData.filter(s => {
+                if ((Number(s.is_active) === 0 && Number(s.password_set) === 1) || Number(s.id) === Number(excludeId)) return false;
+                if (s.role === 'admin') return true;
+                if (department === 'ADMIN') return s.role === 'admin';
+                if (position === 'Dean') return s.role === 'hr';
+                if (position) return s.role === 'manager' && s.department === department;
+                return false;
+            });
+        }
+
+        function escapeAttr(str) {
+            if (str === null || str === undefined) return '';
+            return String(str)
+                .replace(/&/g, '&amp;')
+                .replace(/"/g, '&quot;')
+                .replace(/'/g, '&#39;')
+                .replace(/</g, '&lt;')
+                .replace(/>/g, '&gt;');
+        }
+
+        function csvEscape(value) {
+            if (value === null || value === undefined) return '';
+            const str = String(value);
+            return /[",\n\r]/.test(str) ? '"' + str.replace(/"/g, '""') + '"' : str;
+        }
+
+        initAdmin();
+    </script>
+</body>
+</html>

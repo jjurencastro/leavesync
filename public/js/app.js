@@ -476,6 +476,19 @@ function initUserMenu(user) {
     }
 }
 
+// Wire up the top-left hamburger menu (admin section navigation dropdown)
+function initHamburgerMenu() {
+    const toggle = document.getElementById('hamburger-toggle');
+    const dropdown = document.getElementById('hamburger-dropdown');
+    if (toggle && dropdown) {
+        toggle.addEventListener('click', (e) => {
+            e.stopPropagation();
+            dropdown.classList.toggle('open');
+        });
+        document.addEventListener('click', () => dropdown.classList.remove('open'));
+    }
+}
+
 // Initialize on page load
 document.addEventListener('DOMContentLoaded', async () => {
     // Send device fingerprint on page load
