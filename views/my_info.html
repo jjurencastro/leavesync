@@ -9,11 +9,17 @@
 <body>
     <div class="app-shell">
         <aside class="sidebar">
-            <div class="sidebar-brand">LeaveSync</div>
+            <a class="sidebar-brand" id="sidebar-brand-link" href="/dashboard">LeaveSync</a>
             <nav class="sidebar-nav" id="sidebar-nav" style="visibility: hidden;">
-                <a href="/dashboard" class="sidebar-link">Dashboard</a>
-                <a href="/new-request" class="sidebar-link">New Request</a>
-                <a href="/my-requests" class="sidebar-link">My Requests</a>
+                <div class="sidebar-group">
+                    <button type="button" class="sidebar-link sidebar-group-toggle" data-toggle-target="leave-requests-submenu">
+                        <span>Leave Requests</span> <span class="caret">&#9662;</span>
+                    </button>
+                    <div class="sidebar-submenu" id="leave-requests-submenu">
+                        <a href="/new-request" class="sidebar-sublink">New Request</a>
+                        <a href="/my-requests" class="sidebar-sublink">My Requests</a>
+                    </div>
+                </div>
                 <a href="/my-info" class="sidebar-link active">My Info</a>
             </nav>
         </aside>
@@ -99,15 +105,39 @@
             const user = await checkAuth();
             initUserMenu(user);
 
-            // Admins/HR only see their own dashboard + My Info links, matching their landing page
-            const soloNavLinks = { admin: 'Admin Dashboard', hr: 'HR Dashboard' };
-            if (soloNavLinks[user.role]) {
-                document.getElementById('sidebar-nav').innerHTML = `
-                    <a href="/${user.role === 'admin' ? 'admin' : 'hr'}" class="sidebar-link">${soloNavLinks[user.role]}</a>
-                    <a href="/my-info" class="sidebar-link active">My Info</a>
-                `;
+            // Admins/HR see their own section links instead of the employee Leave Requests dropdown
+            const roleNav = {
+                admin: {
+                    home: '/admin',
+                    links: `
+                        <a href="/admin/leave-requests" class="sidebar-link">Leave Requests</a>
+                        <div class="sidebar-group">
+                            <button type="button" class="sidebar-link sidebar-group-toggle" data-toggle-target="manage-users-submenu">
+                                <span>Manage Users</span> <span class="caret">&#9662;</span>
+                            </button>
+                            <div class="sidebar-submenu" id="manage-users-submenu">
+                                <a href="/admin/create-employee" class="sidebar-sublink">Create Employee Account</a>
+                                <a href="/admin/manage-users" class="sidebar-sublink">Manage Users &amp; Approval Tiers</a>
+                                <a href="/admin/device-requests" class="sidebar-sublink">Device Change Requests</a>
+                            </div>
+                        </div>
+                    `
+                },
+                hr: {
+                    home: '/hr',
+                    links: `
+                        <a href="/hr/leave-requests" class="sidebar-link">Leave Requests</a>
+                        <a href="/hr/device-requests" class="sidebar-link">Device Change Requests</a>
+                    `
+                }
+            };
+            if (roleNav[user.role]) {
+                document.getElementById('sidebar-brand-link').setAttribute('href', roleNav[user.role].home);
+                document.getElementById('sidebar-nav').innerHTML = roleNav[user.role].links +
+                    '<a href="/my-info" class="sidebar-link active">My Info</a>';
             }
             document.getElementById('sidebar-nav').style.visibility = 'visible';
+            initSidebarMenu();
         })();
 
         // Load profile

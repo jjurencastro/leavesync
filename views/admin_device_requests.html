@@ -11,22 +11,15 @@
         <aside class="sidebar">
             <a class="sidebar-brand" href="/admin">LeaveSync</a>
             <nav class="sidebar-nav">
+                <a href="/admin/leave-requests" class="sidebar-link">Leave Requests</a>
                 <div class="sidebar-group">
-                    <button type="button" class="sidebar-link sidebar-group-toggle open" data-toggle-target="admin-submenu">
-                        <span>Admin Dashboard</span> <span class="caret">&#9662;</span>
+                    <button type="button" class="sidebar-link sidebar-group-toggle open" data-toggle-target="manage-users-submenu">
+                        <span>Manage Users</span> <span class="caret">&#9662;</span>
                     </button>
-                    <div class="sidebar-submenu open" id="admin-submenu">
-                        <a href="/admin/leave-requests" class="sidebar-sublink">Leave Requests</a>
-                        <div class="sidebar-subgroup">
-                            <button type="button" class="sidebar-sublink sidebar-subgroup-toggle open" data-toggle-target="manage-users-submenu">
-                                <span>Manage Users</span> <span class="caret">&#9662;</span>
-                            </button>
-                            <div class="sidebar-subsubmenu open" id="manage-users-submenu">
-                                <a href="/admin/create-employee" class="sidebar-subsublink">Create Employee Account</a>
-                                <a href="/admin/manage-users" class="sidebar-subsublink">Manage Users &amp; Approval Tiers</a>
-                                <a href="/admin/device-requests" class="sidebar-subsublink active">Device Change Requests</a>
-                            </div>
-                        </div>
+                    <div class="sidebar-submenu open" id="manage-users-submenu">
+                        <a href="/admin/create-employee" class="sidebar-sublink">Create Employee Account</a>
+                        <a href="/admin/manage-users" class="sidebar-sublink">Manage Users &amp; Approval Tiers</a>
+                        <a href="/admin/device-requests" class="sidebar-sublink active">Device Change Requests</a>
                     </div>
                 </div>
                 <a href="/my-info" class="sidebar-link">My Info</a>

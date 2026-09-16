@@ -476,7 +476,7 @@ function initUserMenu(user) {
     }
 }
 
-// Wire up collapsible sidebar sections (e.g. Admin Dashboard > Manage Users)
+// Wire up collapsible sidebar sections (e.g. Manage Users, Leave Requests)
 function initSidebarMenu() {
     document.querySelectorAll('[data-toggle-target]').forEach(toggle => {
         toggle.addEventListener('click', (e) => {

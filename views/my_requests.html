@@ -9,11 +9,17 @@
 <body>
     <div class="app-shell">
         <aside class="sidebar">
-            <div class="sidebar-brand">LeaveSync</div>
+            <a class="sidebar-brand" href="/dashboard">LeaveSync</a>
             <nav class="sidebar-nav">
-                <a href="/dashboard" class="sidebar-link">Dashboard</a>
-                <a href="/new-request" class="sidebar-link">New Request</a>
-                <a href="/my-requests" class="sidebar-link active">My Requests</a>
+                <div class="sidebar-group">
+                    <button type="button" class="sidebar-link sidebar-group-toggle open" data-toggle-target="leave-requests-submenu">
+                        <span>Leave Requests</span> <span class="caret">&#9662;</span>
+                    </button>
+                    <div class="sidebar-submenu open" id="leave-requests-submenu">
+                        <a href="/new-request" class="sidebar-sublink">New Request</a>
+                        <a href="/my-requests" class="sidebar-sublink active">My Requests</a>
+                    </div>
+                </div>
                 <a href="/my-info" class="sidebar-link">My Info</a>
             </nav>
         </aside>
@@ -83,6 +89,7 @@
                 window.location.href = landingPages[currentUser.role];
             }
             initUserMenu(currentUser);
+            initSidebarMenu();
             loadRequests();
         })();
 

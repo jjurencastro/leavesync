@@ -174,10 +174,9 @@ p {
     backdrop-filter: blur(10px);
 }
 
-/* Collapsible "Admin Dashboard" section in the sidebar: Leave Requests +
-   a nested "Manage Users" group, expanded/collapsed via data-toggle-target */
-.sidebar-group-toggle,
-.sidebar-subgroup-toggle {
+/* Collapsible sidebar sections (e.g. Manage Users, Leave Requests),
+   expanded/collapsed via data-toggle-target */
+.sidebar-group-toggle {
     width: 100%;
     background: none;
     border: none;
@@ -189,30 +188,23 @@ p {
     align-items: center;
 }
 
-.sidebar-group-toggle .caret,
-.sidebar-subgroup-toggle .caret {
+.sidebar-group-toggle .caret {
     transition: transform 0.2s;
     font-size: 0.8em;
 }
 
-.sidebar-group-toggle.open .caret,
-.sidebar-subgroup-toggle.open .caret {
+.sidebar-group-toggle.open .caret {
     transform: rotate(180deg);
 }
 
-.sidebar-submenu,
-.sidebar-subsubmenu {
+.sidebar-submenu {
     display: none;
     flex-direction: column;
-}
-
-.sidebar-submenu.open,
-.sidebar-subsubmenu.open {
-    display: flex;
-}
-
-.sidebar-submenu {
     background: rgba(0, 0, 0, 0.15);
+}
+
+.sidebar-submenu.open {
+    display: flex;
 }
 
 .sidebar-sublink {
@@ -229,25 +221,6 @@ p {
 }
 
 .sidebar-sublink.active {
-    color: #ffffff;
-    font-weight: 600;
-    border-left-color: #69a8ff;
-}
-
-.sidebar-subsublink {
-    padding: 0.5rem 1.5rem 0.5rem 3rem;
-    text-decoration: none;
-    color: #a9bdd4;
-    font-size: 0.88rem;
-    border-left: 3px solid transparent;
-}
-
-.sidebar-subsublink:hover {
-    background: rgba(255, 255, 255, 0.08);
-    color: #ffffff;
-}
-
-.sidebar-subsublink.active {
     color: #ffffff;
     font-weight: 600;
     border-left-color: #69a8ff;
