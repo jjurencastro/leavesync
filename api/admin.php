@@ -253,7 +253,13 @@ function bulkCreateUsers($payload) {
         $gender = strtolower(trim($row['gender'] ?? ''));
         $department = trim($row['department'] ?? '');
         $position = trim($row['position'] ?? '');
-        $supervisorIdentifier = trim($row['supervisor'] ?? ($row['supervisor_id'] ?? ''));
+        // Prefer the client-resolved numeric supervisor_id (the 'supervisor' column may contain
+        // a display string like "Full Name (username)" from the Excel template, which isn't a
+        // valid username/email lookup on its own).
+        $supervisorRaw = trim($row['supervisor'] ?? '');
+        $supervisorId = trim((string) ($row['supervisor_id'] ?? ''));
+        $supervisorIdentifier = $supervisorId !== '' ? $supervisorId : $supervisorRaw;
+        $supervisorLabel = $supervisorRaw !== '' ? $supervisorRaw : $supervisorIdentifier;
 
         $rowErrors = [];
 
@@ -291,7 +297,7 @@ function bulkCreateUsers($payload) {
         } else {
             $supervisorUser = UserRegistration::resolveEligibleSupervisor($supervisorIdentifier, 0, $department, $position);
             if (!$supervisorUser) {
-                $rowErrors[] = "Supervisor '{$supervisorIdentifier}' is not eligible or not found for department '{$department}'";
+                $rowErrors[] = "Supervisor '{$supervisorLabel}' is not eligible or not found for department '{$department}'";
             }
         }
 
