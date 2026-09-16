@@ -418,6 +418,7 @@
             const deptSelect = document.getElementById(`managed-department-${id}`);
             const positionSelect = document.getElementById(`managed-position-${id}`);
             const supervisorSelect = document.getElementById(`managed-supervisor-${id}`);
+            const roleSelect = document.getElementById(`managed-role-${id}`);
             if (!deptSelect || !positionSelect || !supervisorSelect) return;
 
             const department = deptSelect.value;
@@ -436,6 +437,15 @@
             }
 
             supervisorSelect.innerHTML = `<option value="">Select supervisor</option>${buildOptions(eligibleSupervisors, selectedSupervisor, 'id', 'full_name')}`;
+
+            // Keep the tier/role suggestion in sync with the newly selected position
+            // (e.g. Dean -> manager, Instructor -> employee) so it doesn't stay stuck
+            // at whatever tier the previous position implied.
+            const suggestedRole = departmentPositionsData.position_role_map?.[position];
+            if (roleSelect && suggestedRole && !(user && position === user.position)) {
+                roleSelect.value = suggestedRole;
+            }
+
             markManagedUserDirty(id);
         }
 

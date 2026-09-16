@@ -333,6 +333,7 @@ class UserRegistration {
         return [
             'departments' => self::ALLOWED_DEPARTMENTS,
             'department_positions' => self::DEPARTMENT_POSITIONS,
+            'position_role_map' => self::POSITION_ROLE_MAP,
         ];
     }
 
