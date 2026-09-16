@@ -235,7 +235,8 @@
                 const tbody = document.querySelector('#devices-table tbody');
                 tbody.innerHTML = '';
 
-                if (devicesResult.data.length === 0) {5" class="text-center">No trusted devices</td></tr>';
+                if (devicesResult.data.length === 0) {
+                    tbody.innerHTML = '<tr><td colspan="5" class="text-center">No trusted devices</td></tr>';
                 } else {
                     devicesResult.data.forEach(device => {
                         let osDevice = 'Unknown';
@@ -248,8 +249,7 @@
                         const row = document.createElement('tr');
                         row.innerHTML = `
                             <td>${device.browser_info}</td>
-                            <td>${osDevice
-                            <td>${device.browser_info}</td>
+                            <td>${osDevice}</td>
                             <td>${device.ip_address}</td>
                             <td>${UIManager.formatDate(device.last_used)}</td>
                             <td><button class="btn btn-small btn-danger" onclick="removeDevice(${device.id})">Remove</button></td>
