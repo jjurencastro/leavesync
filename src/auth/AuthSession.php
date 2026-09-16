@@ -65,13 +65,17 @@ class AuthSession {
             $db = Database::getInstance();
 
             $user = $db->getRow(
-                "SELECT id, username, email, password_hash, is_active, role FROM users WHERE username = ?",
+                "SELECT id, username, email, password_hash, is_active, password_set, role FROM users WHERE username = ?",
                 [$username]
             );
 
             if (!$user) {
                 AuditLogger::log(null, 'login_failed', 'user', null, ['username' => $username]);
                 return ['success' => false, 'message' => 'Invalid credentials'];
+            }
+
+            if (!$user['password_set']) {
+                return ['success' => false, 'message' => 'Please continue with Google to set up and activate your account.'];
             }
 
             if (!$user['is_active']) {
