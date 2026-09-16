@@ -476,17 +476,17 @@ function initUserMenu(user) {
     }
 }
 
-// Wire up the top-left hamburger menu (admin section navigation dropdown)
-function initHamburgerMenu() {
-    const toggle = document.getElementById('hamburger-toggle');
-    const dropdown = document.getElementById('hamburger-dropdown');
-    if (toggle && dropdown) {
+// Wire up collapsible sidebar sections (e.g. Admin Dashboard > Manage Users)
+function initSidebarMenu() {
+    document.querySelectorAll('[data-toggle-target]').forEach(toggle => {
         toggle.addEventListener('click', (e) => {
-            e.stopPropagation();
-            dropdown.classList.toggle('open');
+            e.preventDefault();
+            const target = document.getElementById(toggle.dataset.toggleTarget);
+            if (!target) return;
+            target.classList.toggle('open');
+            toggle.classList.toggle('open');
         });
-        document.addEventListener('click', () => dropdown.classList.remove('open'));
-    }
+    });
 }
 
 // Initialize on page load

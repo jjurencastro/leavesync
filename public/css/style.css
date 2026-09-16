@@ -168,83 +168,89 @@ p {
     border-bottom: 1px solid var(--border-color);
     padding: 0.8rem 2rem;
     display: flex;
-    justify-content: space-between;
+    justify-content: flex-end;
     align-items: center;
     min-height: 4.25rem;
     backdrop-filter: blur(10px);
 }
 
-.hamburger-menu {
-    position: relative;
-}
-
-.hamburger-toggle {
+/* Collapsible "Admin Dashboard" section in the sidebar: Leave Requests +
+   a nested "Manage Users" group, expanded/collapsed via data-toggle-target */
+.sidebar-group-toggle,
+.sidebar-subgroup-toggle {
+    width: 100%;
     background: none;
     border: none;
+    font: inherit;
+    text-align: left;
     cursor: pointer;
-    padding: 0.5rem;
-    border-radius: 6px;
     display: flex;
-    flex-direction: column;
-    justify-content: center;
-    gap: 5px;
-    width: 2.5rem;
-    height: 2.5rem;
+    justify-content: space-between;
+    align-items: center;
 }
 
-.hamburger-toggle:hover {
-    background: var(--light-bg);
+.sidebar-group-toggle .caret,
+.sidebar-subgroup-toggle .caret {
+    transition: transform 0.2s;
+    font-size: 0.8em;
 }
 
-.hamburger-toggle span {
-    display: block;
-    width: 1.4rem;
-    height: 2px;
-    background: var(--text-color);
-    border-radius: 2px;
+.sidebar-group-toggle.open .caret,
+.sidebar-subgroup-toggle.open .caret {
+    transform: rotate(180deg);
 }
 
-.hamburger-dropdown {
+.sidebar-submenu,
+.sidebar-subsubmenu {
     display: none;
-    position: absolute;
-    left: 0;
-    top: 100%;
-    background: white;
-    border: 1px solid var(--border-color);
-    border-radius: 6px;
-    box-shadow: 0 4px 12px rgba(0,0,0,0.1);
-    min-width: 260px;
-    z-index: 10;
-    overflow: hidden;
+    flex-direction: column;
 }
 
-.hamburger-dropdown.open {
-    display: block;
+.sidebar-submenu.open,
+.sidebar-subsubmenu.open {
+    display: flex;
 }
 
-.hamburger-section-title {
-    padding: 0.6rem 1rem 0.4rem;
-    font-size: 0.75rem;
-    font-weight: 700;
-    text-transform: uppercase;
-    letter-spacing: 0.04em;
-    color: var(--text-muted, #64748b);
+.sidebar-submenu {
+    background: rgba(0, 0, 0, 0.15);
 }
 
-.hamburger-dropdown a {
-    display: block;
-    padding: 0.6rem 1rem;
-    color: var(--text-color);
+.sidebar-sublink {
+    padding: 0.6rem 1.5rem 0.6rem 2.25rem;
     text-decoration: none;
+    color: #c8d6e5;
+    font-size: 0.92rem;
+    border-left: 3px solid transparent;
 }
 
-.hamburger-dropdown a:hover {
-    background: var(--light-bg);
+.sidebar-sublink:hover {
+    background: rgba(255, 255, 255, 0.08);
+    color: #ffffff;
 }
 
-.hamburger-dropdown a.active {
-    color: var(--primary-color);
+.sidebar-sublink.active {
+    color: #ffffff;
     font-weight: 600;
+    border-left-color: #69a8ff;
+}
+
+.sidebar-subsublink {
+    padding: 0.5rem 1.5rem 0.5rem 3rem;
+    text-decoration: none;
+    color: #a9bdd4;
+    font-size: 0.88rem;
+    border-left: 3px solid transparent;
+}
+
+.sidebar-subsublink:hover {
+    background: rgba(255, 255, 255, 0.08);
+    color: #ffffff;
+}
+
+.sidebar-subsublink.active {
+    color: #ffffff;
+    font-weight: 600;
+    border-left-color: #69a8ff;
 }
 
 .user-menu {
