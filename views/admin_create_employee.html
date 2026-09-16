@@ -45,7 +45,7 @@
             <div class="card-header" style="display: flex; justify-content: space-between; align-items: center; gap: 0.75rem; flex-wrap: wrap;">
                 <h2 style="margin: 0;">Create Employee Account</h2>
                 <div style="display: flex; gap: 0.5rem; flex-wrap: wrap;">
-                    <button type="button" class="btn btn-small btn-secondary" onclick="downloadCsvTemplate()">Download CSV Template</button>
+                    <button type="button" class="btn btn-small btn-secondary" onclick="downloadCsvTemplate()">Download Template</button>
                     <button type="button" class="btn btn-small btn-primary" onclick="openBulkUploadModal()">Bulk Upload CSV</button>
                 </div>
             </div>
@@ -171,24 +171,9 @@
         }
 
         function downloadCsvTemplate() {
-            const headers = ['username', 'email', 'full_name', 'gender', 'department', 'position', 'supervisor'];
-            const sampleRows = [
-                ['jdelacruz', 'jdelacruz@g.batstate-u.edu.ph', 'Juan Dela Cruz', 'male', 'CCS', 'Instructor', 'admin'],
-                ['mreyes', 'mreyes@g.batstate-u.edu.ph', 'Maria Reyes', 'female', 'ADMIN', 'HR Officer', 'admin'],
-                ['rsantos', 'rsantos@g.batstate-u.edu.ph', 'Roberto Santos', 'male', 'CTE', 'Dean', 'hr']
-            ];
-            const lines = [
-                headers.join(','),
-                ...sampleRows.map(row => row.map(csvEscape).join(','))
-            ];
-            const blob = new Blob(['\uFEFF' + lines.join('\r\n')], { type: 'text/csv;charset=utf-8;' });
-            const link = document.createElement('a');
-            link.href = URL.createObjectURL(blob);
-            link.download = 'leavesync_user_upload_template.csv';
-            document.body.appendChild(link);
-            link.click();
-            document.body.removeChild(link);
-            URL.revokeObjectURL(link.href);
+            // Server-generated: an .xlsx with dropdown lists for gender/department/position/supervisor
+            // pulled live from the database (falls back to a plain CSV if the server can't build one).
+            window.location.href = 'admin.php?action=download_template';
         }
 
         let parsedBulkUsers = [];
@@ -198,7 +183,8 @@
             const content = `
                 <div style="display: flex; flex-direction: column; gap: 1rem;">
                     <p style="margin: 0; color: var(--text-muted, #64748b); font-size: 0.9rem;">
-                        Upload a CSV file containing employee account records. The supervisor column accepts the supervisor's username or institutional email.
+                        Download the template, fill it in using the dropdown lists for gender, department, position, and supervisor,
+                        then save it as CSV and upload it here. The supervisor column also accepts a plain username or institutional email.
                     </p>
                     <div style="display: flex; gap: 0.5rem; align-items: center; flex-wrap: wrap;">
                         <input type="file" id="bulk-csv-file" accept=".csv,text/csv" class="form-control" style="flex: 1; min-width: 220px;" onchange="handleBulkCsvSelect(event)">
@@ -262,7 +248,10 @@
 
         function resolveSupervisorClient(identifier, department, position) {
             if (!identifier) return null;
-            const identStr = String(identifier).trim().toLowerCase();
+            let identStr = String(identifier).trim().toLowerCase();
+            // Template dropdown values look like "Full Name (username)"; pull the username out of the parentheses
+            const parenMatch = identStr.match(/\(([^)]+)\)\s*$/);
+            if (parenMatch) identStr = parenMatch[1].trim();
             const eligible = getEligibleSupervisors(department, position, 0);
             return eligible.find(s =>
                 String(s.id) === identStr ||
@@ -460,12 +449,6 @@
                 .replace(/'/g, '&#39;')
                 .replace(/</g, '&lt;')
                 .replace(/>/g, '&gt;');
-        }
-
-        function csvEscape(value) {
-            if (value === null || value === undefined) return '';
-            const str = String(value);
-            return /[",\n\r]/.test(str) ? '"' + str.replace(/"/g, '""') + '"' : str;
         }
 
         initAdmin();

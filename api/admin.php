@@ -105,6 +105,10 @@ try {
             echo json_encode(getStatistics());
             break;
 
+        case 'download_template':
+            downloadUserTemplate();
+            exit;
+
         default:
             throw new Exception('Invalid action');
     }
@@ -593,5 +597,183 @@ function getStatistics() {
     ];
 
     return ['success' => true, 'data' => $stats];
+}
+
+/**
+ * Streams the bulk-upload template. When ext-zip is available we build a real
+ * .xlsx with dropdown data validation for gender/department/position/supervisor
+ * (sourced live from the database) so admins just pick from lists instead of
+ * guessing valid values; otherwise we fall back to a plain sample CSV.
+ */
+function downloadUserTemplate() {
+    global $db;
+
+    require_once __DIR__ . '/../src/auth/UserRegistration.php';
+    $deptOptions = UserRegistration::getDepartmentOptions();
+    $departments = $deptOptions['departments'];
+    $positions = [];
+    foreach ($deptOptions['department_positions'] as $deptPositions) {
+        foreach ($deptPositions as $position) {
+            $positions[$position] = true;
+        }
+    }
+    $positions = array_keys($positions);
+    sort($positions);
+
+    $supervisorRows = $db->getResults(
+        "SELECT full_name, username FROM users WHERE role IN ('admin', 'hr', 'manager') AND is_active = 1 ORDER BY full_name"
+    );
+    $supervisors = array_map(function ($s) {
+        return $s['full_name'] . ' (' . $s['username'] . ')';
+    }, $supervisorRows);
+
+    if (class_exists('ZipArchive')) {
+        buildXlsxTemplate($departments, $positions, $supervisors);
+    } else {
+        buildCsvTemplateFallback();
+    }
+}
+
+function xmlEscape($value) {
+    return htmlspecialchars((string) $value, ENT_QUOTES | ENT_XML1, 'UTF-8');
+}
+
+function buildXlsxTemplate($departments, $positions, $supervisors) {
+    $genders = ['Male', 'Female'];
+    $maxDataRow = 300; // generous row allowance for bulk entry
+
+    $headerCells = ['username', 'email', 'full_name', 'gender', 'department', 'position', 'supervisor'];
+    $headerRowXml = '<row r="1">';
+    foreach ($headerCells as $i => $label) {
+        $col = chr(65 + $i);
+        $headerRowXml .= '<c r="' . $col . '1" t="inlineStr" s="1"><is><t>' . xmlEscape($label) . '</t></is></c>';
+    }
+    $headerRowXml .= '</row>';
+
+    $lastRow = max(count($genders), count($departments), count($positions), count($supervisors)) + 1;
+    $listsColumns = ['A' => $genders, 'B' => $departments, 'C' => $positions, 'D' => $supervisors];
+    $listsHeaderXml = '<row r="1">'
+        . '<c r="A1" t="inlineStr"><is><t>Gender</t></is></c>'
+        . '<c r="B1" t="inlineStr"><is><t>Department</t></is></c>'
+        . '<c r="C1" t="inlineStr"><is><t>Position</t></is></c>'
+        . '<c r="D1" t="inlineStr"><is><t>Supervisor</t></is></c>'
+        . '</row>';
+    $listsRowsXml = '';
+    for ($r = 2; $r <= $lastRow; $r++) {
+        $rowXml = '';
+        foreach ($listsColumns as $col => $values) {
+            $value = $values[$r - 2] ?? null;
+            if ($value !== null && $value !== '') {
+                $rowXml .= '<c r="' . $col . $r . '" t="inlineStr"><is><t>' . xmlEscape($value) . '</t></is></c>';
+            }
+        }
+        if ($rowXml !== '') {
+            $listsRowsXml .= '<row r="' . $r . '">' . $rowXml . '</row>';
+        }
+    }
+
+    $genderRange = 'Lists!$A$2:$A$' . (count($genders) + 1);
+    $deptRange = 'Lists!$B$2:$B$' . (count($departments) + 1);
+    $posRange = 'Lists!$C$2:$C$' . (count($positions) + 1);
+    $supRange = 'Lists!$D$2:$D$' . (count($supervisors) + 1);
+
+    $sheet1 = '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>'
+        . '<worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main">'
+        . '<dimension ref="A1:G' . $maxDataRow . '"/>'
+        . '<sheetViews><sheetView tabSelected="1" workbookViewId="0"><pane ySplit="1" topLeftCell="A2" activePane="bottomLeft" state="frozen"/></sheetView></sheetViews>'
+        . '<cols><col min="1" max="7" width="24" customWidth="1"/></cols>'
+        . '<sheetData>' . $headerRowXml . '</sheetData>'
+        . '<dataValidations count="4">'
+        . '<dataValidation type="list" allowBlank="1" showInputMessage="1" showErrorMessage="1" sqref="D2:D' . $maxDataRow . '"><formula1>' . $genderRange . '</formula1></dataValidation>'
+        . '<dataValidation type="list" allowBlank="1" showInputMessage="1" showErrorMessage="1" sqref="E2:E' . $maxDataRow . '"><formula1>' . $deptRange . '</formula1></dataValidation>'
+        . '<dataValidation type="list" allowBlank="1" showInputMessage="1" showErrorMessage="1" sqref="F2:F' . $maxDataRow . '"><formula1>' . $posRange . '</formula1></dataValidation>'
+        . '<dataValidation type="list" allowBlank="1" showInputMessage="1" showErrorMessage="1" sqref="G2:G' . $maxDataRow . '"><formula1>' . $supRange . '</formula1></dataValidation>'
+        . '</dataValidations>'
+        . '</worksheet>';
+
+    $sheet2 = '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>'
+        . '<worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main">'
+        . '<dimension ref="A1:D' . $lastRow . '"/>'
+        . '<sheetData>' . $listsHeaderXml . $listsRowsXml . '</sheetData>'
+        . '</worksheet>';
+
+    $contentTypes = '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>'
+        . '<Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types">'
+        . '<Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/>'
+        . '<Default Extension="xml" ContentType="application/xml"/>'
+        . '<Override PartName="/xl/workbook.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet.main+xml"/>'
+        . '<Override PartName="/xl/worksheets/sheet1.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.worksheet+xml"/>'
+        . '<Override PartName="/xl/worksheets/sheet2.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.worksheet+xml"/>'
+        . '<Override PartName="/xl/styles.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.styles+xml"/>'
+        . '</Types>';
+
+    $rootRels = '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>'
+        . '<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">'
+        . '<Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="xl/workbook.xml"/>'
+        . '</Relationships>';
+
+    $workbookRels = '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>'
+        . '<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">'
+        . '<Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet" Target="worksheets/sheet1.xml"/>'
+        . '<Relationship Id="rId2" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet" Target="worksheets/sheet2.xml"/>'
+        . '<Relationship Id="rId3" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/styles" Target="styles.xml"/>'
+        . '</Relationships>';
+
+    $workbook = '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>'
+        . '<workbook xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships">'
+        . '<sheets>'
+        . '<sheet name="Employees" sheetId="1" r:id="rId1"/>'
+        . '<sheet name="Lists" sheetId="2" r:id="rId2" state="hidden"/>'
+        . '</sheets>'
+        . '</workbook>';
+
+    $styles = '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>'
+        . '<styleSheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main">'
+        . '<fonts count="2"><font><sz val="11"/><name val="Calibri"/></font><font><b/><sz val="11"/><name val="Calibri"/></font></fonts>'
+        . '<fills count="2"><fill><patternFill patternType="none"/></fill><fill><patternFill patternType="gray125"/></fill></fills>'
+        . '<borders count="1"><border><left/><right/><top/><bottom/><diagonal/></border></borders>'
+        . '<cellStyleXfs count="1"><xf numFmtId="0" fontId="0" fillId="0" borderId="0"/></cellStyleXfs>'
+        . '<cellXfs count="2"><xf numFmtId="0" fontId="0" fillId="0" borderId="0" xfId="0"/><xf numFmtId="0" fontId="1" fillId="0" borderId="0" xfId="0" applyFont="1"/></cellXfs>'
+        . '<cellStyles count="1"><cellStyle name="Normal" xfId="0" builtinId="0"/></cellStyles>'
+        . '</styleSheet>';
+
+    $tmpFile = tempnam(sys_get_temp_dir(), 'lsxlsx');
+    $zip = new ZipArchive();
+    $opened = $zip->open($tmpFile, ZipArchive::CREATE | ZipArchive::OVERWRITE);
+    if ($opened !== true) {
+        throw new Exception('Failed to build the template file');
+    }
+    $zip->addFromString('[Content_Types].xml', $contentTypes);
+    $zip->addFromString('_rels/.rels', $rootRels);
+    $zip->addFromString('xl/workbook.xml', $workbook);
+    $zip->addFromString('xl/_rels/workbook.xml.rels', $workbookRels);
+    $zip->addFromString('xl/styles.xml', $styles);
+    $zip->addFromString('xl/worksheets/sheet1.xml', $sheet1);
+    $zip->addFromString('xl/worksheets/sheet2.xml', $sheet2);
+    $zip->close();
+
+    header('Content-Type: application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+    header('Content-Disposition: attachment; filename="leavesync_user_upload_template.xlsx"');
+    header('Content-Length: ' . filesize($tmpFile));
+    readfile($tmpFile);
+    unlink($tmpFile);
+}
+
+function buildCsvTemplateFallback() {
+    $headers = ['username', 'email', 'full_name', 'gender', 'department', 'position', 'supervisor'];
+    $sampleRows = [
+        ['jdelacruz', 'jdelacruz@g.batstate-u.edu.ph', 'Juan Dela Cruz', 'male', 'CCS', 'Instructor', 'admin'],
+        ['mreyes', 'mreyes@g.batstate-u.edu.ph', 'Maria Reyes', 'female', 'ADMIN', 'HR Officer', 'admin'],
+    ];
+
+    header('Content-Type: text/csv; charset=utf-8');
+    header('Content-Disposition: attachment; filename="leavesync_user_upload_template.csv"');
+    echo "\xEF\xBB\xBF"; // BOM so Excel opens the UTF-8 file with correct encoding
+    $out = fopen('php://output', 'w');
+    fputcsv($out, $headers);
+    foreach ($sampleRows as $row) {
+        fputcsv($out, $row);
+    }
+    fclose($out);
 }
 ?>
