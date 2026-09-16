@@ -30,13 +30,42 @@
             </header>
 
     <div class="container page-container">
-        <h1>Leave Requests Awaiting HR Approval</h1>
+        <h1>Leave Requests</h1>
 
         <div class="card">
             <div class="card-header">
-                <h2>Leave Requests Awaiting HR Approval</h2>
+                <h2>Leave Requests</h2>
             </div>
             <div class="card-body">
+                <div class="leave-request-filters" style="display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap: 0.75rem; margin-bottom: 1rem;">
+                    <div class="form-group" style="margin: 0;">
+                        <label for="lr-filter-employee">Employee</label>
+                        <input type="text" id="lr-filter-employee" class="form-control" placeholder="Search name" oninput="renderLeaveRequests()">
+                    </div>
+                    <div class="form-group" style="margin: 0;">
+                        <label for="lr-filter-type">Leave Type</label>
+                        <select id="lr-filter-type" class="form-control" onchange="renderLeaveRequests()">
+                            <option value="">All types</option>
+                        </select>
+                    </div>
+                    <div class="form-group" style="margin: 0;">
+                        <label for="lr-filter-hr-status">HR Approval Status</label>
+                        <select id="lr-filter-hr-status" class="form-control" onchange="renderLeaveRequests()">
+                            <option value="">All</option>
+                            <option value="pending">Pending HR Approval</option>
+                            <option value="approved">Approved</option>
+                            <option value="rejected">Rejected</option>
+                        </select>
+                    </div>
+                    <div class="form-group" style="margin: 0;">
+                        <label for="lr-filter-from">From</label>
+                        <input type="date" id="lr-filter-from" class="form-control" onchange="renderLeaveRequests()">
+                    </div>
+                    <div class="form-group" style="margin: 0;">
+                        <label for="lr-filter-to">To</label>
+                        <input type="date" id="lr-filter-to" class="form-control" onchange="renderLeaveRequests()">
+                    </div>
+                </div>
                 <table class="table">
                     <thead>
                         <tr>
@@ -76,17 +105,49 @@
             await loadLeaveRequests();
         }
 
+        let allLeaveRequests = [];
+
         async function loadLeaveRequests() {
             const result = await LeaveRequestManager.listRequests();
-            const tbody = document.getElementById('leave-requests-table');
-            tbody.innerHTML = '';
 
             if (!result.success) {
-                tbody.innerHTML = '<tr><td colspan="7" class="text-center">Failed to load leave requests</td></tr>';
+                document.getElementById('leave-requests-table').innerHTML = '<tr><td colspan="7" class="text-center">Failed to load leave requests</td></tr>';
                 return;
             }
 
-            const requests = result.data || [];
+            allLeaveRequests = result.data || [];
+
+            // Populate the leave-type filter from the loaded requests
+            const typeSelect = document.getElementById('lr-filter-type');
+            const types = [...new Set(allLeaveRequests.map(r => r.leave_type_name).filter(Boolean))].sort();
+            typeSelect.innerHTML = '<option value="">All types</option>' +
+                types.map(t => `<option value="${t}">${t}</option>`).join('');
+
+            renderLeaveRequests();
+        }
+
+        function getFilteredLeaveRequests() {
+            const employee = (document.getElementById('lr-filter-employee').value || '').trim().toLowerCase();
+            const type = document.getElementById('lr-filter-type').value;
+            const hrStatus = document.getElementById('lr-filter-hr-status').value;
+            const from = document.getElementById('lr-filter-from').value;
+            const to = document.getElementById('lr-filter-to').value;
+
+            return allLeaveRequests.filter(req => {
+                if (employee && !(req.full_name || '').toLowerCase().includes(employee)) return false;
+                if (type && req.leave_type_name !== type) return false;
+                if (hrStatus && req.hr_status !== hrStatus) return false;
+                if (from && req.start_date < from) return false;
+                if (to && req.start_date > to) return false;
+                return true;
+            });
+        }
+
+        function renderLeaveRequests() {
+            const tbody = document.getElementById('leave-requests-table');
+            tbody.innerHTML = '';
+
+            const requests = getFilteredLeaveRequests();
 
             if (requests.length === 0) {
                 tbody.innerHTML = '<tr><td colspan="7" class="text-center">No leave requests found</td></tr>';
