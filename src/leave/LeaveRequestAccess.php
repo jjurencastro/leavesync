@@ -18,7 +18,8 @@ class LeaveRequestAccess {
         }
 
         if ($viewer['role'] === 'hr') {
-            return in_array($request['supervisor_status'], ['approved', 'not_required'], true);
+            return $request['status'] === 'rejected'
+                || in_array($request['supervisor_status'], ['approved', 'not_required'], true);
         }
 
         return false;

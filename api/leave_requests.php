@@ -257,7 +257,7 @@ function listLeaveRequests($user) {
                 LIMIT 50";
         $requests = $db->getResults($sql, [$user['id'], $user['id'], $user['id'], $user['id']]);
     } else if ($user['role'] === 'hr') {
-        // HR sees requests that have reached (or passed) the HR stage
+        // HR sees requests awaiting HR review and terminal rejections for recordkeeping.
         $sql = "SELECT lr.*, u.full_name, lt.name as leave_type_name,
                        asup.full_name as assigned_supervisor_name,
                        rsup.full_name as supervisor_name,
@@ -268,6 +268,7 @@ function listLeaveRequests($user) {
                 LEFT JOIN users asup ON lr.assigned_supervisor_id = asup.id
                 LEFT JOIN users rsup ON u.supervisor_id = rsup.id
                 WHERE lr.supervisor_status IN ('approved', 'not_required')
+                   OR lr.status = 'rejected'
                 ORDER BY lr.created_at DESC
                 LIMIT 50";
         $requests = $db->getResults($sql, []);
