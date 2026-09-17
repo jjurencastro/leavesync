@@ -522,7 +522,7 @@ function rejectLeaveRequest($data, $user) {
             throw new Exception('Unauthorized to reject requests');
         }
         $db->execute(
-            "UPDATE leave_requests SET status = 'rejected', supervisor_status = 'rejected', manager_id = ?, manager_comments = ? WHERE id = ?",
+            "UPDATE leave_requests SET status = 'rejected', supervisor_status = 'rejected', hr_status = 'rejected', manager_id = ?, manager_comments = ? WHERE id = ?",
             [$user['id'], $data['comments'] ?? '', $data['id']]
         );
     } elseif ($stage === 'hr') {
