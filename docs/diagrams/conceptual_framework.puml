@@ -7,11 +7,11 @@ skinparam rectangle {
   BorderColor Black
 }
 
-rectangle "INPUT\n----\nEmployee leave request data\n(type, dates, reason)\n\nEmployee account credentials\nand device fingerprint data\n\nSupervisor / HR / Admin\napproval decisions\n\nPasskey (WebAuthn)\nauthenticator assertions\n\nExisting manual leave records\n(Google Forms, HRIS)" as INPUT
+rectangle "INPUT\n----\nExisting (manual) leave process\n\nUser and system requirements\n\nEmployee/account data\n\nLeave information\n(type, dates, reason)\n\nLeave balance information\n\nSecurity requirements\n(MFA, device trust, signatures)\n\nApproval requirements\n(supervisor / HR hierarchy)\n\nSystem development resources\nand tools" as INPUT
 
-rectangle "PROCESS\n----\nAuthenticate user and\nverify MFA / device trust\n\nValidate leave request\n(dates, weekdays, overlap, balance)\n\nReserve leave balance for\npending request\n\nRoute request through\nsupervisor / HR approval hierarchy\n\nVerify digital signature\n(WebAuthn passkey) on approval\n\nUpdate leave balance\n(approve = deduct, reject = restore)\n\nLog actions to audit trail" as PROCESS
+rectangle "PROCESS\n----\nRequirements analysis\n\nSystem design\n\nSystem development\n(implementation)\n\nAuthentication and MFA\n\nDevice verification\n\nLeave validation\n(dates, weekdays, overlap, balance)\n\nApproval routing\n(supervisor / HR hierarchy)\n\nDigital signature verification\n(WebAuthn passkey)\n\nTesting and refinement\n\nSystem integration" as PROCESS
 
-rectangle "OUTPUT\n----\nApproved leave request with\nupdated balance\n\nRejected leave request with\nrestored balance\n\nDigitally signed,\nnon-repudiable approval record\n\nAudit log of leave transactions\n\nLeaveSync leave management system" as OUTPUT
+rectangle "OUTPUT\n----\nDeveloped LeaveSync system\n\nSecure leave submission\n\nAutomated leave validation\n\nControlled approval workflow\n\nDigitally verified approval\n\nUpdated leave balances\n\nAudit records" as OUTPUT
 
 INPUT -down-> PROCESS
 PROCESS -down-> OUTPUT

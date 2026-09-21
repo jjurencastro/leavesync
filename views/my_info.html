@@ -94,6 +94,35 @@
                 </table>
             </div>
         </div>
+
+        <div class="card" id="employee-profile-editor" style="display: none;">
+            <div class="card-header">
+                <h2>Update My Details</h2>
+            </div>
+            <div class="card-body">
+                <div class="form-group">
+                    <label for="edit-full-name">Full Name</label>
+                    <input type="text" id="edit-full-name">
+                </div>
+                <div class="form-group">
+                    <label for="edit-gender">Gender</label>
+                    <select id="edit-gender">
+                        <option value="">Select</option>
+                        <option value="male">Male</option>
+                        <option value="female">Female</option>
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label for="edit-department">Department</label>
+                    <input type="text" id="edit-department">
+                </div>
+                <div class="form-group">
+                    <label for="edit-position">Position</label>
+                    <input type="text" id="edit-position">
+                </div>
+                <button class="btn btn-primary" onclick="submitEmployeeProfileUpdate()">Save Changes</button>
+            </div>
+        </div>
     </div>
         </div>
     </div>
@@ -157,6 +186,31 @@
                 document.getElementById('profile-position').textContent = u.position || '-';
                 document.getElementById('profile-supervisor').textContent = u.supervisor_name || 'None assigned';
                 document.getElementById('profile-gender').textContent = u.gender ? (u.gender.charAt(0).toUpperCase() + u.gender.slice(1)) : '-';
+
+                if (u.role === 'employee') {
+                    document.getElementById('employee-profile-editor').style.display = '';
+                    document.getElementById('edit-full-name').value = u.full_name || '';
+                    document.getElementById('edit-gender').value = u.gender || '';
+                    document.getElementById('edit-department').value = u.department || '';
+                    document.getElementById('edit-position').value = u.position || '';
+                }
+            }
+        }
+
+        async function submitEmployeeProfileUpdate() {
+            const payload = {
+                full_name: document.getElementById('edit-full-name').value.trim(),
+                gender: document.getElementById('edit-gender').value,
+                department: document.getElementById('edit-department').value.trim(),
+                position: document.getElementById('edit-position').value.trim()
+            };
+
+            const result = await AuthManager.updateProfile(payload);
+            if (result.success) {
+                UIManager.showAlert('Profile updated successfully', 'success');
+                loadProfile();
+            } else {
+                UIManager.showAlert(result.message || 'Unable to update profile', 'danger');
             }
         }
     </script>

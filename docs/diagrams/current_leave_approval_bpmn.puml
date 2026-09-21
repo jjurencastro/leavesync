@@ -1,15 +1,20 @@
 @startuml
 !pragma layout smetana
- title Current Leave Approval BPMN-Style Process
+title BPMN Diagram of the Existing Leave Management Process
 
 start
 partition "Employee" {
-  :Complete leave request in Google Form;
+  :Complete leave request form;
   :Submit leave request;
 }
 
-partition "Supervisor / Google Account" {
-  :Receive request;
+partition "Google Forms" {
+  :Record submitted response;
+  :Notify supervisor via Google account;
+}
+
+partition "Supervisor" {
+  :Receive notification;
   :Review leave request;
   if (Approve request?) then (Yes)
     :Enter approved leave in HRIS;

@@ -8,6 +8,8 @@ require_once __DIR__ . '/../src/database/Database.php';
 require_once __DIR__ . '/../src/auth/Auth.php';
 require_once __DIR__ . '/../src/auth/MFA.php';
 require_once __DIR__ . '/../src/security/DeviceFingerprint.php';
+require_once __DIR__ . '/../src/leave/EmployeeNotifications.php';
+require_once __DIR__ . '/../src/leave/EmployeeProfile.php';
 
 header('Content-Type: application/json');
 
@@ -123,6 +125,95 @@ try {
             }
             $user = Auth::getCurrentUser();
             echo json_encode(['success' => true, 'data' => $user]);
+            break;
+
+        case 'update_profile':
+            if (!Auth::isAuthenticated()) {
+                http_response_code(401);
+                throw new Exception('Unauthorized');
+            }
+            $user = Auth::getCurrentUser();
+            if (($user['role'] ?? '') !== 'employee') {
+                throw new Exception('Only employees can update their own profile details');
+            }
+
+            $updates = EmployeeProfile::sanitizeProfileUpdate($data);
+            if (empty($updates)) {
+                throw new Exception('No valid profile fields provided');
+            }
+
+            foreach ($updates as $field => $value) {
+                if (!EmployeeProfile::canEditProfile($user, $field)) {
+                    throw new Exception('This field cannot be edited by employees');
+                }
+                if ($field === 'full_name' && $value === '') {
+                    throw new Exception('Full name is required');
+                }
+                if ($field === 'department' && $value === '') {
+                    throw new Exception('Department is required');
+                }
+                if ($field === 'position' && $value === '') {
+                    throw new Exception('Position is required');
+                }
+            }
+
+            $db = Database::getInstance();
+            $placeholders = [];
+            $values = [];
+            foreach ($updates as $field => $value) {
+                $placeholders[] = "$field = ?";
+                $values[] = $value;
+            }
+            $values[] = $user['id'];
+
+            $db->execute(
+                "UPDATE users SET " . implode(', ', $placeholders) . " WHERE id = ?",
+                $values
+            );
+
+            Auth::auditLog($user['id'], 'update_employee_profile', 'user', $user['id']);
+
+            echo json_encode(['success' => true, 'message' => 'Profile updated successfully']);
+            break;
+
+        case 'notifications':
+            if (!Auth::isAuthenticated()) {
+                http_response_code(401);
+                throw new Exception('Unauthorized');
+            }
+
+            $user = Auth::getCurrentUser();
+            $db = Database::getInstance();
+            $rows = $db->getResults(
+                "SELECT * FROM notifications WHERE user_id = ? ORDER BY created_at DESC LIMIT 20",
+                [$user['id']]
+            );
+
+            echo json_encode([
+                'success' => true,
+                'data' => array_map([EmployeeNotifications::class, 'formatNotification'], $rows),
+                'summary' => EmployeeNotifications::summarize($rows),
+            ]);
+            break;
+
+        case 'mark_notification_read':
+            if (!Auth::isAuthenticated()) {
+                http_response_code(401);
+                throw new Exception('Unauthorized');
+            }
+
+            if (empty($data['id'])) {
+                throw new Exception('Notification ID required');
+            }
+
+            $user = Auth::getCurrentUser();
+            $db = Database::getInstance();
+            $db->execute(
+                "UPDATE notifications SET is_read = 1, read_at = NOW() WHERE user_id = ? AND id = ?",
+                [$user['id'], $data['id']]
+            );
+
+            echo json_encode(['success' => true, 'message' => 'Notification marked as read']);
             break;
 
         case 'mfa_status':

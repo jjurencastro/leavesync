@@ -67,7 +67,7 @@ System, HRIS) was gathered through:
 | Authentication | TOTP (RFC 6238) multi-factor authentication |
 | Frontend | HTML5, CSS3, vanilla JavaScript |
 | Version control | Git / GitHub |
-| Diagramming | PlantUML (BPMN-style and UML Activity diagrams) |
+| Diagramming | PlantUML (BPMN and UML Activity diagrams) |
 
 ### 1.5 Testing Methodology
 
@@ -90,40 +90,39 @@ Testing was conducted at two levels:
 ## 2. Conceptual Framework
 
 The conceptual framework presents the study using the **Input-Process-Output (IPO)
-Model**. It shows the data and conditions the system requires (Input), the
-operations LeaveSync performs on that data (Process), and the resulting
-artifacts produced for the employee, approvers, and the institution (Output).
+Model**. It shows how the existing situation, identified requirements, and
+available resources (Input) are transformed through the activities of system
+development (Process) into the developed LeaveSync system and its resulting
+capabilities (Output).
 
 ![Conceptual Framework](images/conceptual_framework.png)
 
-**Input.** The system requires the employee's leave request details (leave
-type, date range, reason), the requester's account credentials together with
-device-fingerprint data collected from the browser/OS/IP, the decisions made
-by supervisors, HR, and administrators during review, the WebAuthn passkey
-assertions produced by approvers' authenticators, and, for baseline
-comparison, the records of how leave was previously filed manually through
-Google Forms and encoded into the HRIS.
+**Figure 1. Conceptual Framework of LeaveSync Using the IPO Model**
 
-**Process.** LeaveSync first authenticates the user and confirms that the
-request originates from a registered, trusted device and that MFA has been
-satisfied. It then validates the leave request itself — checking the date
-range, counting only weekdays, rejecting overlapping requests, and confirming
-that the selected leave type has enough available balance. Once validated,
-the requested days are immediately reserved against the employee's balance
-and the request is routed through the appropriate approval hierarchy
-(supervisor then HR for employees; HR only for managers). Every approval
-action requires verification of a digital signature produced through a
-WebAuthn passkey assertion before the decision is committed, and the
-resulting balance changes (deduction on approval, restoration on rejection)
-and all actions taken are written to the audit log.
+**Input.** The input consists of the existing (manual) leave process used as
+the baseline for comparison, the user and system requirements identified
+through interviews and observation, employee/account data, leave information
+(type, dates, reason), leave balance information, the security requirements
+of the system (multi-factor authentication, device trust, digital
+signatures), the approval requirements defined by the supervisor/HR
+hierarchy, and the development resources and tools needed to build the
+system.
 
-**Output.** The process yields either an approved leave request with an
-updated leave balance or a rejected request with the reserved days restored,
-together with a digitally signed, non-repudiable record of who approved or
-rejected the request and when. The cumulative output of the process is the
-LeaveSync leave management system itself and the audit trail it produces,
-replacing the manual, unsigned, and easily misrecorded Google Forms/HRIS
-process described in Section 3.
+**Process.** The process represents the requirements analysis, system
+design, and system development activities carried out to build LeaveSync.
+This includes implementing authentication and MFA, device verification,
+leave validation (checking the date range, counting only weekdays, rejecting
+overlapping requests, and confirming available balance), approval routing
+through the supervisor/HR hierarchy, digital signature verification through
+WebAuthn passkey assertions, and the testing, refinement, and integration of
+these components into a single working system.
+
+**Output.** The output is the developed LeaveSync system itself and the
+capabilities it provides: secure leave submission, automated leave
+validation, a controlled and digitally verified approval workflow,
+automatically updated leave balances, and a complete audit trail of leave
+transactions — replacing the manual, unsigned, and easily misrecorded Google
+Forms/HRIS process described in Section 3.
 
 ---
 
@@ -143,7 +142,6 @@ supervisor review the request and record the result in the HRIS.
 
 - Employee
 - Google Forms
-- Supervisor's Google account (notification channel)
 - Supervisor
 - HRIS (Human Resource Information System)
 
@@ -193,17 +191,24 @@ supervisor review the request and record the result in the HRIS.
 
 ![Current Leave Approval BPMN Diagram](images/current_leave_approval_bpmn.png)
 
+**Figure 2. BPMN Diagram of the Existing Leave Management Process**
+
 ### 3.9 BPMN Diagram Explanation
 
 **Employee lane.** The Employee lane begins the process. The employee
 completes the leave request form with the required leave information and
 submits it through Google Forms. The submission is the message/information
-flow that moves the process to the supervisor.
+flow that moves the process to the Google Forms lane.
 
-**Supervisor / Google Account lane.** This lane represents both the
-notification channel and the supervisor's work. The supervisor receives the
-submitted request through the Google account, reviews the information, and
-reaches the main business decision: approve or reject the request.
+**Google Forms lane.** Google Forms records the submitted response as its
+own participant in the process, separate from the supervisor, and then
+notifies the supervisor of the new request through the supervisor's Google
+account. This lane represents the notification channel/system rather than a
+human decision-maker.
+
+**Supervisor lane.** The supervisor receives the notification, reviews the
+request information, and reaches the main business decision: approve or
+reject the request.
 
 **Approval path.** When the supervisor approves the request, the supervisor
 enters the approved leave into the HRIS under the employee's account. The
@@ -220,6 +225,25 @@ rejected — and the paths do not execute at the same time.
 
 **End condition.** The process ends after the HRIS records the result and
 applies the corresponding balance action.
+
+### 3.10 Analysis of the Existing BPMN Process
+
+The BPMN diagram shows that the existing leave management process depends on
+several separate activities and systems. The employee submits the request
+through Google Forms, which records the response and notifies the supervisor
+through a separate notification channel. The supervisor then reviews the
+request and manually records the decision in the HRIS. This creates an
+additional encoding step between the approval decision and the official
+leave record. The diagram also shows that the leave request passes through
+separate tools for submission, notification, approval, and record keeping.
+Because these activities are not handled through one integrated workflow,
+validation, approval tracking, and leave balance management depend entirely
+on manual processing. These observations are consistent with the weaknesses
+identified in Section 3.7 — the absence of device/identity verification, the
+lack of cryptographic proof of approval, the error-prone manual encoding into
+the HRIS, the missing consolidated audit trail, and the absence of real-time
+balance reservation — and served as the basis for identifying the
+requirements addressed by LeaveSync.
 
 ---
 
@@ -274,84 +298,99 @@ updates automatically.
 
 ![Leave Request and Approval Activity Diagram](images/leave_request_activity.png)
 
+**Figure 3. UML Activity Diagram of the Proposed Leave Request and Approval Process**
+
 ### 4.7 UML Activity Diagram Explanation
 
-**Initial node.** The solid black circle indicates that the activity begins
-when the employee opens the New Request page in LeaveSync. It identifies
-where control enters the software activity and is not itself an action.
+The diagram uses four swimlanes — **Employee**, **LeaveSync System**,
+**Supervisor**, and **HR** — to separate the human participants from the
+system's internal processing.
 
-**Select leave type and enter request data.** The employee selects a
-specific leave type, enters the start and end dates, and provides a reason.
-These values are the input data used by the validation and balance actions.
+**Initial node (Employee lane).** The solid black circle indicates that the
+activity begins when the employee accesses LeaveSync. It identifies where
+control enters the activity and is not itself an action.
 
-**Count weekdays.** The system calculates the number of leave days by
-iterating from the start date through the end date. Monday through Friday
-are counted; Saturday and Sunday are skipped. For example, a request from
-September 11 through September 14 counts only the Friday and the Monday as
-two leave days.
+**Enter and submit request data (Employee lane).** The employee enters the
+selected leave type, the start and end dates, and a reason, then submits the
+request. These values are the input data used by the validation and balance
+actions that follow.
 
-**Validate the date range.** The system checks that the end date is not
-before the start date and that the range contains at least one weekday. An
-invalid range returns an error to the employee instead of creating a request.
+**Authenticate and verify device trust (LeaveSync System lane).** The system
+authenticates the employee, verifies MFA, and confirms that the request is
+being submitted from a device registered and trusted for that employee. If
+the device is not trusted, the request is denied and the activity
+terminates immediately — an untrusted device never reaches validation.
 
-**Check for an overlapping request.** The system searches for another
-request belonging to the same employee whose dates overlap the requested
-range. Only pending and approved requests block the new request; rejected
-and cancelled requests do not. If an overlap exists, the system displays an
-error and returns the employee to request entry.
+**Validate the leave type and count weekdays (LeaveSync System lane).** The
+system confirms the selected leave type exists and is available to the
+employee, then calculates the number of leave days by iterating from the
+start date through the end date. Monday through Friday are counted;
+Saturday and Sunday are skipped. For example, a request from September 11
+through September 14 counts only the Friday and the Monday as two leave
+days.
 
-**Check the selected leave balance.** The system checks the balance row
-belonging to the selected leave type only. If the selected type does not
-have enough available days, the request is rejected before creation.
+**Validate the date range (LeaveSync System lane).** The system checks that
+the end date is not before the start date and that the range contains at
+least one weekday. *[No]* the invalid range is reported to the employee and
+the activity ends; *[Yes]* processing continues.
 
-**Verify the trusted device.** The system confirms that the request is
-being submitted from a device registered and trusted for the employee. An
-untrusted device cannot submit the leave request.
+**Check for an overlapping request (LeaveSync System lane).** The system
+searches for another request belonging to the same employee whose dates
+overlap the requested range. Only pending and approved requests block the
+new request; rejected and cancelled requests do not. *[Yes, overlap exists]*
+the system reports a duplicate-date error and the activity ends; *[No]*
+processing continues.
 
-**Create the pending request and reserve the balance.** After validation
-succeeds, the system creates the leave request with its selected leave type,
+**Check the selected leave balance (LeaveSync System lane).** The system
+checks the balance row belonging to the selected leave type only. *[No,
+insufficient]* the request is rejected and the activity ends before
+creation; *[Yes]* processing continues.
+
+**Create the pending request and reserve the balance (LeaveSync System
+lane).** The system creates the leave request with its selected leave type,
 dates, weekday count, reason, and approval statuses, then immediately
-subtracts the weekday count from the selected leave type's available balance
-and adds the same number to pending days. This prevents the employee from
-submitting another request using the same available days while the request
-is waiting for approval.
+subtracts the weekday count from the selected leave type's available
+balance and adds the same number to pending days. This prevents the
+employee from submitting another request using the same available days
+while the request is waiting for approval.
 
-**Route the request.** For an employee request, the system routes the
-request to the assigned supervisor first; after supervisor approval, the
-request moves to HR. A manager's request skips the supervisor stage and goes
-directly to HR.
+**Route the request (LeaveSync System lane).** *[Yes, requester is a
+manager]* the request is routed directly to HR, skipping the supervisor
+stage; *[No]* the request is routed to the employee's assigned supervisor
+first, and moves to HR only after supervisor approval.
 
-**Approval passkey verification.** Before an authorized supervisor or HR
-user approves a request, LeaveSync requests a passkey assertion. The system
-verifies the approval challenge, the registered credential, the user
-verification result, and the passkey's device binding. A failed assertion
-prevents approval.
+**Supervisor review and passkey verification (Supervisor lane).** The
+supervisor reviews the request. Before the supervisor's decision is
+accepted, LeaveSync requires a passkey assertion: the system verifies the
+approval challenge, the registered credential, the user-verification
+result, and the passkey's device binding. A failed assertion prevents the
+decision from being recorded. *[Reject]* the request is marked rejected,
+pending days are reduced, and the reserved days are returned to the
+selected leave balance, after which the activity ends for that request;
+*[Approve]* the request moves to the HR lane.
 
-**Supervisor decision.** The supervisor decision has two guarded paths:
-*[Approve]* records the supervisor approval status and moves the request to
-the HR stage; *[Reject]* marks the request rejected, reduces pending days,
-and returns the reserved days to the selected leave balance.
+**HR review and passkey verification (HR lane).** HR reviews the request and
+must likewise complete passkey verification before a decision is recorded.
+*[Reject]* pending days are reduced and the same days are returned to the
+selected leave balance; *[Approve]* pending days are reduced and used days
+are increased by the stored weekday count. This final approval does not
+count the days again — it transfers the already-reserved days from
+`pending_days` to `used_days`; rejection transfers the reserved days back to
+`balance` instead.
 
-**HR decision.** HR makes the final approval decision: *[Approve]* reduces
-pending days and increases used days by the stored weekday count;
-*[Reject]* reduces pending days and returns the same days to the selected
-leave balance.
-
-**Balance transfer.** The final approval does not count the days again — it
-transfers the already-reserved days from `pending_days` to `used_days`.
-Rejection transfers the reserved days back to `balance` instead.
-
-**Activity final node.** The activity reaches its final node after the
-request is approved or rejected, the appropriate balance update is
-completed, and the final status is available to the employee and approvers.
+**Update status, record audit log, and activity final node (LeaveSync
+System lane).** After the supervisor or HR decision is recorded and the
+corresponding balance update is applied, the system updates the request's
+status, writes the action to the audit log, and the activity reaches its
+single final node with the result available to the employee and approvers.
 
 ### 4.8 Diagram Selection Rationale
 
 The existing and new processes use different diagram types because they
 describe different perspectives. The old process is documented with a
-**BPMN-style diagram** because it describes an end-to-end organizational
-process involving multiple external actors and systems — the employee, the
-supervisor, Google Forms, the supervisor's Google account, and the HRIS. The
+**BPMN diagram** because it describes an end-to-end organizational
+process involving multiple external actors and systems — the employee,
+Google Forms, the supervisor, and the HRIS. The
 new process is documented with a **UML Activity Diagram** because it
 describes how the LeaveSync application itself behaves internally — its
 validation logic, balance reservation, approval routing, and signature

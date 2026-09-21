@@ -1,45 +1,74 @@
 @startuml
 !pragma layout smetana
- title Leave Request and Approval Activity
- start
- :Select leave type and date range;
- :Count weekdays only;
- if (Valid weekday range?) then (yes)
-   :Check overlapping pending or approved request;
-   if (Overlap exists?) then (yes)
-     :Reject duplicate date request;
-     stop
-   endif
-   :Check selected leave-type balance;
-   if (Sufficient balance?) then (yes)
-     :Verify trusted device;
-     :Create pending request;
-     :Deduct days from balance;
-     :Increase pending days;
-     if (Requester is manager?) then (yes)
-       :Notify HR;
-     else (no)
-       :Notify supervisor;
-     endif
-     :Supervisor reviews request;
-     if (Supervisor rejects?) then (yes)
-       :Restore balance;
-       :Decrease pending days;
-       stop
-     endif
-     :HR reviews request;
-     if (HR rejects?) then (yes)
-       :Restore balance;
-       :Decrease pending days;
-     else (no)
-       :Decrease pending days;
-       :Increase used days;
-     endif
-   else (no)
-     :Reject insufficient balance;
-   endif
- else (no)
-   :Reject invalid date range;
- endif
- stop
+title Leave Request and Approval Activity
+
+|Employee|
+start
+:Access LeaveSync;
+:Enter leave type, date range, and reason;
+:Submit leave request;
+
+|LeaveSync System|
+:Authenticate user and verify MFA;
+:Verify trusted device;
+if (Device trusted?) then (no)
+  :Deny request;
+  stop
+else (yes)
+endif
+:Validate selected leave type;
+:Count weekdays in date range;
+if (Valid date range?) then (no)
+  :Display invalid date-range error;
+  stop
+else (yes)
+endif
+if (Overlap with existing request?) then (yes)
+  :Display duplicate-date error;
+  stop
+else (no)
+endif
+if (Sufficient leave balance?) then (no)
+  :Display insufficient-balance error;
+  stop
+else (yes)
+endif
+:Create pending request;
+:Reserve balance (deduct from balance,\nincrease pending days);
+if (Requester is manager?) then (yes)
+  |HR|
+  :Review request;
+  :Verify passkey (digital signature);
+  if (HR decision) then (Reject)
+    :Restore balance;
+    :Decrease pending days;
+  else (Approve)
+    :Decrease pending days;
+    :Increase used days;
+  endif
+else (no)
+  |Supervisor|
+  :Review request;
+  :Verify passkey (digital signature);
+  if (Supervisor decision) then (Reject)
+    :Restore balance;
+    :Decrease pending days;
+  else (Approve)
+    |HR|
+    :Review request;
+    :Verify passkey (digital signature);
+    if (HR decision) then (Reject)
+      :Restore balance;
+      :Decrease pending days;
+    else (Approve)
+      :Decrease pending days;
+      :Increase used days;
+    endif
+  endif
+endif
+
+|LeaveSync System|
+:Update request status;
+:Record audit log;
+stop
 @enduml

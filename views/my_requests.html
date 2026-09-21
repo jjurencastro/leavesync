@@ -44,11 +44,18 @@
 
         <div class="card">
             <div class="card-body">
-                <div style="display: flex; gap: 1rem; margin-bottom: 1.5rem;">
+                <div style="display: flex; gap: 1rem; margin-bottom: 1.5rem; flex-wrap: wrap;">
                     <button class="btn btn-secondary" onclick="filterRequests('all')">All</button>
                     <button class="btn btn-secondary" onclick="filterRequests('pending')">Pending</button>
                     <button class="btn btn-secondary" onclick="filterRequests('approved')">Approved</button>
                     <button class="btn btn-secondary" onclick="filterRequests('rejected')">Rejected</button>
+                    <button class="btn btn-secondary" onclick="filterRequests('cancelled')">Cancelled</button>
+                </div>
+
+                <div class="card" style="margin-bottom: 1rem;">
+                    <div class="card-body" id="employee-balance-summary">
+                        <strong>Leave Summary:</strong> Loading...
+                    </div>
                 </div>
 
                 <table class="table">
@@ -96,11 +103,28 @@
 
         // Load requests
         async function loadRequests() {
-            const result = await LeaveRequestManager.listRequests();
+            const result = await LeaveRequestManager.listRequests(currentFilter);
             if (result.success) {
                 allRequests = (result.data || []).filter(req => req.user_id === currentUser?.id);
                 displayRequests();
+                renderBalanceSummary();
             }
+        }
+
+        async function renderBalanceSummary() {
+            const balanceResult = await LeaveRequestManager.getLeaveBalance();
+            if (!balanceResult.success) return;
+
+            const summary = balanceResult.summary || { available: 0, pending: 0, used: 0 };
+            const container = document.getElementById('employee-balance-summary');
+            if (!container) return;
+
+            container.innerHTML = `
+                <strong>Leave Summary:</strong>
+                Available: <span class="badge badge-approved">${summary.available}</span>
+                Pending: <span class="badge badge-pending">${summary.pending}</span>
+                Used: <span class="badge badge-secondary">${summary.used}</span>
+            `;
         }
 
         function displayRequests() {
@@ -127,6 +151,7 @@
                         <td>
                             <button class="btn btn-small btn-secondary" onclick="viewRequest(${req.id})">View</button>
                             ${req.status === 'pending' ? `<button class="btn btn-small btn-warning" onclick="editRequest(${req.id})">Edit</button>` : ''}
+                            ${req.status === 'pending' ? `<button class="btn btn-small btn-danger" onclick="cancelRequest(${req.id})">Cancel</button>` : ''}
                         </td>
                     `;
                     tbody.appendChild(row);
@@ -136,7 +161,7 @@
 
         function filterRequests(status) {
             currentFilter = status;
-            displayRequests();
+            loadRequests();
         }
 
         async function viewRequest(id) {
@@ -219,6 +244,20 @@
                 loadRequests();
             } else {
                 UIManager.showAlert(updateResult.message || 'Failed to update leave request', 'danger');
+            }
+        }
+
+        async function cancelRequest(id) {
+            if (!confirm('Cancel this leave request? This will restore the leave balance and stop the pending approval flow.')) {
+                return;
+            }
+
+            const result = await LeaveRequestManager.cancelRequest(id);
+            if (result.success) {
+                UIManager.showAlert('Leave request cancelled', 'success');
+                loadRequests();
+            } else {
+                UIManager.showAlert(result.message || 'Failed to cancel leave request', 'danger');
             }
         }
     </script>

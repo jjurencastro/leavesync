@@ -67,6 +67,16 @@
             </div>
         </div>
 
+        <div class="card" id="notifications-card">
+            <div class="card-header" style="display: flex; justify-content: space-between; align-items: center; gap: 0.75rem; flex-wrap: wrap;">
+                <h2 style="margin: 0;">Notifications</h2>
+                <span id="notifications-count" class="badge badge-pending">0</span>
+            </div>
+            <div class="card-body">
+                <div id="notifications-list">Loading...</div>
+            </div>
+        </div>
+
         <div class="card" id="recent-requests-card">
             <div class="card-header">
                 <h2>Recent Leave Requests</h2>
@@ -129,7 +139,10 @@
                 loadDeviceRequestsNotice();
             }
 
-            // Load leave balances, one card per applicable leave type
+            // Load employee notifications and leave balances
+            const notificationsResult = await AuthManager.getNotifications();
+            renderNotifications(notificationsResult);
+
             const balanceResult = await LeaveRequestManager.getLeaveBalance();
             const balancesGrid = document.getElementById('leave-balances-grid');
             balancesGrid.innerHTML = '';
@@ -208,6 +221,42 @@
                         tbody.appendChild(row);
                     });
                 }
+            }
+        }
+
+        function renderNotifications(result) {
+            const list = document.getElementById('notifications-list');
+            const badge = document.getElementById('notifications-count');
+            if (!list) return;
+
+            if (!result.success || !Array.isArray(result.data) || result.data.length === 0) {
+                list.innerHTML = '<p class="text-muted" style="margin: 0;">No notifications yet.</p>';
+                if (badge) badge.textContent = '0';
+                return;
+            }
+
+            const unread = result.summary?.unread ?? 0;
+            if (badge) badge.textContent = String(unread);
+
+            list.innerHTML = result.data.map(notification => `
+                <div class="notification-item" style="padding: 0.75rem 0; border-bottom: 1px solid #e5e7eb; ${notification.read_state === 'unread' ? 'background: rgba(59,130,246,0.04);' : ''};">
+                    <div style="display: flex; justify-content: space-between; gap: 0.75rem; align-items: flex-start; flex-wrap: wrap;">
+                        <strong>${escapeAttr(notification.title || 'Notification')}</strong>
+                        <small class="text-muted">${UIManager.formatDate(notification.created_at)}</small>
+                    </div>
+                    <p style="margin: 0.25rem 0 0.5rem;">${escapeAttr(notification.message || '')}</p>
+                    ${notification.read_state === 'unread' ? `<button class="btn btn-small btn-secondary" onclick="markNotificationRead(${notification.id})">Mark as read</button>` : '<span class="text-muted">Read</span>'}
+                </div>
+            `).join('');
+        }
+
+        async function markNotificationRead(id) {
+            const result = await AuthManager.markNotificationRead(id);
+            if (result.success) {
+                const notificationResult = await AuthManager.getNotifications();
+                renderNotifications(notificationResult);
+            } else {
+                UIManager.showAlert(result.message || 'Unable to update notification', 'danger');
             }
         }
 

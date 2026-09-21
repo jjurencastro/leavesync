@@ -162,6 +162,18 @@ class AuthManager {
         return APIClient.get('auth.php?action=devices');
     }
 
+    static async updateProfile(data) {
+        return APIClient.post('auth.php?action=update_profile', data);
+    }
+
+    static async getNotifications() {
+        return APIClient.get('auth.php?action=notifications');
+    }
+
+    static async markNotificationRead(id) {
+        return APIClient.post('auth.php?action=mark_notification_read', { id: id });
+    }
+
     static async removeDevice(deviceId) {
         return APIClient.post('auth.php?action=remove_device', { device_id: deviceId });
     }
@@ -187,8 +199,8 @@ class LeaveRequestManager {
         });
     }
 
-    static async listRequests() {
-        return APIClient.get('leave_requests.php?action=list');
+    static async listRequests(status = 'all') {
+        return APIClient.get(`leave_requests.php?action=list_filtered&status=${encodeURIComponent(status)}`);
     }
 
     static async getRequest(id) {
@@ -197,6 +209,10 @@ class LeaveRequestManager {
 
     static async updateRequest(id, reason) {
         return APIClient.put(`leave_requests.php?action=update&id=${id}`, { reason });
+    }
+
+    static async cancelRequest(id) {
+        return APIClient.post('leave_requests.php?action=cancel', { id: id });
     }
 
     static async approveRequest(id, comments = '', webauthnResponse = null) {

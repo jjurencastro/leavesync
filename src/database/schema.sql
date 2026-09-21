@@ -11,6 +11,7 @@ CREATE TABLE IF NOT EXISTS users (
     position VARCHAR(50),
     gender VARCHAR(30),
     supervisor_id INT,
+    backup_approver_id INT,
     role ENUM('employee', 'manager', 'hr', 'admin') DEFAULT 'employee',
     is_active BOOLEAN DEFAULT TRUE,
     device_fingerprint VARCHAR(255),
@@ -22,7 +23,9 @@ CREATE TABLE IF NOT EXISTS users (
     INDEX idx_username (username),
     INDEX idx_role (role),
     INDEX idx_supervisor_id (supervisor_id),
-    FOREIGN KEY (supervisor_id) REFERENCES users(id) ON DELETE SET NULL
+    INDEX idx_backup_approver_id (backup_approver_id),
+    FOREIGN KEY (supervisor_id) REFERENCES users(id) ON DELETE SET NULL,
+    FOREIGN KEY (backup_approver_id) REFERENCES users(id) ON DELETE SET NULL
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 CREATE TABLE IF NOT EXISTS user_id_sequence (

@@ -4,9 +4,19 @@ class ApprovalChain {
 
     public static function resolveFirstAvailable($db, $requesterId, $filedDate) {
         $requester = $db->getRow(
-            "SELECT id, supervisor_id, department, position FROM users WHERE id = ?",
+            "SELECT id, supervisor_id, backup_approver_id, department, position FROM users WHERE id = ?",
             [$requesterId]
         );
+
+        $delegated = EmployeeDelegation::resolveApprover($db, $requesterId, $requester['department'] ?? null);
+        if ($delegated && !empty($delegated['id'])) {
+            return [
+                'id' => (int) $delegated['id'],
+                'role' => $delegated['role'] ?? 'manager',
+                'bypassed_ids' => [],
+                'source' => $delegated['source'] ?? 'delegated'
+            ];
+        }
 
         $candidateId = (int) ($requester['supervisor_id'] ?? 0);
         $visited = [(int) $requesterId => true];

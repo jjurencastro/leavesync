@@ -12,6 +12,9 @@ require_once __DIR__ . '/../src/security/WebAuthnService.php';
 require_once __DIR__ . '/../src/leave/LeaveTypeOrder.php';
 require_once __DIR__ . '/../src/leave/LeaveRequestAccess.php';
 require_once __DIR__ . '/../src/leave/ApprovalChain.php';
+require_once __DIR__ . '/../src/leave/EmployeeLeaveFilters.php';
+require_once __DIR__ . '/../src/leave/EmployeeBalanceSummary.php';
+require_once __DIR__ . '/../src/leave/EmployeeDelegation.php';
 
 header('Content-Type: application/json');
 
@@ -45,6 +48,10 @@ try {
             echo json_encode(listLeaveRequests($user));
             break;
 
+        case 'list_filtered':
+            echo json_encode(listLeaveRequests($user, $_GET['status'] ?? 'all'));
+            break;
+
         case 'get':
             if (empty($_GET['id'])) throw new Exception('Leave request ID required');
             echo json_encode(getLeaveRequest($_GET['id'], $user));
@@ -53,6 +60,11 @@ try {
         case 'update':
             if ($method !== 'PUT') throw new Exception('Method not allowed');
             echo json_encode(updateLeaveRequest($_GET['id'] ?? null, parseRequestPayload(), $user));
+            break;
+
+        case 'cancel':
+            if ($method !== 'POST') throw new Exception('Method not allowed');
+            echo json_encode(cancelLeaveRequest($data, $user));
             break;
 
         case 'approve':
@@ -166,7 +178,7 @@ function createLeaveRequest($data, $user) {
     }
 
     $filedDate = (new DateTimeImmutable('now', new DateTimeZone('UTC')))->format('Y-m-d');
-    $employee = $db->getRow("SELECT supervisor_id, role, department, position FROM users WHERE id = ?", [$user['id']]);
+    $employee = $db->getRow("SELECT supervisor_id, backup_approver_id, role, department, position FROM users WHERE id = ?", [$user['id']]);
 
     // Tier 1 (employee) needs supervisor approval then HR approval; Tier 2 (manager) skips
     // straight to HR; Tier 3 (hr) / System Administrator's own leave is self-exempt.
@@ -174,7 +186,12 @@ function createLeaveRequest($data, $user) {
     $isSelfExempt = in_array($userRole, ['hr', 'admin'], true);
     $assignment = null;
     if (!$isSelfExempt && $userRole !== 'manager') {
-        $assignment = ApprovalChain::resolveFirstAvailable($db, $user['id'], $filedDate);
+        $delegated = EmployeeDelegation::resolveApprover($db, $user['id'], $employee['department'] ?? null);
+        if ($delegated && !empty($delegated['id'])) {
+            $assignment = ['id' => (int) $delegated['id'], 'role' => $delegated['role'] ?? 'manager', 'bypassed_ids' => [], 'source' => $delegated['source'] ?? 'delegated'];
+        } else {
+            $assignment = ApprovalChain::resolveFirstAvailable($db, $user['id'], $filedDate);
+        }
         if (!$assignment) {
             throw new Exception('No available supervisor could be found for this leave request');
         }
@@ -238,7 +255,7 @@ function createLeaveRequest($data, $user) {
     return ['success' => true, 'message' => 'Leave request created', 'id' => $request_id];
 }
 
-function listLeaveRequests($user) {
+function listLeaveRequests($user, $statusFilter = 'all') {
     global $db;
 
     if ($user['role'] === 'manager') {
@@ -267,8 +284,8 @@ function listLeaveRequests($user) {
                 JOIN leave_types lt ON lr.leave_type_id = lt.id
                 LEFT JOIN users asup ON lr.assigned_supervisor_id = asup.id
                 LEFT JOIN users rsup ON u.supervisor_id = rsup.id
-                WHERE lr.supervisor_status IN ('approved', 'not_required')
-                   OR lr.status = 'rejected'
+                     WHERE lr.supervisor_status IN ('approved', 'not_required')
+                         OR lr.status = 'rejected'
                 ORDER BY lr.created_at DESC
                 LIMIT 50";
         $requests = $db->getResults($sql, []);
@@ -307,6 +324,8 @@ function listLeaveRequests($user) {
         addApprovalState($request);
     }
     unset($request);
+
+    $requests = EmployeeLeaveFilters::apply($requests, $statusFilter);
 
     return ['success' => true, 'data' => $requests];
 }
@@ -394,6 +413,54 @@ function updateLeaveRequest($id, $data, $user) {
     return ['success' => true, 'message' => 'Leave request updated'];
 }
 
+function cancelLeaveRequest($data, $user) {
+    global $db;
+
+    $id = $data['id'] ?? null;
+    if (!$id) {
+        throw new Exception('Leave request ID required');
+    }
+
+    $request = $db->getRow("SELECT * FROM leave_requests WHERE id = ?", [$id]);
+    if (!$request) {
+        throw new Exception('Leave request not found');
+    }
+
+    if ((int) $request['user_id'] !== (int) $user['id']) {
+        throw new Exception('You can only cancel your own leave requests');
+    }
+
+    if ($request['status'] !== 'pending') {
+        throw new Exception('Only pending leave requests can be cancelled');
+    }
+
+    $db->execute(
+        "UPDATE leave_requests SET status = 'cancelled', supervisor_status = 'not_required', hr_status = 'rejected' WHERE id = ?",
+        [$id]
+    );
+
+    if (!empty($request['number_of_days'])) {
+        $db->execute(
+            "UPDATE leave_balances
+             SET pending_days = pending_days - ?, balance = balance + ?
+             WHERE user_id = ? AND leave_type_id = ?",
+            [$request['number_of_days'], $request['number_of_days'], $request['user_id'], $request['leave_type_id']]
+        );
+    }
+
+    createNotification(
+        $user['id'],
+        'Leave Request Cancelled',
+        "Your leave request from {$request['start_date']} to {$request['end_date']} has been cancelled.",
+        'leave_request',
+        $id
+    );
+
+    Auth::auditLog($user['id'], 'cancel_leave_request', 'leave_request', $id);
+
+    return ['success' => true, 'message' => 'Leave request cancelled'];
+}
+
 function approveLeaveRequest($data, $user) {
     global $db;
 
@@ -472,8 +539,8 @@ function approveLeaveRequest($data, $user) {
 
     // Move the days from pending to used now that it's fully approved
     $db->execute(
-        "UPDATE leave_balances 
-         SET pending_days = pending_days - ?, used_days = used_days + ? 
+        "UPDATE leave_balances
+         SET pending_days = pending_days - ?, used_days = used_days + ?
          WHERE user_id = ? AND leave_type_id = ?",
         [$request['number_of_days'], $request['number_of_days'], $request['user_id'], $request['leave_type_id']]
     );
@@ -540,8 +607,8 @@ function rejectLeaveRequest($data, $user) {
 
     // Revert pending days to balance
     $db->execute(
-        "UPDATE leave_balances 
-         SET pending_days = pending_days - ?, balance = balance + ? 
+        "UPDATE leave_balances
+         SET pending_days = pending_days - ?, balance = balance + ?
          WHERE user_id = ? AND leave_type_id = ?",
         [$request['number_of_days'], $request['number_of_days'], $request['user_id'], $request['leave_type_id']]
     );
@@ -580,7 +647,12 @@ function currentApprovalStage($request) {
 function addApprovalState(&$request) {
     $request['overall_status'] = $request['status'];
 
-    if ($request['status'] === 'approved' || $request['status'] === 'rejected' || $request['status'] === 'cancelled') {
+    if ($request['status'] === 'cancelled') {
+        $request['approval_stage'] = 'cancelled';
+        return;
+    }
+
+    if ($request['status'] === 'approved' || $request['status'] === 'rejected') {
         $request['approval_stage'] = 'completed';
         return;
     }
@@ -600,7 +672,12 @@ function getLeaveBalance($user_id) {
         [$user_id]
     );
 
-    return ['success' => true, 'data' => LeaveTypeOrder::sortTypes($balances, 'leave_type_name')];
+    $sorted = LeaveTypeOrder::sortTypes($balances, 'leave_type_name');
+    return [
+        'success' => true,
+        'data' => $sorted,
+        'summary' => EmployeeBalanceSummary::summarize($sorted),
+    ];
 }
 
 /**
