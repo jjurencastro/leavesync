@@ -12,6 +12,7 @@ require_once __DIR__ . '/../src/auth/DeviceChangeRequest.php';
 require_once __DIR__ . '/../src/auth/UserRegistration.php';
 require_once __DIR__ . '/../src/security/DeviceFingerprint.php';
 require_once __DIR__ . '/../src/security/Permission.php';
+require_once __DIR__ . '/../src/database/SchemaSupport.php';
 
 header('Content-Type: application/json');
 
@@ -240,7 +241,7 @@ function getHRStatistics($user) {
 function getHREmployees() {
     global $db;
     return ['success' => true, 'data' => $db->getResults(
-        "SELECT u.id, u.username, u.email, u.full_name, u.department, u.position, u.role, u.gender, u.is_active, u.deleted_at,
+        "SELECT u.id, u.username, u.email, u.full_name, u.department, u.position, u.role, u.gender, u.is_active,
                 u.supervisor_id, sup.full_name AS supervisor_name
          FROM users u LEFT JOIN users sup ON u.supervisor_id = sup.id
          WHERE u.role <> 'admin' ORDER BY u.department, u.full_name"
@@ -284,7 +285,10 @@ function restoreEmployee($id, $user) {
     if (!$id) throw new Exception('Employee ID required');
     $target = $db->getRow("SELECT id FROM users WHERE id = ? AND role <> 'admin'", [$id]);
     if (!$target) throw new Exception('Employee not found');
-    $db->execute('UPDATE users SET deleted_at = NULL, is_active = 1 WHERE id = ?', [$id]);
+    $sql = SchemaSupport::hasColumn($db, 'users', 'deleted_at')
+        ? 'UPDATE users SET deleted_at = NULL, is_active = 1 WHERE id = ?'
+        : 'UPDATE users SET is_active = 1 WHERE id = ?';
+    $db->execute($sql, [$id]);
     Auth::auditLog($user['id'], 'restore_employee', 'user', $id);
     return ['success' => true, 'message' => 'Employee account restored'];
 }

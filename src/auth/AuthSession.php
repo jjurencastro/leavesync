@@ -65,7 +65,7 @@ class AuthSession {
             $db = Database::getInstance();
 
             $user = $db->getRow(
-                "SELECT id, username, email, password_hash, is_active, password_set, role, deleted_at FROM users WHERE username = ? AND deleted_at IS NULL",
+                "SELECT id, username, email, password_hash, is_active, password_set, role FROM users WHERE username = ?",
                 [$username]
             );
 
@@ -212,15 +212,22 @@ class AuthSession {
 
             $db = Database::getInstance();
             $session = $db->getRow(
-                "SELECT s.*, u.id, u.username, u.email, u.full_name, u.department, u.position, u.gender, u.supervisor_id, u.role, u.device_fingerprint, u.password_set, u.is_active, u.deleted_at, sup.full_name AS supervisor_name, sup.email AS supervisor_email
+                "SELECT s.*, u.id, u.username, u.email, u.full_name, u.department, u.position, u.gender, u.supervisor_id, u.role, u.device_fingerprint, u.password_set, u.is_active, sup.full_name AS supervisor_name, sup.email AS supervisor_email
                  FROM sessions s
                  JOIN users u ON s.user_id = u.id
                  LEFT JOIN users sup ON u.supervisor_id = sup.id
-                 WHERE s.token_hash = ? AND s.expires_at > CURRENT_TIMESTAMP AND u.deleted_at IS NULL",
+                 WHERE s.token_hash = ? AND s.expires_at > CURRENT_TIMESTAMP",
                 [$token_hash]
             );
 
             if (!$session) {
+                return null;
+            }
+
+            // A deactivated account must not keep an existing session. Pending
+            // activation accounts are allowed to reach the activation flow.
+            if (empty($session['is_active']) && !empty($session['password_set'])) {
+                $db->execute("DELETE FROM sessions WHERE token_hash = ?", [$token_hash]);
                 return null;
             }
 

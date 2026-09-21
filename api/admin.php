@@ -12,6 +12,7 @@ require_once __DIR__ . '/../src/security/DigitalSignature.php';
 require_once __DIR__ . '/../src/security/DeviceFingerprint.php';
 require_once __DIR__ . '/../src/security/Permission.php';
 require_once __DIR__ . '/../src/leave/LeavePolicy.php';
+require_once __DIR__ . '/../src/database/SchemaSupport.php';
 
 header('Content-Type: application/json');
 
@@ -166,7 +167,7 @@ function getUsers() {
     global $db;
 
     $users = $db->getResults(
-        "SELECT u.id, u.username, u.email, u.full_name, u.department, u.position, u.role, u.is_active, u.deleted_at, u.password_set, u.created_at,
+        "SELECT u.id, u.username, u.email, u.full_name, u.department, u.position, u.role, u.is_active, u.password_set, u.created_at,
                 u.supervisor_id, sup.full_name AS supervisor_name
          FROM users u
          LEFT JOIN users sup ON u.supervisor_id = sup.id
@@ -737,7 +738,10 @@ function restoreUser($id, $user) {
     if (!$id) throw new Exception('User ID required');
     $target = $db->getRow('SELECT id FROM users WHERE id = ?', [$id]);
     if (!$target) throw new Exception('User not found');
-    $db->execute('UPDATE users SET deleted_at = NULL, is_active = 1 WHERE id = ?', [$id]);
+    $sql = SchemaSupport::hasColumn($db, 'users', 'deleted_at')
+        ? 'UPDATE users SET deleted_at = NULL, is_active = 1 WHERE id = ?'
+        : 'UPDATE users SET is_active = 1 WHERE id = ?';
+    $db->execute($sql, [$id]);
     Auth::auditLog($user['id'], 'restore_user', 'user', $id);
     return ['success' => true, 'message' => 'User restored'];
 }
@@ -747,7 +751,10 @@ function deactivateUser($id, $user) {
     if (!$id || (int) $id === (int) $user['id']) throw new Exception('You cannot deactivate this account');
     $target = $db->getRow('SELECT id, role FROM users WHERE id = ?', [$id]);
     if (!$target || $target['role'] === 'admin') throw new Exception('User cannot be deactivated');
-    $db->execute('UPDATE users SET is_active = 0, deleted_at = NOW() WHERE id = ?', [$id]);
+    $sql = SchemaSupport::hasColumn($db, 'users', 'deleted_at')
+        ? 'UPDATE users SET is_active = 0, deleted_at = NOW() WHERE id = ?'
+        : 'UPDATE users SET is_active = 0 WHERE id = ?';
+    $db->execute($sql, [$id]);
     Auth::auditLog($user['id'], 'deactivate_user', 'user', $id);
     return ['success' => true, 'message' => 'User deactivated'];
 }
