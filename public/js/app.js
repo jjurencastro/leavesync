@@ -199,8 +199,8 @@ class LeaveRequestManager {
         });
     }
 
-    static async listRequests(status = 'all') {
-        return APIClient.get(`leave_requests.php?action=list_filtered&status=${encodeURIComponent(status)}`);
+    static async listRequests(status = 'all', search = '') {
+        return APIClient.get(`leave_requests.php?action=list_filtered&status=${encodeURIComponent(status)}&search=${encodeURIComponent(search)}`);
     }
 
     static async getRequest(id) {

@@ -1,5 +1,7 @@
 <?php
 
+require_once __DIR__ . '/EmployeeDelegation.php';
+
 class ApprovalChain {
 
     public static function resolveFirstAvailable($db, $requesterId, $filedDate) {
@@ -7,16 +9,6 @@ class ApprovalChain {
             "SELECT id, supervisor_id, backup_approver_id, department, position FROM users WHERE id = ?",
             [$requesterId]
         );
-
-        $delegated = EmployeeDelegation::resolveApprover($db, $requesterId, $requester['department'] ?? null);
-        if ($delegated && !empty($delegated['id'])) {
-            return [
-                'id' => (int) $delegated['id'],
-                'role' => $delegated['role'] ?? 'manager',
-                'bypassed_ids' => [],
-                'source' => $delegated['source'] ?? 'delegated'
-            ];
-        }
 
         $candidateId = (int) ($requester['supervisor_id'] ?? 0);
         $visited = [(int) $requesterId => true];
@@ -52,6 +44,15 @@ class ApprovalChain {
                 }
 
                 $bypassed[] = (int) $candidate['id'];
+                $backup = EmployeeDelegation::resolveSupervisorBackup($db, $candidate['id'], $filedDate, $visited);
+                if ($backup) {
+                    return [
+                        'id' => $backup['id'],
+                        'role' => $backup['role'],
+                        'bypassed_ids' => $bypassed,
+                        'source' => 'manager_backup'
+                    ];
+                }
             }
 
             $candidateId = (int) ($candidate['supervisor_id'] ?? 0);

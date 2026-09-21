@@ -10,6 +10,7 @@ require_once __DIR__ . '/../src/auth/Auth.php';
 require_once __DIR__ . '/../src/auth/DeviceChangeRequest.php';
 require_once __DIR__ . '/../src/auth/UserRegistration.php';
 require_once __DIR__ . '/../src/security/DeviceFingerprint.php';
+require_once __DIR__ . '/../src/leave/ManagerLeaveQueue.php';
 
 header('Content-Type: application/json');
 
@@ -61,6 +62,19 @@ try {
 
         case 'device_requests':
             echo json_encode(getSupervisorDeviceRequests($user));
+            break;
+
+        case 'leave_summary':
+            echo json_encode(getManagerLeaveSummary($user, $_GET['status'] ?? 'all', $_GET['search'] ?? ''));
+            break;
+
+        case 'delegation_options':
+            echo json_encode(getManagerDelegationOptions($user));
+            break;
+
+        case 'update_delegation':
+            if ($method !== 'PUT') throw new Exception('Method not allowed');
+            echo json_encode(updateManagerDelegation($user, parseRequestPayload()));
             break;
 
         case 'approve_device_request':
@@ -178,6 +192,66 @@ function getSupervisorDeviceRequests($user) {
     }
 
     return ['success' => true, 'data' => $requests];
+}
+
+function getManagerLeaveSummary($user, $status, $search) {
+    global $db;
+
+    $requests = $db->getResults(
+        "SELECT lr.*, u.full_name, lt.name AS leave_type_name
+         FROM leave_requests lr
+         JOIN users u ON lr.user_id = u.id
+         JOIN leave_types lt ON lr.leave_type_id = lt.id
+         WHERE lr.assigned_supervisor_id = ? OR lr.manager_id = ? OR u.supervisor_id = ? OR lr.user_id = ?
+         ORDER BY lr.created_at DESC LIMIT 50",
+        [$user['id'], $user['id'], $user['id'], $user['id']]
+    );
+
+    foreach ($requests as &$request) {
+        $request['overall_status'] = $request['status'];
+    }
+    unset($request);
+
+    return ['success' => true, 'data' => ManagerLeaveQueue::summarize(ManagerLeaveQueue::filter($requests, $status, $search))];
+}
+
+function getManagerDelegationOptions($user) {
+    global $db;
+
+    $options = $db->getResults(
+        "SELECT id, full_name, department, position
+         FROM users
+         WHERE id <> ? AND role IN ('manager', 'admin') AND is_active = 1
+         ORDER BY full_name",
+        [$user['id']]
+    );
+    $current = $db->getRow("SELECT backup_approver_id FROM users WHERE id = ?", [$user['id']]);
+
+    return ['success' => true, 'data' => $options, 'backup_approver_id' => $current['backup_approver_id'] ?? null];
+}
+
+function updateManagerDelegation($user, $data) {
+    global $db;
+
+    $backupId = (int) ($data['backup_approver_id'] ?? 0);
+    if ($backupId === (int) $user['id']) {
+        throw new Exception('A manager cannot delegate approval to themselves');
+    }
+
+    if ($backupId > 0) {
+        $eligible = $db->getRow(
+            "SELECT id FROM users WHERE id = ? AND role IN ('manager', 'admin') AND is_active = 1",
+            [$backupId]
+        );
+        if (!$eligible) {
+            throw new Exception('Select an active manager or administrator as the backup approver');
+        }
+    }
+
+    $db->execute("UPDATE users SET backup_approver_id = ? WHERE id = ?", [$backupId > 0 ? $backupId : null, $user['id']]);
+    Auth::auditLog($user['id'], 'update_manager_delegation', 'user', $user['id'], ['backup_approver_id' => $backupId ?: null]);
+
+    return ['success' => true, 'message' => $backupId > 0 ? 'Backup approver saved' : 'Backup approver cleared'];
 }
 
 function resolveSupervisorDeviceRequest($id, $status, $user, $webauthnResponse = null) {

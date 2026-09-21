@@ -46,6 +46,23 @@
                 <h2>Team Leave Requests</h2>
             </div>
             <div class="card-body">
+                <div style="display: flex; gap: 1rem; margin-bottom: 1rem; flex-wrap: wrap; align-items: end;">
+                    <div class="form-group" style="margin: 0; min-width: 180px;">
+                        <label for="request-status-filter">Status</label>
+                        <select id="request-status-filter" onchange="loadTeamRequests()">
+                            <option value="all">All</option>
+                            <option value="pending">Pending</option>
+                            <option value="approved">Approved</option>
+                            <option value="rejected">Rejected</option>
+                            <option value="cancelled">Cancelled</option>
+                        </select>
+                    </div>
+                    <div class="form-group" style="margin: 0; min-width: 240px;">
+                        <label for="request-search">Search employee or leave type</label>
+                        <input id="request-search" type="search" oninput="debouncedLoadTeamRequests()" placeholder="Search requests">
+                    </div>
+                </div>
+                <div id="team-request-summary" class="alert alert-info" style="margin-bottom: 1rem;">Loading team summary...</div>
                 <table class="table">
                     <thead>
                         <tr>
@@ -64,6 +81,24 @@
                         </tr>
                     </tbody>
                 </table>
+            </div>
+        </div>
+
+        <div class="card" style="margin-top: 1.5rem;">
+            <div class="card-header">
+                <h2>Approval Coverage</h2>
+            </div>
+            <div class="card-body">
+                <p class="text-muted">Choose an active manager or administrator to receive your team's requests when you are unavailable.</p>
+                <div style="display: flex; gap: 1rem; align-items: end; flex-wrap: wrap;">
+                    <div class="form-group" style="margin: 0; min-width: 280px;">
+                        <label for="backup-approver">Backup approver</label>
+                        <select id="backup-approver">
+                            <option value="0">No backup approver</option>
+                        </select>
+                    </div>
+                    <button class="btn btn-primary" onclick="saveBackupApprover()">Save Coverage</button>
+                </div>
             </div>
         </div>
     </div>
@@ -92,11 +127,36 @@
 
             initUserMenu(user);
             initSidebarMenu();
+            await loadBackupApprovers();
             await loadTeamRequests();
         }
 
+        async function loadBackupApprovers() {
+            const result = await APIClient.get('manager.php?action=delegation_options');
+            if (!result.success) return;
+
+            const select = document.getElementById('backup-approver');
+            select.innerHTML = '<option value="0">No backup approver</option>';
+            (result.data || []).forEach(approver => {
+                const option = document.createElement('option');
+                option.value = approver.id;
+                option.textContent = `${approver.full_name} (${approver.position || approver.department || 'Approver'})`;
+                select.appendChild(option);
+            });
+            select.value = result.backup_approver_id || '0';
+        }
+
+        async function saveBackupApprover() {
+            const result = await APIClient.put('manager.php?action=update_delegation', {
+                backup_approver_id: document.getElementById('backup-approver').value
+            });
+            UIManager.showAlert(result.message || 'Unable to update approval coverage', result.success ? 'success' : 'danger');
+        }
+
         async function loadTeamRequests() {
-            const result = await LeaveRequestManager.listRequests();
+            const status = document.getElementById('request-status-filter').value;
+            const search = document.getElementById('request-search').value.trim();
+            const result = await LeaveRequestManager.listRequests(status, search);
             const tbody = document.getElementById('requests-table');
             tbody.innerHTML = '';
 
@@ -106,6 +166,7 @@
             }
 
             const requests = result.data || [];
+            renderTeamSummary(requests);
 
             if (requests.length === 0) {
                 tbody.innerHTML = '<tr><td colspan="7" class="text-center">No leave requests found</td></tr>';
@@ -132,6 +193,19 @@
                 `;
                 tbody.appendChild(row);
             });
+        }
+
+        let searchTimer;
+        function debouncedLoadTeamRequests() {
+            clearTimeout(searchTimer);
+            searchTimer = setTimeout(loadTeamRequests, 250);
+        }
+
+        function renderTeamSummary(requests) {
+            const pending = requests.filter(req => req.status === 'pending' && req.supervisor_status === 'pending');
+            const pendingDays = pending.reduce((total, req) => total + Number(req.number_of_days || 0), 0);
+            document.getElementById('team-request-summary').textContent =
+                `${pending.length} request(s) awaiting your approval, covering ${pendingDays} day(s). Showing ${requests.length} matching request(s).`;
         }
 
         async function viewTeamRequest(id) {

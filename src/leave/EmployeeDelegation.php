@@ -1,6 +1,33 @@
 <?php
 
 class EmployeeDelegation {
+    public static function resolveSupervisorBackup($db, $supervisorId, $filedDate, array $visited = []) {
+        $backup = $db->getRow(
+            "SELECT backup_approver_id FROM users WHERE id = ?",
+            [$supervisorId]
+        );
+        $backupId = (int) ($backup['backup_approver_id'] ?? 0);
+        if ($backupId <= 0 || isset($visited[$backupId]) || $backupId === (int) $supervisorId) {
+            return null;
+        }
+
+        $candidate = $db->getRow(
+            "SELECT id, role, is_active, password_set
+             FROM users
+             WHERE id = ? AND role IN ('manager', 'admin')
+               AND (is_active = 1 OR (is_active = 0 AND password_set = 0))",
+            [$backupId]
+        );
+        if (!$candidate || self::hasApprovedLeave($db, $backupId, $filedDate)) {
+            return null;
+        }
+
+        return [
+            'id' => (int) $candidate['id'],
+            'role' => $candidate['role'] ?? 'manager',
+        ];
+    }
+
     /**
      * Returns a qualified fallback approver if the employee has configured one,
      * or a department fallback if no specific backup approver is defined.
@@ -58,5 +85,14 @@ class EmployeeDelegation {
         }
 
         return null;
+    }
+
+    private static function hasApprovedLeave($db, $userId, $filedDate) {
+        return (bool) $db->getRow(
+            "SELECT id FROM leave_requests
+             WHERE user_id = ? AND status = 'approved'
+               AND start_date <= ? AND end_date >= ? LIMIT 1",
+            [$userId, $filedDate, $filedDate]
+        );
     }
 }

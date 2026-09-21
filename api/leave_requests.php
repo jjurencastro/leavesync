@@ -15,6 +15,7 @@ require_once __DIR__ . '/../src/leave/ApprovalChain.php';
 require_once __DIR__ . '/../src/leave/EmployeeLeaveFilters.php';
 require_once __DIR__ . '/../src/leave/EmployeeBalanceSummary.php';
 require_once __DIR__ . '/../src/leave/EmployeeDelegation.php';
+require_once __DIR__ . '/../src/leave/ManagerLeaveQueue.php';
 
 header('Content-Type: application/json');
 
@@ -49,7 +50,7 @@ try {
             break;
 
         case 'list_filtered':
-            echo json_encode(listLeaveRequests($user, $_GET['status'] ?? 'all'));
+            echo json_encode(listLeaveRequests($user, $_GET['status'] ?? 'all', $_GET['search'] ?? ''));
             break;
 
         case 'get':
@@ -186,12 +187,7 @@ function createLeaveRequest($data, $user) {
     $isSelfExempt = in_array($userRole, ['hr', 'admin'], true);
     $assignment = null;
     if (!$isSelfExempt && $userRole !== 'manager') {
-        $delegated = EmployeeDelegation::resolveApprover($db, $user['id'], $employee['department'] ?? null);
-        if ($delegated && !empty($delegated['id'])) {
-            $assignment = ['id' => (int) $delegated['id'], 'role' => $delegated['role'] ?? 'manager', 'bypassed_ids' => [], 'source' => $delegated['source'] ?? 'delegated'];
-        } else {
-            $assignment = ApprovalChain::resolveFirstAvailable($db, $user['id'], $filedDate);
-        }
+        $assignment = ApprovalChain::resolveFirstAvailable($db, $user['id'], $filedDate);
         if (!$assignment) {
             throw new Exception('No available supervisor could be found for this leave request');
         }
@@ -255,7 +251,7 @@ function createLeaveRequest($data, $user) {
     return ['success' => true, 'message' => 'Leave request created', 'id' => $request_id];
 }
 
-function listLeaveRequests($user, $statusFilter = 'all') {
+function listLeaveRequests($user, $statusFilter = 'all', $searchFilter = '') {
     global $db;
 
     if ($user['role'] === 'manager') {
@@ -325,7 +321,9 @@ function listLeaveRequests($user, $statusFilter = 'all') {
     }
     unset($request);
 
-    $requests = EmployeeLeaveFilters::apply($requests, $statusFilter);
+    $requests = $user['role'] === 'manager'
+        ? ManagerLeaveQueue::filter($requests, $statusFilter, $searchFilter)
+        : EmployeeLeaveFilters::apply($requests, $statusFilter);
 
     return ['success' => true, 'data' => $requests];
 }

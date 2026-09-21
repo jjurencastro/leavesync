@@ -16,10 +16,10 @@ class ApprovalChainFakeDb {
     public function getRow($sql, $params = []) {
         $normalized = $this->normalizeSql($sql);
 
-        if (strpos($normalized, 'SELECT id, supervisor_id, department, position FROM users WHERE id = ?') !== false || strpos($normalized, 'SELECT supervisor_id FROM users WHERE id = ?') !== false) {
+        if (strpos($normalized, 'SELECT id, supervisor_id, backup_approver_id, department, position FROM users WHERE id = ?') !== false || strpos($normalized, 'SELECT id, supervisor_id, department, position FROM users WHERE id = ?') !== false || strpos($normalized, 'SELECT supervisor_id FROM users WHERE id = ?') !== false) {
             $userId = (int) $params[0];
             $map = [10 => 20, 20 => 30, 30 => 40];
-            return ['id' => $userId, 'supervisor_id' => isset($map[$userId]) ? $map[$userId] : null, 'department' => 'CCS', 'position' => 'Instructor'];
+            return ['id' => $userId, 'supervisor_id' => isset($map[$userId]) ? $map[$userId] : null, 'backup_approver_id' => null, 'department' => 'CCS', 'position' => 'Instructor'];
         }
 
         if (strpos($normalized, 'FROM users WHERE id = ?') !== false) {
