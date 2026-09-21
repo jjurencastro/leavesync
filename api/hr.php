@@ -11,6 +11,7 @@ require_once __DIR__ . '/../src/auth/Auth.php';
 require_once __DIR__ . '/../src/auth/DeviceChangeRequest.php';
 require_once __DIR__ . '/../src/auth/UserRegistration.php';
 require_once __DIR__ . '/../src/security/DeviceFingerprint.php';
+require_once __DIR__ . '/../src/security/Permission.php';
 
 header('Content-Type: application/json');
 
@@ -62,6 +63,24 @@ try {
 
         case 'device_requests':
             echo json_encode(getDirectReportDeviceRequests($user));
+            break;
+
+        case 'statistics':
+            echo json_encode(getHRStatistics($user));
+            break;
+
+        case 'employees':
+            echo json_encode(getHREmployees());
+            break;
+
+        case 'reassign_employee':
+            if ($method !== 'PUT') throw new Exception('Method not allowed');
+            echo json_encode(reassignEmployee($_GET['id'] ?? null, parseRequestPayload(), $user));
+            break;
+
+        case 'restore_employee':
+            if ($method !== 'PUT') throw new Exception('Method not allowed');
+            echo json_encode(restoreEmployee($_GET['id'] ?? null, $user));
             break;
 
         case 'approve_device_request':
@@ -201,6 +220,73 @@ function getDirectReportDeviceRequests($user) {
     }
 
     return ['success' => true, 'data' => $requests];
+}
+
+function getHRStatistics($user) {
+    global $db;
+
+    return [
+        'success' => true,
+        'data' => [
+            'total_leave_requests' => $db->getRow("SELECT COUNT(*) AS count FROM leave_requests WHERE supervisor_status IN ('approved', 'not_required') OR status = 'rejected'")['count'],
+            'pending_hr_requests' => $db->getRow("SELECT COUNT(*) AS count FROM leave_requests WHERE status = 'pending' AND hr_status = 'pending' AND supervisor_status IN ('approved', 'not_required')")['count'],
+            'approved_leave_requests' => $db->getRow("SELECT COUNT(*) AS count FROM leave_requests WHERE status = 'approved'")['count'],
+            'rejected_leave_requests' => $db->getRow("SELECT COUNT(*) AS count FROM leave_requests WHERE status = 'rejected'")['count'],
+            'pending_device_requests' => $db->getRow("SELECT COUNT(*) AS count FROM device_change_requests dcr JOIN users u ON dcr.user_id = u.id WHERE dcr.status = 'pending' AND u.supervisor_id = ?", [$user['id']])['count'],
+        ]
+    ];
+}
+
+function getHREmployees() {
+    global $db;
+    return ['success' => true, 'data' => $db->getResults(
+        "SELECT u.id, u.username, u.email, u.full_name, u.department, u.position, u.role, u.gender, u.is_active, u.deleted_at,
+                u.supervisor_id, sup.full_name AS supervisor_name
+         FROM users u LEFT JOIN users sup ON u.supervisor_id = sup.id
+         WHERE u.role <> 'admin' ORDER BY u.department, u.full_name"
+    )];
+}
+
+function reassignEmployee($id, $data, $user) {
+    global $db;
+    if (!$id) throw new Exception('Employee ID required');
+    $target = $db->getRow("SELECT id, role, department FROM users WHERE id = ? AND role <> 'admin'", [$id]);
+    if (!$target) throw new Exception('Employee not found');
+
+    $updates = [];
+    $values = [];
+    if (isset($data['department'])) {
+        $updates[] = 'department = ?';
+        $values[] = trim((string) $data['department']);
+    }
+    if (isset($data['position'])) {
+        $updates[] = 'position = ?';
+        $values[] = trim((string) $data['position']);
+    }
+    if (isset($data['supervisor_id'])) {
+        $supervisorId = (int) $data['supervisor_id'];
+        $department = $data['department'] ?? $target['department'];
+        if (!UserRegistration::isEligibleSupervisor($supervisorId, $id, $department, $data['position'] ?? null)) {
+            throw new Exception('Selected supervisor is not eligible for this employee');
+        }
+        $updates[] = 'supervisor_id = ?';
+        $values[] = $supervisorId;
+    }
+    if (!$updates) throw new Exception('No employee fields supplied');
+    $values[] = $id;
+    $db->execute('UPDATE users SET ' . implode(', ', $updates) . ' WHERE id = ?', $values);
+    Auth::auditLog($user['id'], 'reassign_employee', 'user', $id, $data);
+    return ['success' => true, 'message' => 'Employee record updated'];
+}
+
+function restoreEmployee($id, $user) {
+    global $db;
+    if (!$id) throw new Exception('Employee ID required');
+    $target = $db->getRow("SELECT id FROM users WHERE id = ? AND role <> 'admin'", [$id]);
+    if (!$target) throw new Exception('Employee not found');
+    $db->execute('UPDATE users SET deleted_at = NULL, is_active = 1 WHERE id = ?', [$id]);
+    Auth::auditLog($user['id'], 'restore_employee', 'user', $id);
+    return ['success' => true, 'message' => 'Employee account restored'];
 }
 
 function resolveDirectReportDeviceRequest($id, $status, $user, $webauthnResponse = null) {

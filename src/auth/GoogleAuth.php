@@ -80,8 +80,8 @@ class GoogleAuth {
 
         $db = Database::getInstance();
         $user = $db->getRow(
-            "SELECT id, username, email, password_hash, is_active, password_set, role, full_name, gender, department, position, supervisor_id
-             FROM users WHERE LOWER(email) = LOWER(?)",
+            "SELECT id, username, email, password_hash, is_active, password_set, role, full_name, gender, department, position, supervisor_id, deleted_at
+             FROM users WHERE LOWER(email) = LOWER(?) AND deleted_at IS NULL",
             [$userinfo['email']]
         );
 

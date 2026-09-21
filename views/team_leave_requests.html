@@ -63,6 +63,7 @@
                     </div>
                 </div>
                 <div id="team-request-summary" class="alert alert-info" style="margin-bottom: 1rem;">Loading team summary...</div>
+                <div id="team-analytics" class="alert alert-info" style="margin-bottom: 1rem;">Loading team analytics...</div>
                 <table class="table">
                     <thead>
                         <tr>
@@ -129,6 +130,15 @@
             initSidebarMenu();
             await loadBackupApprovers();
             await loadTeamRequests();
+            await loadTeamAnalytics();
+        }
+
+        async function loadTeamAnalytics() {
+            const result = await APIClient.get('manager.php?action=analytics');
+            const target = document.getElementById('team-analytics');
+            if (!target || !result.success) return;
+            const types = (result.data?.by_leave_type || []).slice(0, 4).map(item => `${item.leave_type_name}: ${item.days} day(s)`).join(' | ');
+            target.textContent = types ? `Team leave utilization: ${types}` : 'No team leave analytics available yet.';
         }
 
         async function loadBackupApprovers() {

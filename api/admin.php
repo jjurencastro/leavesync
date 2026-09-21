@@ -6,9 +6,12 @@
 require_once __DIR__ . '/../config/config.php';
 require_once __DIR__ . '/../src/database/Database.php';
 require_once __DIR__ . '/../src/auth/Auth.php';
+require_once __DIR__ . '/../src/auth/UserRegistration.php';
 require_once __DIR__ . '/../src/auth/DeviceChangeRequest.php';
 require_once __DIR__ . '/../src/security/DigitalSignature.php';
 require_once __DIR__ . '/../src/security/DeviceFingerprint.php';
+require_once __DIR__ . '/../src/security/Permission.php';
+require_once __DIR__ . '/../src/leave/LeavePolicy.php';
 
 header('Content-Type: application/json');
 
@@ -105,6 +108,48 @@ try {
             echo json_encode(getStatistics());
             break;
 
+        case 'policies':
+            echo json_encode(getLeavePolicies());
+            break;
+
+        case 'create_policy':
+            if ($method !== 'POST') throw new Exception('Method not allowed');
+            echo json_encode(createLeavePolicy(parseRequestPayload(), $user));
+            break;
+
+        case 'update_policy':
+            if ($method !== 'PUT') throw new Exception('Method not allowed');
+            echo json_encode(updateLeavePolicy($_GET['id'] ?? null, parseRequestPayload(), $user));
+            break;
+
+        case 'settings':
+            echo json_encode(getAppSettings());
+            break;
+
+        case 'update_settings':
+            if ($method !== 'PUT') throw new Exception('Method not allowed');
+            echo json_encode(updateAppSettings(parseRequestPayload(), $user));
+            break;
+
+        case 'permissions':
+            echo json_encode(getRolePermissions());
+            break;
+
+        case 'update_permissions':
+            if ($method !== 'PUT') throw new Exception('Method not allowed');
+            echo json_encode(updateRolePermissions(parseRequestPayload(), $user));
+            break;
+
+        case 'restore_user':
+            if ($method !== 'PUT') throw new Exception('Method not allowed');
+            echo json_encode(restoreUser($_GET['id'] ?? null, $user));
+            break;
+
+        case 'deactivate_user':
+            if ($method !== 'PUT') throw new Exception('Method not allowed');
+            echo json_encode(deactivateUser($_GET['id'] ?? null, $user));
+            break;
+
         case 'download_template':
             downloadUserTemplate();
             exit;
@@ -121,7 +166,7 @@ function getUsers() {
     global $db;
 
     $users = $db->getResults(
-        "SELECT u.id, u.username, u.email, u.full_name, u.department, u.position, u.role, u.is_active, u.password_set, u.created_at,
+        "SELECT u.id, u.username, u.email, u.full_name, u.department, u.position, u.role, u.is_active, u.deleted_at, u.password_set, u.created_at,
                 u.supervisor_id, sup.full_name AS supervisor_name
          FROM users u
          LEFT JOIN users sup ON u.supervisor_id = sup.id
@@ -579,27 +624,148 @@ function updateLeaveType($id, $data) {
 
 function getAuditLog() {
     global $db;
-    
+
+    $where = [];
+    $params = [];
+    if (!empty($_GET['action_filter'])) {
+        $where[] = 'al.action = ?';
+        $params[] = $_GET['action_filter'];
+    }
+    if (!empty($_GET['user_id'])) {
+        $where[] = 'al.user_id = ?';
+        $params[] = (int) $_GET['user_id'];
+    }
+    if (!empty($_GET['from'])) {
+        $where[] = 'al.created_at >= ?';
+        $params[] = $_GET['from'] . ' 00:00:00';
+    }
+    if (!empty($_GET['to'])) {
+        $where[] = 'al.created_at <= ?';
+        $params[] = $_GET['to'] . ' 23:59:59';
+    }
+    $whereSql = $where ? 'WHERE ' . implode(' AND ', $where) : '';
     $logs = $db->getResults(
         "SELECT al.*, u.full_name 
          FROM audit_log al
          LEFT JOIN users u ON al.user_id = u.id
+         $whereSql
          ORDER BY al.created_at DESC
-         LIMIT 1000"
+         LIMIT 1000",
+        $params
     );
 
     return ['success' => true, 'data' => $logs];
 }
 
+function getLeavePolicies() {
+    global $db;
+    return ['success' => true, 'data' => $db->getResults(
+        "SELECT lp.*, lt.name AS leave_type_name
+         FROM leave_policies lp JOIN leave_types lt ON lp.leave_type_id = lt.id
+         ORDER BY lp.fiscal_year DESC, lt.name, lp.department"
+    )];
+}
+
+function createLeavePolicy($data, $user) {
+    global $db;
+    $policy = LeavePolicy::validate($data);
+    $db->execute(
+        "INSERT INTO leave_policies (leave_type_id, department, gender, fiscal_year, days_per_year, approval_threshold_days, auto_route_role, is_active, created_by, updated_by)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+        [$policy['leave_type_id'], $policy['department'], $policy['gender'], $policy['fiscal_year'], $policy['days_per_year'], $policy['approval_threshold_days'], $policy['auto_route_role'], $policy['is_active'], $user['id'], $user['id']]
+    );
+    Auth::auditLog($user['id'], 'create_leave_policy', 'leave_policy', $db->lastInsertId(), $policy);
+    return ['success' => true, 'message' => 'Leave policy created'];
+}
+
+function updateLeavePolicy($id, $data, $user) {
+    global $db;
+    if (!$id) throw new Exception('Policy ID required');
+    $policy = LeavePolicy::validate($data);
+    $db->execute(
+        "UPDATE leave_policies SET leave_type_id = ?, department = ?, gender = ?, fiscal_year = ?, days_per_year = ?, approval_threshold_days = ?, auto_route_role = ?, is_active = ?, updated_by = ? WHERE id = ?",
+        [$policy['leave_type_id'], $policy['department'], $policy['gender'], $policy['fiscal_year'], $policy['days_per_year'], $policy['approval_threshold_days'], $policy['auto_route_role'], $policy['is_active'], $user['id'], $id]
+    );
+    Auth::auditLog($user['id'], 'update_leave_policy', 'leave_policy', $id, $policy);
+    return ['success' => true, 'message' => 'Leave policy updated'];
+}
+
+function getAppSettings() {
+    global $db;
+    $rows = $db->getResults('SELECT setting_key, setting_value, updated_at FROM app_settings ORDER BY setting_key');
+    $settings = [];
+    foreach ($rows as $row) $settings[$row['setting_key']] = $row['setting_value'];
+    return ['success' => true, 'data' => $settings];
+}
+
+function updateAppSettings($data, $user) {
+    global $db;
+    foreach ($data as $key => $value) {
+        if (!preg_match('/^[a-z][a-z0-9_.-]{1,99}$/', $key)) throw new Exception('Invalid setting key');
+        $db->execute(
+            "INSERT INTO app_settings (setting_key, setting_value, updated_by) VALUES (?, ?, ?)
+             ON DUPLICATE KEY UPDATE setting_value = VALUES(setting_value), updated_by = VALUES(updated_by)",
+            [$key, is_scalar($value) ? (string) $value : json_encode($value), $user['id']]
+        );
+    }
+    Auth::auditLog($user['id'], 'update_app_settings', 'settings', null, $data);
+    return ['success' => true, 'message' => 'Application settings updated'];
+}
+
+function getRolePermissions() {
+    global $db;
+    $rows = $db->getResults('SELECT role, permission, granted FROM role_permissions ORDER BY role, permission');
+    return ['success' => true, 'data' => $rows ?: Permission::defaults()];
+}
+
+function updateRolePermissions($data, $user) {
+    global $db;
+    foreach (($data['permissions'] ?? []) as $permission) {
+        if (empty($permission['role']) || empty($permission['permission'])) throw new Exception('Invalid permission entry');
+        $db->execute(
+            "INSERT INTO role_permissions (role, permission, granted, updated_by) VALUES (?, ?, ?, ?)
+             ON DUPLICATE KEY UPDATE granted = VALUES(granted), updated_by = VALUES(updated_by)",
+            [$permission['role'], $permission['permission'], empty($permission['granted']) ? 0 : 1, $user['id']]
+        );
+    }
+    Auth::auditLog($user['id'], 'update_role_permissions', 'permissions', null, $data);
+    return ['success' => true, 'message' => 'Role permissions updated'];
+}
+
+function restoreUser($id, $user) {
+    global $db;
+    if (!$id) throw new Exception('User ID required');
+    $target = $db->getRow('SELECT id FROM users WHERE id = ?', [$id]);
+    if (!$target) throw new Exception('User not found');
+    $db->execute('UPDATE users SET deleted_at = NULL, is_active = 1 WHERE id = ?', [$id]);
+    Auth::auditLog($user['id'], 'restore_user', 'user', $id);
+    return ['success' => true, 'message' => 'User restored'];
+}
+
+function deactivateUser($id, $user) {
+    global $db;
+    if (!$id || (int) $id === (int) $user['id']) throw new Exception('You cannot deactivate this account');
+    $target = $db->getRow('SELECT id, role FROM users WHERE id = ?', [$id]);
+    if (!$target || $target['role'] === 'admin') throw new Exception('User cannot be deactivated');
+    $db->execute('UPDATE users SET is_active = 0, deleted_at = NOW() WHERE id = ?', [$id]);
+    Auth::auditLog($user['id'], 'deactivate_user', 'user', $id);
+    return ['success' => true, 'message' => 'User deactivated'];
+}
+
 function getStatistics() {
     global $db;
-    
+
     $stats = [
         'total_users' => $db->getRow("SELECT COUNT(*) as count FROM users")['count'],
+        'active_users' => $db->getRow("SELECT COUNT(*) as count FROM users WHERE is_active = 1")['count'],
+        'pending_activations' => $db->getRow("SELECT COUNT(*) as count FROM users WHERE is_active = 0")['count'],
         'total_leave_requests' => $db->getRow("SELECT COUNT(*) as count FROM leave_requests")['count'],
         'pending_requests' => $db->getRow("SELECT COUNT(*) as count FROM leave_requests WHERE status = 'pending'")['count'],
+        'pending_hr_requests' => $db->getRow("SELECT COUNT(*) as count FROM leave_requests WHERE status = 'pending' AND hr_status = 'pending' AND supervisor_status IN ('approved', 'not_required')")['count'],
         'approved_requests' => $db->getRow("SELECT COUNT(*) as count FROM leave_requests WHERE status = 'approved'")['count'],
-        'rejected_requests' => $db->getRow("SELECT COUNT(*) as count FROM leave_requests WHERE status = 'rejected'")['count']
+        'rejected_requests' => $db->getRow("SELECT COUNT(*) as count FROM leave_requests WHERE status = 'rejected'")['count'],
+        'cancelled_requests' => $db->getRow("SELECT COUNT(*) as count FROM leave_requests WHERE status = 'cancelled'")['count'],
+        'pending_device_requests' => $db->getRow("SELECT COUNT(*) as count FROM device_change_requests WHERE status = 'pending'")['count'],
     ];
 
     return ['success' => true, 'data' => $stats];

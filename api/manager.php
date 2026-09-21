@@ -11,6 +11,7 @@ require_once __DIR__ . '/../src/auth/DeviceChangeRequest.php';
 require_once __DIR__ . '/../src/auth/UserRegistration.php';
 require_once __DIR__ . '/../src/security/DeviceFingerprint.php';
 require_once __DIR__ . '/../src/leave/ManagerLeaveQueue.php';
+require_once __DIR__ . '/../src/security/Permission.php';
 
 header('Content-Type: application/json');
 
@@ -66,6 +67,19 @@ try {
 
         case 'leave_summary':
             echo json_encode(getManagerLeaveSummary($user, $_GET['status'] ?? 'all', $_GET['search'] ?? ''));
+            break;
+
+        case 'calendar':
+            echo json_encode(getManagerCalendar($user, $_GET['from'] ?? date('Y-m-01'), $_GET['to'] ?? date('Y-m-t')));
+            break;
+
+        case 'analytics':
+            echo json_encode(getManagerAnalytics($user, $_GET['from'] ?? date('Y-01-01'), $_GET['to'] ?? date('Y-12-31')));
+            break;
+
+        case 'escalate_leave':
+            if ($method !== 'POST') throw new Exception('Method not allowed');
+            echo json_encode(escalateLeaveRequest($_GET['id'] ?? null, parseRequestPayload(), $user));
             break;
 
         case 'delegation_options':
@@ -228,6 +242,62 @@ function getManagerDelegationOptions($user) {
     $current = $db->getRow("SELECT backup_approver_id FROM users WHERE id = ?", [$user['id']]);
 
     return ['success' => true, 'data' => $options, 'backup_approver_id' => $current['backup_approver_id'] ?? null];
+}
+
+function getManagerCalendar($user, $from, $to) {
+    global $db;
+    $rows = $db->getResults(
+        "SELECT lr.id, lr.user_id, u.full_name, u.department, lt.name AS leave_type_name,
+                lr.start_date, lr.end_date, lr.number_of_days, lr.status
+         FROM leave_requests lr JOIN users u ON lr.user_id = u.id JOIN leave_types lt ON lr.leave_type_id = lt.id
+         WHERE (u.supervisor_id = ? OR lr.assigned_supervisor_id = ? OR lr.manager_id = ?)
+           AND lr.status IN ('pending', 'approved') AND lr.start_date <= ? AND lr.end_date >= ?
+         ORDER BY lr.start_date, u.full_name",
+        [$user['id'], $user['id'], $user['id'], $to, $from]
+    );
+    return ['success' => true, 'data' => $rows];
+}
+
+function getManagerAnalytics($user, $from, $to) {
+    global $db;
+    $base = "FROM leave_requests lr JOIN users u ON lr.user_id = u.id JOIN leave_types lt ON lr.leave_type_id = lt.id
+             WHERE (u.supervisor_id = ? OR lr.assigned_supervisor_id = ? OR lr.manager_id = ?)
+               AND lr.start_date <= ? AND lr.end_date >= ?";
+    $params = [$user['id'], $user['id'], $user['id'], $to, $from];
+    $byType = $db->getResults("SELECT lt.name AS leave_type_name, COUNT(*) AS requests, COALESCE(SUM(lr.number_of_days), 0) AS days $base GROUP BY lt.id, lt.name ORDER BY days DESC", $params);
+    $byStatus = $db->getResults("SELECT lr.status, COUNT(*) AS requests, COALESCE(SUM(lr.number_of_days), 0) AS days $base GROUP BY lr.status", $params);
+    return ['success' => true, 'data' => ['from' => $from, 'to' => $to, 'by_leave_type' => $byType, 'by_status' => $byStatus]];
+}
+
+function escalateLeaveRequest($id, $data, $user) {
+    global $db;
+    if (!$id || empty($data['reason'])) throw new Exception('Leave request and escalation reason are required');
+    $request = $db->getRow(
+        "SELECT lr.id, lr.user_id, lr.status, lr.supervisor_status, lr.assigned_supervisor_id, u.supervisor_id AS requester_supervisor_id
+         FROM leave_requests lr JOIN users u ON lr.user_id = u.id WHERE lr.id = ?",
+        [$id]
+    );
+    if (!$request || $request['status'] !== 'pending') throw new Exception('Pending leave request not found');
+    if ((int) $request['assigned_supervisor_id'] !== (int) $user['id'] && (int) ($request['requester_supervisor_id'] ?? 0) !== (int) $user['id']) {
+        throw new Exception('You cannot escalate this request');
+    }
+
+    $toUserId = (int) ($data['to_user_id'] ?? 0);
+    if ($toUserId <= 0) throw new Exception('Escalation target is required');
+    $target = $db->getRow("SELECT id FROM users WHERE id = ? AND role IN ('manager', 'hr', 'admin') AND is_active = 1", [$toUserId]);
+    if (!$target) throw new Exception('Escalation target is not an active approver');
+
+    $db->execute(
+        "INSERT INTO approval_escalations (leave_request_id, from_user_id, to_user_id, reason) VALUES (?, ?, ?, ?)",
+        [$id, $user['id'], $toUserId, trim($data['reason'])]
+    );
+    $db->execute(
+        "INSERT INTO notifications (user_id, title, message, notification_type, related_entity_type, related_entity_id)
+         VALUES (?, ?, ?, ?, ?, ?)",
+        [$toUserId, 'Leave Request Escalated', 'A leave request requires your attention.', 'info', 'leave_request', $id]
+    );
+    Auth::auditLog($user['id'], 'escalate_leave_request', 'leave_request', $id, ['to_user_id' => $toUserId, 'reason' => $data['reason']]);
+    return ['success' => true, 'message' => 'Leave request escalated'];
 }
 
 function updateManagerDelegation($user, $data) {

@@ -82,6 +82,10 @@ try {
             echo json_encode(getLeaveBalance($user['id']));
             break;
 
+        case 'calendar':
+            echo json_encode(getEmployeeCalendar($user, $_GET['from'] ?? date('Y-m-01'), $_GET['to'] ?? date('Y-m-t')));
+            break;
+
         case 'leave_types':
             echo json_encode(getAvailableLeaveTypes($user));
             break;
@@ -676,6 +680,20 @@ function getLeaveBalance($user_id) {
         'data' => $sorted,
         'summary' => EmployeeBalanceSummary::summarize($sorted),
     ];
+}
+
+function getEmployeeCalendar($user, $from, $to) {
+        global $db;
+        $rows = $db->getResults(
+                "SELECT lr.id, lt.name AS leave_type_name, lr.start_date, lr.end_date, lr.number_of_days, lr.status,
+                                lr.supervisor_status, lr.hr_status
+                 FROM leave_requests lr JOIN leave_types lt ON lr.leave_type_id = lt.id
+                 WHERE lr.user_id = ? AND lr.status IN ('pending', 'approved')
+                     AND lr.start_date <= ? AND lr.end_date >= ?
+                 ORDER BY lr.start_date",
+                [$user['id'], $to, $from]
+        );
+        return ['success' => true, 'data' => $rows];
 }
 
 /**

@@ -270,6 +270,15 @@
             }
         }
 
+        async function toggleUserActive(id, currentlyActive) {
+            const action = currentlyActive ? 'deactivate_user' : 'restore_user';
+            const verb = currentlyActive ? 'deactivate' : 'restore';
+            if (!confirm(`Are you sure you want to ${verb} this account?`)) return;
+            const result = await APIClient.put(`admin.php?action=${action}&id=${id}`, {});
+            UIManager.showAlert(result.message || `Unable to ${verb} account`, result.success ? 'success' : 'danger');
+            if (result.success) await loadManageUsers();
+        }
+
         function populateDepartmentFilterOptions() {
             const select = document.getElementById('mu-filter-department');
             if (!select) return;
@@ -349,7 +358,9 @@
                 );
                 const row = document.createElement('tr');
                 const roleOptions = TIER_ROLES.map(r => `<option value="${escapeAttr(r.value)}" ${r.value === u.role ? 'selected' : ''}>${escapeAttr(r.label)}</option>`).join('');
-                const statusBadge = Number(u.is_active) === 1
+                const statusBadge = u.deleted_at
+                    ? `<span style="background: #fee2e2; color: #991b1b; font-size: 0.75rem; padding: 2px 6px; border-radius: 4px; font-weight: 600;">Deactivated</span>`
+                    : Number(u.is_active) === 1
                     ? `<span style="background: #e6f7ec; color: #166534; font-size: 0.75rem; padding: 2px 6px; border-radius: 4px; font-weight: 600;">Active</span>`
                     : `<span style="background: #fef3c7; color: #92400e; font-size: 0.75rem; padding: 2px 6px; border-radius: 4px; font-weight: 600;">Pending Activation</span>`;
 
@@ -364,6 +375,7 @@
                         <div style="display: flex; gap: 0.35rem; align-items: center;">
                             <button id="${saveButtonId}" class="btn btn-small btn-secondary" disabled onclick="updateManagedUser(${u.id})">Save</button>
                             <button class="btn btn-small btn-secondary" onclick="editUserAccount(${u.id})">Edit</button>
+                            ${u.role !== 'admin' ? `<button class="btn btn-small ${u.deleted_at ? 'btn-success' : 'btn-warning'}" onclick="toggleUserActive(${u.id}, ${Number(u.is_active) === 1 && !u.deleted_at})">${u.deleted_at ? 'Restore' : 'Deactivate'}</button>` : ''}
                             <button class="btn btn-small btn-danger" onclick="deleteUserAccount(${u.id})">Delete</button>
                         </div>
                     </td>

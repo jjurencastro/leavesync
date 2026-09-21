@@ -1,0 +1,25 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>HR Employee Records - LeaveSync</title>
+    <link rel="stylesheet" href="/css/style.css">
+</head>
+<body>
+    <div class="app-shell"><aside class="sidebar"><a class="sidebar-brand" href="/hr">LeaveSync</a><nav class="sidebar-nav">
+        <a href="/hr/leave-requests" class="sidebar-link">Leave Requests</a>
+        <a href="/hr/employees" class="sidebar-link active">Employee Records</a>
+        <a href="/hr/device-requests" class="sidebar-link">Device Change Requests</a>
+        <a href="/my-info" class="sidebar-link">My Info</a>
+    </nav></aside><div class="main-area"><header class="topbar"><div class="user-menu"><button class="user-menu-toggle" id="user-menu-toggle"><span id="user-fullname">Loading...</span> <span>&#9662;</span></button><div class="user-menu-dropdown" id="user-menu-dropdown"><a href="/settings">Settings</a><a href="#" class="logout-link" onclick="logout()">Logout</a></div></div></header>
+    <div class="container page-container"><h1>Employee Records</h1><div class="card"><div class="card-body"><input id="employee-search" class="form-control" placeholder="Search employee, department, or role" oninput="renderEmployees()"><table class="table"><thead><tr><th>Name</th><th>Department</th><th>Position</th><th>Role</th><th>Supervisor</th><th>Status</th><th>Action</th></tr></thead><tbody id="employee-table"><tr><td colspan="7">Loading...</td></tr></tbody></table></div></div></div></div></div>
+<script src="/js/app.js"></script><script>
+let employees = [];
+(async function init() { const user = await checkAuth(); if (!user || user.role !== 'hr') { window.location.href = '/dashboard'; return; } initUserMenu(user); initSidebarMenu(); loadEmployees(); })();
+async function loadEmployees() { const result = await APIClient.get('hr.php?action=employees'); if (!result.success) return UIManager.showAlert(result.message || 'Unable to load employee records', 'danger'); employees = result.data || []; renderEmployees(); }
+function renderEmployees() { const term = (document.getElementById('employee-search').value || '').toLowerCase(); const rows = employees.filter(u => [u.full_name, u.department, u.position, u.role].join(' ').toLowerCase().includes(term)); const tbody = document.getElementById('employee-table'); tbody.innerHTML = rows.length ? rows.map(u => `<tr><td>${escapeAttr(u.full_name)}</td><td>${escapeAttr(u.department || '')}</td><td>${escapeAttr(u.position || '')}</td><td>${escapeAttr(u.role || '')}</td><td>${escapeAttr(u.supervisor_name || 'None assigned')}</td><td>${Number(u.is_active) ? 'Active' : (u.deleted_at ? 'Deactivated' : 'Pending')}</td><td><button class="btn btn-small btn-secondary" onclick="reassignEmployee(${u.id})">Reassign</button>${u.deleted_at ? `<button class="btn btn-small btn-success" onclick="restoreEmployee(${u.id})">Restore</button>` : ''}</td></tr>`).join('') : '<tr><td colspan="7">No matching employees</td></tr>'; }
+function escapeAttr(value) { return String(value || '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
+async function reassignEmployee(id) { const department = prompt('New department (leave blank to keep current):'); const supervisorId = prompt('New supervisor ID (leave blank to keep current):'); const payload = {}; if (department) payload.department = department; if (supervisorId) payload.supervisor_id = supervisorId; if (!Object.keys(payload).length) return; const result = await APIClient.put(`hr.php?action=reassign_employee&id=${id}`, payload); UIManager.showAlert(result.message || 'Unable to update employee', result.success ? 'success' : 'danger'); if (result.success) loadEmployees(); }
+async function restoreEmployee(id) { if (!confirm('Restore this employee account?')) return; const result = await APIClient.put(`hr.php?action=restore_employee&id=${id}`, {}); UIManager.showAlert(result.message || 'Unable to restore employee', result.success ? 'success' : 'danger'); if (result.success) loadEmployees(); }
+</script></body></html>

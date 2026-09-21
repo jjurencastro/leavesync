@@ -65,7 +65,7 @@ class AuthSession {
             $db = Database::getInstance();
 
             $user = $db->getRow(
-                "SELECT id, username, email, password_hash, is_active, password_set, role FROM users WHERE username = ?",
+                "SELECT id, username, email, password_hash, is_active, password_set, role, deleted_at FROM users WHERE username = ? AND deleted_at IS NULL",
                 [$username]
             );
 
@@ -212,11 +212,11 @@ class AuthSession {
 
             $db = Database::getInstance();
             $session = $db->getRow(
-                "SELECT s.*, u.id, u.username, u.email, u.full_name, u.department, u.position, u.gender, u.supervisor_id, u.role, u.device_fingerprint, u.password_set, u.is_active, sup.full_name AS supervisor_name, sup.email AS supervisor_email
+                "SELECT s.*, u.id, u.username, u.email, u.full_name, u.department, u.position, u.gender, u.supervisor_id, u.role, u.device_fingerprint, u.password_set, u.is_active, u.deleted_at, sup.full_name AS supervisor_name, sup.email AS supervisor_email
                  FROM sessions s
                  JOIN users u ON s.user_id = u.id
                  LEFT JOIN users sup ON u.supervisor_id = sup.id
-                 WHERE s.token_hash = ? AND s.expires_at > CURRENT_TIMESTAMP",
+                 WHERE s.token_hash = ? AND s.expires_at > CURRENT_TIMESTAMP AND u.deleted_at IS NULL",
                 [$token_hash]
             );
 

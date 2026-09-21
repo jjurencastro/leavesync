@@ -17,6 +17,7 @@
                         <span>Manage Users</span> <span class="caret">&#9662;</span>
                     </button>
                     <div class="sidebar-submenu" id="manage-users-submenu">
+                                <a href="/admin/policies" class="sidebar-sublink">Policies &amp; Settings</a>
                         <a href="/admin/create-employee" class="sidebar-sublink">Create Employee Account</a>
                         <a href="/admin/manage-users" class="sidebar-sublink">Manage Users &amp; Approval Tiers</a>
                         <a href="/admin/device-requests" class="sidebar-sublink">Device Change Requests</a>
@@ -65,11 +66,7 @@
 
         async function loadAdminStatistics() {
             const grid = document.getElementById('admin-stats-grid');
-            const [statsResult, usersResult, deviceResult] = await Promise.all([
-                APIClient.get('admin.php?action=statistics'),
-                APIClient.get('admin.php?action=users'),
-                APIClient.get('admin.php?action=device_requests')
-            ]);
+            const statsResult = await APIClient.get('admin.php?action=statistics');
 
             if (!statsResult.success) {
                 grid.innerHTML = '<p class="text-center">Failed to load statistics</p>';
@@ -77,18 +74,18 @@
             }
 
             const stats = statsResult.data || {};
-            const users = usersResult.success ? (usersResult.data || []) : [];
-            const pendingActivations = users.filter(u => Number(u.is_active) !== 1).length;
-            const pendingDeviceRequests = deviceResult.success ? (deviceResult.data || []).length : 0;
 
             const cards = [
-                { label: 'Total Employees', value: users.length, href: '/admin/manage-users' },
-                { label: 'Pending Account Activations', value: pendingActivations, href: '/admin/manage-users', urgent: true },
+                { label: 'Total Users', value: stats.total_users ?? 0, href: '/admin/manage-users' },
+                { label: 'Active Users', value: stats.active_users ?? 0, href: '/admin/manage-users' },
+                { label: 'Pending Account Activations', value: stats.pending_activations ?? 0, href: '/admin/manage-users', urgent: true },
                 { label: 'Total Leave Requests', value: stats.total_leave_requests ?? 0, href: '/admin/leave-requests' },
                 { label: 'Pending Leave Requests', value: stats.pending_requests ?? 0, href: '/admin/leave-requests', urgent: true },
+                { label: 'Pending HR Approval', value: stats.pending_hr_requests ?? 0, href: '/admin/leave-requests', urgent: true },
                 { label: 'Approved Leave Requests', value: stats.approved_requests ?? 0, href: '/admin/leave-requests' },
                 { label: 'Rejected Leave Requests', value: stats.rejected_requests ?? 0, href: '/admin/leave-requests' },
-                { label: 'Pending Device Change Requests', value: pendingDeviceRequests, href: '/admin/device-requests', urgent: true }
+                { label: 'Cancelled Leave Requests', value: stats.cancelled_requests ?? 0, href: '/admin/leave-requests' },
+                { label: 'Pending Device Change Requests', value: stats.pending_device_requests ?? 0, href: '/admin/device-requests', urgent: true }
             ];
 
             grid.innerHTML = cards.map(c => `
