@@ -178,9 +178,6 @@ try {
                 throw new Exception('Unauthorized');
             }
             $user = Auth::getCurrentUser();
-            if (($user['role'] ?? '') !== 'employee') {
-                throw new Exception('Only employees can update their own profile details');
-            }
 
             $updates = EmployeeProfile::sanitizeProfileUpdate($data);
             if (empty($updates)) {
@@ -189,7 +186,7 @@ try {
 
             foreach ($updates as $field => $value) {
                 if (!EmployeeProfile::canEditProfile($user, $field)) {
-                    throw new Exception('This field cannot be edited by employees');
+                    throw new Exception('This field cannot be edited in your profile');
                 }
                 if ($field === 'full_name' && $value === '') {
                     throw new Exception('Full name is required');

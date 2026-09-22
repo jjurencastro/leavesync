@@ -2,11 +2,11 @@
 
 class EmployeeProfile {
     /**
-     * Employees can update their non-sensitive profile fields without admin intervention.
+     * Authenticated users can update their non-sensitive profile fields.
      */
     public static function canEditProfile(array $user, string $field): bool {
         $allowed = ['full_name', 'gender', 'department', 'position'];
-        return ($user['role'] ?? '') === 'employee' && in_array($field, $allowed, true);
+        return !empty($user['id']) && in_array($field, $allowed, true);
     }
 
     public static function sanitizeProfileUpdate(array $data): array {

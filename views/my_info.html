@@ -43,8 +43,9 @@
 
         <!-- Profile Info -->
         <div class="card">
-            <div class="card-header">
+            <div class="card-header" style="display: flex; justify-content: space-between; align-items: center; gap: 1rem;">
                 <h2>My Profile</h2>
+                <button type="button" class="btn btn-small btn-primary" id="edit-profile-button" onclick="toggleProfileEditor()">Update My Details</button>
             </div>
             <div class="card-body">
                 <table class="table">
@@ -63,6 +64,10 @@
                     <tr>
                         <th>Email</th>
                         <td id="profile-email">-</td>
+                    </tr>
+                    <tr>
+                        <th>Gender</th>
+                        <td id="profile-gender">-</td>
                     </tr>
                 </table>
             </div>
@@ -86,10 +91,6 @@
                     <tr>
                         <th>Immediate Supervisor</th>
                         <td id="profile-supervisor">-</td>
-                    </tr>
-                    <tr>
-                        <th>Gender</th>
-                        <td id="profile-gender">-</td>
                     </tr>
                 </table>
             </div>
@@ -188,14 +189,19 @@
                 document.getElementById('profile-supervisor').textContent = u.supervisor_name || 'None assigned';
                 document.getElementById('profile-gender').textContent = u.gender ? (u.gender.charAt(0).toUpperCase() + u.gender.slice(1)) : '-';
 
-                if (u.role === 'employee') {
-                    document.getElementById('employee-profile-editor').style.display = '';
-                    document.getElementById('edit-full-name').value = u.full_name || '';
-                    document.getElementById('edit-gender').value = u.gender || '';
-                    document.getElementById('edit-department').value = u.department || '';
-                    document.getElementById('edit-position').value = u.position || '';
-                }
+                document.getElementById('edit-full-name').value = u.full_name || '';
+                document.getElementById('edit-gender').value = u.gender || '';
+                document.getElementById('edit-department').value = u.department || '';
+                document.getElementById('edit-position').value = u.position || '';
             }
+        }
+
+        function toggleProfileEditor() {
+            const editor = document.getElementById('employee-profile-editor');
+            const button = document.getElementById('edit-profile-button');
+            const isOpen = editor.style.display !== 'none';
+            editor.style.display = isOpen ? 'none' : '';
+            button.textContent = isOpen ? 'Update My Details' : 'Close Editor';
         }
 
         async function submitEmployeeProfileUpdate() {
