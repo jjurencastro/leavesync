@@ -80,7 +80,7 @@ class GoogleAuth {
 
         $db = Database::getInstance();
         $user = $db->getRow(
-            "SELECT id, username, email, password_hash, is_active, password_set, role, full_name, gender, department, position, supervisor_id
+            "SELECT id, username, email, password_hash, is_active, password_set, role, full_name, gender, department, position, supervisor_id, profile_picture_url
              FROM users WHERE LOWER(email) = LOWER(?)",
             [$userinfo['email']]
         );
@@ -99,6 +99,14 @@ class GoogleAuth {
         // after that, block sign-in until an admin approves (is_active = 1)
         if (!$user['is_active'] && !$needs_password_setup) {
             throw new Exception('Your account activation is pending supervisor approval.');
+        }
+
+        $profilePictureUrl = $userinfo['picture'] ?? null;
+        if ($profilePictureUrl && filter_var($profilePictureUrl, FILTER_VALIDATE_URL) && parse_url($profilePictureUrl, PHP_URL_SCHEME) === 'https') {
+            $db->execute(
+                "UPDATE users SET profile_picture_url = ? WHERE id = ?",
+                [$profilePictureUrl, $user['id']]
+            );
         }
 
         // Once a user has a registered trusted device, only that device may sign in

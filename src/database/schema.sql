@@ -15,6 +15,7 @@ CREATE TABLE IF NOT EXISTS users (
     role ENUM('employee', 'manager', 'hr', 'admin') DEFAULT 'employee',
     is_active BOOLEAN DEFAULT TRUE,
     device_fingerprint VARCHAR(255),
+    profile_picture_url VARCHAR(2048),
     public_key LONGTEXT,
     password_set BOOLEAN DEFAULT TRUE,
     deleted_at TIMESTAMP NULL,

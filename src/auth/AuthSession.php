@@ -212,7 +212,7 @@ class AuthSession {
 
             $db = Database::getInstance();
             $session = $db->getRow(
-                "SELECT s.*, u.id, u.username, u.email, u.full_name, u.department, u.position, u.gender, u.supervisor_id, u.role, u.device_fingerprint, u.password_set, u.is_active, sup.full_name AS supervisor_name, sup.email AS supervisor_email
+                "SELECT s.*, u.id, u.username, u.email, u.full_name, u.department, u.position, u.gender, u.supervisor_id, u.role, u.device_fingerprint, u.profile_picture_url, u.password_set, u.is_active, sup.full_name AS supervisor_name, sup.email AS supervisor_email
                  FROM sessions s
                  JOIN users u ON s.user_id = u.id
                  LEFT JOIN users sup ON u.supervisor_id = sup.id

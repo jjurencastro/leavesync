@@ -474,11 +474,51 @@ async function checkAuth() {
     return result.data;
 }
 
-// Wire up the top-right user menu (full name + Settings/Logout dropdown) shared by every authenticated page
+function getUserInitials(user) {
+    const name = (user.full_name || user.username || '').trim();
+    const parts = name.split(/\s+/).filter(Boolean);
+    if (parts.length > 1) {
+        return (parts[0][0] + parts[parts.length - 1][0]).toUpperCase();
+    }
+    return name.slice(0, 2).toUpperCase() || '?';
+}
+
+function createUserAvatar(user) {
+    const avatar = document.createElement('span');
+    avatar.className = 'user-avatar';
+    avatar.setAttribute('aria-hidden', 'true');
+
+    const initials = getUserInitials(user);
+    const useInitials = () => {
+        avatar.classList.add('user-avatar-fallback');
+        avatar.textContent = initials;
+    };
+
+    if (user.profile_picture_url) {
+        const image = document.createElement('img');
+        image.src = user.profile_picture_url;
+        image.alt = '';
+        image.className = 'user-avatar-image';
+        image.addEventListener('error', useInitials, { once: true });
+        avatar.appendChild(image);
+    } else {
+        useInitials();
+    }
+
+    return avatar;
+}
+
+// Wire up the top-right user menu (avatar, full name + Settings/Logout dropdown) shared by every authenticated page
 function initUserMenu(user) {
     const nameEl = document.getElementById('user-fullname');
     if (nameEl) {
         nameEl.textContent = user.full_name || user.username;
+
+        const toggle = document.getElementById('user-menu-toggle');
+        if (toggle) {
+            toggle.querySelectorAll('.user-avatar').forEach(avatar => avatar.remove());
+            toggle.insertBefore(createUserAvatar(user), nameEl);
+        }
     }
 
     const toggle = document.getElementById('user-menu-toggle');
