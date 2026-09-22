@@ -499,6 +499,8 @@ function createUserAvatar(user) {
         image.src = user.profile_picture_url;
         image.alt = '';
         image.className = 'user-avatar-image';
+        image.referrerPolicy = 'no-referrer';
+        image.decoding = 'async';
         image.addEventListener('error', useInitials, { once: true });
         avatar.appendChild(image);
     } else {
