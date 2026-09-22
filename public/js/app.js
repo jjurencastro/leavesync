@@ -496,7 +496,7 @@ function createUserAvatar(user) {
 
     if (user.profile_picture_url) {
         const image = document.createElement('img');
-        image.src = user.profile_picture_url;
+        image.src = '/api/auth.php?action=profile_picture';
         image.alt = '';
         image.className = 'user-avatar-image';
         image.referrerPolicy = 'no-referrer';

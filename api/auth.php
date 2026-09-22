@@ -60,6 +60,51 @@ try {
             header('Location: ' . rtrim(APP_URL, '/') . $destination);
             exit;
 
+        case 'profile_picture':
+            if (!Auth::isAuthenticated()) {
+                http_response_code(401);
+                throw new Exception('Unauthorized');
+            }
+
+            $user = Auth::getCurrentUser();
+            $pictureUrl = $user['profile_picture_url'] ?? '';
+            $pictureHost = strtolower(parse_url($pictureUrl, PHP_URL_HOST) ?: '');
+            $isGoogleImage = $pictureHost === 'googleusercontent.com'
+                || substr($pictureHost, -strlen('.googleusercontent.com')) === '.googleusercontent.com';
+
+            if (!filter_var($pictureUrl, FILTER_VALIDATE_URL)
+                || parse_url($pictureUrl, PHP_URL_SCHEME) !== 'https'
+                || !$isGoogleImage) {
+                http_response_code(404);
+                throw new Exception('Profile picture not found');
+            }
+
+            $ch = curl_init($pictureUrl);
+            curl_setopt_array($ch, [
+                CURLOPT_RETURNTRANSFER => true,
+                CURLOPT_FOLLOWLOCATION => true,
+                CURLOPT_MAXREDIRS => 2,
+                CURLOPT_CONNECTTIMEOUT => 5,
+                CURLOPT_TIMEOUT => 10,
+                CURLOPT_SSL_VERIFYPEER => true,
+                CURLOPT_USERAGENT => 'LeaveSync profile picture proxy'
+            ]);
+            $imageData = curl_exec($ch);
+            $statusCode = (int) curl_getinfo($ch, CURLINFO_HTTP_CODE);
+            $contentType = (string) curl_getinfo($ch, CURLINFO_CONTENT_TYPE);
+            curl_close($ch);
+
+            if ($imageData === false || $statusCode < 200 || $statusCode >= 300
+                || strpos($contentType, 'image/') !== 0) {
+                http_response_code(404);
+                throw new Exception('Profile picture not available');
+            }
+
+            header('Content-Type: ' . explode(';', $contentType)[0]);
+            header('Cache-Control: private, max-age=3600');
+            echo $imageData;
+            break;
+
         case 'device_change_info':
             echo json_encode(Auth::getPendingDeviceChangeInfo());
             break;
