@@ -45,7 +45,7 @@
         <div class="card">
             <div class="card-header" style="display: flex; justify-content: space-between; align-items: center; gap: 1rem;">
                 <h2>My Profile</h2>
-                <button type="button" class="btn btn-small btn-primary" id="edit-profile-button" onclick="toggleProfileEditor()">Update My Details</button>
+                <button type="button" class="btn btn-small btn-primary" id="edit-profile-button" onclick="toggleProfileEditor()">Edit</button>
             </div>
             <div class="card-body">
                 <table class="table">
@@ -96,34 +96,6 @@
             </div>
         </div>
 
-        <div class="card" id="employee-profile-editor" style="display: none;">
-            <div class="card-header">
-                <h2>Update My Details</h2>
-            </div>
-            <div class="card-body">
-                <div class="form-group">
-                    <label for="edit-full-name">Full Name</label>
-                    <input type="text" id="edit-full-name">
-                </div>
-                <div class="form-group">
-                    <label for="edit-gender">Gender</label>
-                    <select id="edit-gender">
-                        <option value="">Select</option>
-                        <option value="male">Male</option>
-                        <option value="female">Female</option>
-                    </select>
-                </div>
-                <div class="form-group">
-                    <label for="edit-department">Department</label>
-                    <input type="text" id="edit-department">
-                </div>
-                <div class="form-group">
-                    <label for="edit-position">Position</label>
-                    <input type="text" id="edit-position">
-                </div>
-                <button class="btn btn-primary" onclick="submitEmployeeProfileUpdate()">Save Changes</button>
-            </div>
-        </div>
     </div>
         </div>
     </div>
@@ -172,6 +144,8 @@
             initSidebarMenu();
         })();
 
+        let profileEditing = false;
+
         // Load profile
         loadProfile();
 
@@ -188,20 +162,50 @@
                 document.getElementById('profile-position').textContent = u.position || '-';
                 document.getElementById('profile-supervisor').textContent = u.supervisor_name || 'None assigned';
                 document.getElementById('profile-gender').textContent = u.gender ? (u.gender.charAt(0).toUpperCase() + u.gender.slice(1)) : '-';
-
-                document.getElementById('edit-full-name').value = u.full_name || '';
-                document.getElementById('edit-gender').value = u.gender || '';
-                document.getElementById('edit-department').value = u.department || '';
-                document.getElementById('edit-position').value = u.position || '';
             }
         }
 
         function toggleProfileEditor() {
-            const editor = document.getElementById('employee-profile-editor');
             const button = document.getElementById('edit-profile-button');
-            const isOpen = editor.style.display !== 'none';
-            editor.style.display = isOpen ? 'none' : '';
-            button.textContent = isOpen ? 'Update My Details' : 'Close Editor';
+            profileEditing = !profileEditing;
+            button.textContent = profileEditing ? 'Save' : 'Edit';
+
+            if (profileEditing) {
+                makeProfileFieldEditable('profile-full-name', 'text');
+                makeProfileFieldEditable('profile-gender', 'gender');
+                makeProfileFieldEditable('profile-department', 'text');
+                makeProfileFieldEditable('profile-position', 'text');
+            } else {
+                submitEmployeeProfileUpdate();
+            }
+        }
+
+        function makeProfileFieldEditable(fieldId, type) {
+            const cell = document.getElementById(fieldId);
+            const currentValue = cell.textContent === '-' ? '' : cell.textContent;
+            cell.textContent = '';
+
+            if (type === 'gender') {
+                const select = document.createElement('select');
+                select.id = 'edit-gender';
+                select.className = 'form-control';
+                [['', 'Select'], ['male', 'Male'], ['female', 'Female']].forEach(([value, label]) => {
+                    const option = document.createElement('option');
+                    option.value = value;
+                    option.textContent = label;
+                    option.selected = value === currentValue.toLowerCase();
+                    select.appendChild(option);
+                });
+                cell.appendChild(select);
+                return;
+            }
+
+            const input = document.createElement('input');
+            input.type = 'text';
+            input.id = fieldId.replace('profile-', 'edit-');
+            input.className = 'form-control';
+            input.value = currentValue;
+            cell.appendChild(input);
         }
 
         async function submitEmployeeProfileUpdate() {
@@ -215,9 +219,12 @@
             const result = await AuthManager.updateProfile(payload);
             if (result.success) {
                 UIManager.showAlert('Profile updated successfully', 'success');
+                profileEditing = false;
+                document.getElementById('edit-profile-button').textContent = 'Edit';
                 loadProfile();
             } else {
                 UIManager.showAlert(result.message || 'Unable to update profile', 'danger');
+                profileEditing = true;
             }
         }
     </script>
