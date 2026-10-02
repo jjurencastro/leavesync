@@ -98,8 +98,30 @@ LeaveSync emails supervisors/HR when a leave request awaits their approval, and 
 temporary password for self-service resets. Email is optional — without it, in-app
 notifications still work and mail-dependent features silently skip delivery.
 
+Two transports are supported:
+
+**A. Brevo HTTP API — required on Railway (recommended for production)**
+
+Railway blocks outbound SMTP ports (25/465/587), so Gmail SMTP cannot connect there.
+The API transport sends over HTTPS (port 443), which is never blocked.
+
+1. Create a free account at https://app.brevo.com (300 emails/day, no credit card).
+2. Go to **SMTP & API → API Keys → Generate a new API key** and copy it.
+3. Go to **Senders & IP**, add the address you want to send from, and click the
+   verification link Brevo emails to that address.
+4. Set these variables (Railway **Variables** tab or `.env`):
+   ```env
+   MAIL_TRANSPORT=api
+   BREVO_API_KEY=xkeysib-your-api-key
+   MAIL_FROM=your_verified_sender@gmail.com
+   MAIL_FROM_NAME=LeaveSync
+   ```
+
+**B. Gmail SMTP — local development only**
+
 1. In `.env`, set:
    ```env
+   MAIL_TRANSPORT=smtp
    MAIL_HOST=smtp.gmail.com
    MAIL_PORT=587
    MAIL_SECURE=tls
@@ -108,10 +130,10 @@ notifications still work and mail-dependent features silently skip delivery.
    MAIL_FROM=your_email@gmail.com
    MAIL_FROM_NAME=LeaveSync
    ```
-2. For Gmail, enable 2-Step Verification on the account, then create an App Password at
+2. Enable 2-Step Verification on the Gmail account, then create an App Password at
    https://myaccount.google.com/apppasswords and use it as `MAIL_PASSWORD` (not the normal password).
-3. On Railway, add the same `MAIL_*` entries under **Variables**.
-4. Leave `MAIL_HOST`/`MAIL_USER` blank to disable outbound email entirely.
+
+Leave the transport's key/credentials blank to disable outbound email entirely.
 
 ## Features Overview
 

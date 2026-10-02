@@ -61,6 +61,7 @@ $envKeys = [
     'RATE_LIMIT_REQUESTS', 'RATE_LIMIT_WINDOW',
     'MAIL_HOST', 'MAIL_PORT', 'MAIL_USER', 'MAIL_PASSWORD',
     'MAIL_FROM', 'MAIL_FROM_NAME', 'MAIL_SECURE',
+    'MAIL_TRANSPORT', 'BREVO_API_KEY',
 ];
 
 $env = $fileEnv;
@@ -110,7 +111,12 @@ define('MFA_WINDOW', (int)($env['MFA_WINDOW'] ?? 30));
 define('RATE_LIMIT_REQUESTS', (int)($env['RATE_LIMIT_REQUESTS'] ?? 100));
 define('RATE_LIMIT_WINDOW', (int)($env['RATE_LIMIT_WINDOW'] ?? 3600));
 
-// Email (SMTP) Configuration - blank MAIL_HOST/MAIL_USER disables sending (Mailer no-ops)
+// Email Configuration. Two transports:
+//   MAIL_TRANSPORT=api  -> Brevo HTTP API over HTTPS/443 (use on hosts like Railway
+//                          that block outbound SMTP ports). Requires BREVO_API_KEY.
+//   MAIL_TRANSPORT=smtp -> PHPMailer over SMTP (local dev; Gmail app passwords).
+define('MAIL_TRANSPORT', strtolower($env['MAIL_TRANSPORT'] ?? 'smtp'));
+define('BREVO_API_KEY', $env['BREVO_API_KEY'] ?? '');
 define('MAIL_HOST', $env['MAIL_HOST'] ?? '');
 define('MAIL_PORT', (int)($env['MAIL_PORT'] ?? 587));
 define('MAIL_USER', $env['MAIL_USER'] ?? '');
