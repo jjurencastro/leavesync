@@ -40,6 +40,16 @@ All responses are in JSON format:
   - `timezone` (string) - Device fingerprint data
 - **Response**: Authentication token and user info
 
+### Forgot Password
+- **URL**: `/api/auth.php?action=forgot_password`
+- **Method**: POST
+- **Parameters**:
+  - `username` (string, required) - Username or email address
+- **Response**: Always a generic success message (never reveals whether the account exists).
+  If the account exists and is activated, a temporary password is emailed to its registered
+  address, all existing sessions are invalidated, and the user is forced to set a new
+  password via the activation page on next login. Repeat requests within 5 minutes are ignored.
+
 ### Logout
 - **URL**: `/api/auth.php?action=logout`
 - **Method**: GET

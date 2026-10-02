@@ -16,6 +16,7 @@ require_once __DIR__ . '/../src/leave/EmployeeLeaveFilters.php';
 require_once __DIR__ . '/../src/leave/EmployeeBalanceSummary.php';
 require_once __DIR__ . '/../src/leave/EmployeeDelegation.php';
 require_once __DIR__ . '/../src/leave/ManagerLeaveQueue.php';
+require_once __DIR__ . '/../src/mail/Mailer.php';
 
 header('Content-Type: application/json');
 
@@ -740,6 +741,10 @@ function notifyNextApprover($requester, $message, $entity_id, $assignedSuperviso
 
     if ($assignedSupervisorId) {
         createNotification($assignedSupervisorId, 'New Leave Request', $message, 'leave_request', $entity_id);
+        $approver = $db->getRow("SELECT email, full_name FROM users WHERE id = ?", [$assignedSupervisorId]);
+        if ($approver) {
+            emailApprover($approver, $message);
+        }
         return;
     }
 
@@ -749,26 +754,51 @@ function notifyNextApprover($requester, $message, $entity_id, $assignedSuperviso
     }
 
     $approvers = $requester['supervisor_id']
-        ? $db->getResults("SELECT id FROM users WHERE id = ? AND is_active = 1 AND role IN ('manager', 'admin')", [$requester['supervisor_id']])
-        : $db->getResults("SELECT id FROM users WHERE role = 'manager' AND department = ? AND is_active = 1", [$requester['department']]);
+        ? $db->getResults("SELECT id, email, full_name FROM users WHERE id = ? AND is_active = 1 AND role IN ('manager', 'admin')", [$requester['supervisor_id']])
+        : $db->getResults("SELECT id, email, full_name FROM users WHERE role = 'manager' AND department = ? AND is_active = 1", [$requester['department']]);
 
     // No supervisor on file for this employee: fall back to the System Administrator
     if (empty($approvers)) {
-        $approvers = $db->getResults("SELECT id FROM users WHERE role = 'admin' AND is_active = 1");
+        $approvers = $db->getResults("SELECT id, email, full_name FROM users WHERE role = 'admin' AND is_active = 1");
     }
 
     foreach ($approvers as $approver) {
         createNotification($approver['id'], 'New Leave Request', $message, 'leave_request', $entity_id);
+        emailApprover($approver, $message);
     }
 }
 
 function notifyHR($message, $entity_id) {
     global $db;
 
-    $hrUsers = $db->getResults("SELECT id FROM users WHERE role = 'hr' AND is_active = 1");
+    $hrUsers = $db->getResults("SELECT id, email, full_name FROM users WHERE role = 'hr' AND is_active = 1");
     foreach ($hrUsers as $hrUser) {
         createNotification($hrUser['id'], 'New Leave Request', $message, 'leave_request', $entity_id);
+        emailApprover($hrUser, $message);
     }
+}
+
+/**
+ * Email an approver that a request is waiting for their action. Delivery
+ * failures are logged inside Mailer and never affect the in-app flow.
+ */
+function emailApprover($approver, $message) {
+    if (empty($approver['email'])) {
+        return;
+    }
+
+    $safeName = htmlspecialchars($approver['full_name'] ?? '', ENT_QUOTES, 'UTF-8');
+    $safeMessage = htmlspecialchars($message, ENT_QUOTES, 'UTF-8');
+    $loginUrl = rtrim(APP_URL, '/') . '/login';
+
+    $html = "<p>Hello {$safeName},</p>"
+        . "<p>{$safeMessage}.</p>"
+        . '<p><a href="' . htmlspecialchars($loginUrl, ENT_QUOTES, 'UTF-8') . '">Log in to LeaveSync</a> to review and act on this request.</p>'
+        . "<p>&mdash; LeaveSync</p>";
+
+    $text = "Hello {$approver['full_name']},\n\n{$message}.\n\nLog in to LeaveSync to review and act on this request: {$loginUrl}\n";
+
+    Mailer::send($approver['email'], $approver['full_name'] ?? '', 'LeaveSync: leave request awaiting your approval', $html, $text);
 }
 
 function createNotification($user_id, $title, $message, $type, $entity_id) {

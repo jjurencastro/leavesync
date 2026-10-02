@@ -26,6 +26,11 @@ try {
             echo json_encode(Auth::login($data['username'] ?? '', $data['password'] ?? '', $totp, $confirmDeviceChange));
             break;
 
+        case 'forgot_password':
+            if ($method !== 'POST') throw new Exception('Method not allowed');
+            echo json_encode(Auth::requestPasswordReset($data['username'] ?? ''));
+            break;
+
         case 'google_login':
             $redirectUri = ($data['redirect_uri'] ?? '') ?: (currentOrigin() . '/api/auth.php?action=google_callback');
             try {

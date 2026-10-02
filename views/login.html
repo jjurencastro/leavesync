@@ -41,6 +41,10 @@
                     </div>
 
                     <button type="submit" class="btn btn-primary" style="width: 100%;">Login</button>
+
+                    <div style="text-align: center; margin-top: 0.75rem;">
+                        <a href="#" id="forgot-password-link" style="font-size: 0.85rem;">Forgot password?</a>
+                    </div>
                 </form>
 
                 <div id="device-change-section" style="display: none;">
@@ -168,6 +172,37 @@
         document.getElementById('cancel-device-change-btn').addEventListener('click', () => {
             document.getElementById('device-change-section').style.display = 'none';
             document.getElementById('login-form').style.display = 'block';
+        });
+
+        document.getElementById('forgot-password-link').addEventListener('click', (e) => {
+            e.preventDefault();
+
+            UIManager.showModal(`
+                <div class="form-group">
+                    <label for="forgot-username">Username</label>
+                    <input type="text" id="forgot-username" autocomplete="username" placeholder="Enter your username">
+                </div>
+                <p class="text-muted" style="font-size: 0.85rem;">If the account exists, a temporary password will be sent to its registered email address. You will be asked to set a new password the next time you log in.</p>
+                <button type="button" class="btn btn-primary" style="width: 100%;" id="forgot-submit-btn">Send Temporary Password</button>
+                <div id="forgot-result" style="margin-top: 0.75rem;"></div>
+            `, 'Reset Password');
+
+            document.getElementById('forgot-submit-btn').addEventListener('click', async () => {
+                const btn = document.getElementById('forgot-submit-btn');
+                const resultDiv = document.getElementById('forgot-result');
+                const username = document.getElementById('forgot-username').value.trim();
+
+                if (!username) {
+                    resultDiv.innerHTML = '<div class="alert alert-danger">Please enter your username.</div>';
+                    return;
+                }
+
+                btn.disabled = true;
+                const result = await AuthManager.forgotPassword(username);
+                btn.disabled = false;
+
+                resultDiv.innerHTML = `<div class="alert alert-${result.success ? 'success' : 'danger'}">${result.message || 'Request failed'}</div>`;
+            });
         });
     </script>
 </body>

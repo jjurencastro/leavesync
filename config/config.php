@@ -59,6 +59,8 @@ $envKeys = [
     'AUTH_SESSION_LIFETIME',
     'MFA_ENABLED', 'MFA_WINDOW',
     'RATE_LIMIT_REQUESTS', 'RATE_LIMIT_WINDOW',
+    'MAIL_HOST', 'MAIL_PORT', 'MAIL_USER', 'MAIL_PASSWORD',
+    'MAIL_FROM', 'MAIL_FROM_NAME', 'MAIL_SECURE',
 ];
 
 $env = $fileEnv;
@@ -107,6 +109,15 @@ define('MFA_WINDOW', (int)($env['MFA_WINDOW'] ?? 30));
 // API Rate Limiting
 define('RATE_LIMIT_REQUESTS', (int)($env['RATE_LIMIT_REQUESTS'] ?? 100));
 define('RATE_LIMIT_WINDOW', (int)($env['RATE_LIMIT_WINDOW'] ?? 3600));
+
+// Email (SMTP) Configuration - blank MAIL_HOST/MAIL_USER disables sending (Mailer no-ops)
+define('MAIL_HOST', $env['MAIL_HOST'] ?? '');
+define('MAIL_PORT', (int)($env['MAIL_PORT'] ?? 587));
+define('MAIL_USER', $env['MAIL_USER'] ?? '');
+define('MAIL_PASSWORD', $env['MAIL_PASSWORD'] ?? '');
+define('MAIL_FROM', $env['MAIL_FROM'] ?? ($env['MAIL_USER'] ?? ''));
+define('MAIL_FROM_NAME', $env['MAIL_FROM_NAME'] ?? 'LeaveSync');
+define('MAIL_SECURE', strtolower($env['MAIL_SECURE'] ?? 'tls'));
 
 // Security Headers
 header('Strict-Transport-Security: max-age=31536000; includeSubDomains');

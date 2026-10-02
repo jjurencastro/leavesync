@@ -75,7 +75,13 @@ class AuthSession {
             }
 
             if (!$user['password_set']) {
-                return ['success' => false, 'message' => 'Please continue with Google to set up and activate your account.'];
+                // Unactivated accounts normally carry an unusable random password and must
+                // continue with Google. After a self-service reset, though, the emailed
+                // temporary password is valid and must let the user in so the activation
+                // page can force them to set a new password.
+                if (!password_verify($password, $user['password_hash'])) {
+                    return ['success' => false, 'message' => 'Please continue with Google to set up and activate your account.'];
+                }
             }
 
             if (!$user['is_active']) {

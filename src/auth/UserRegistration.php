@@ -6,6 +6,7 @@
 
 require_once __DIR__ . '/../database/Database.php';
 require_once __DIR__ . '/../security/DigitalSignature.php';
+require_once __DIR__ . '/../mail/Mailer.php';
 require_once __DIR__ . '/AuditLogger.php';
 
 class UserRegistration {
@@ -161,6 +162,84 @@ class UserRegistration {
         AuditLogger::log($user_id, 'password_changed', 'user', $user_id);
 
         return ['success' => true, 'message' => 'Password changed successfully'];
+    }
+
+    /**
+     * Self-service password reset requested from the login page. Emails a
+     * temporary password and flags the account as not-activated so the next
+     * login is forced through /activate to set a new password. Always returns
+     * the same generic message so account existence cannot be probed.
+     * @param string $identifier Username or email entered on the login page
+     */
+    public static function requestPasswordReset($identifier) {
+        $generic = ['success' => true, 'message' => 'If an account matches that username, a temporary password has been sent to its registered email address.'];
+
+        $identifier = trim((string)$identifier);
+        if ($identifier === '') {
+            return $generic;
+        }
+
+        $db = Database::getInstance();
+        $user = $db->getRow(
+            "SELECT id, username, email, full_name, password_set FROM users WHERE username = ? OR email = ?",
+            [$identifier, $identifier]
+        );
+
+        // Accounts that never finished activation have no password to reset
+        if (!$user || empty($user['password_set'])) {
+            return $generic;
+        }
+
+        // Cooldown: ignore repeat requests within 5 minutes (audit_log is the ledger)
+        $recent = $db->getRow(
+            "SELECT id FROM audit_log WHERE user_id = ? AND action = 'password_reset_requested' AND created_at > (NOW() - INTERVAL 5 MINUTE) LIMIT 1",
+            [$user['id']]
+        );
+        if ($recent) {
+            return $generic;
+        }
+
+        $tempPassword = self::generateTemporaryPassword();
+        $db->execute(
+            "UPDATE users SET password_hash = ?, password_set = 0 WHERE id = ?",
+            [password_hash($tempPassword, PASSWORD_BCRYPT), $user['id']]
+        );
+
+        // Invalidate every existing session so the old password can't keep working anywhere
+        $db->execute("DELETE FROM sessions WHERE user_id = ?", [$user['id']]);
+
+        AuditLogger::log($user['id'], 'password_reset_requested', 'user', $user['id']);
+
+        $safeName = htmlspecialchars($user['full_name'], ENT_QUOTES, 'UTF-8');
+        $loginUrl = rtrim(APP_URL, '/') . '/login';
+        $html = "<p>Hello {$safeName},</p>"
+            . "<p>A password reset was requested for your LeaveSync account. Your temporary password is:</p>"
+            . "<p style=\"font-size: 1.25em; font-weight: bold; letter-spacing: 1px;\">{$tempPassword}</p>"
+            . '<p><a href="' . htmlspecialchars($loginUrl, ENT_QUOTES, 'UTF-8') . '">Log in</a> with it and you will be asked to set a new password right away.</p>'
+            . "<p>If you did not request this, contact your administrator immediately.</p>"
+            . "<p>&mdash; LeaveSync</p>";
+        $text = "Hello {$user['full_name']},\n\nA password reset was requested for your LeaveSync account.\n"
+            . "Your temporary password is: {$tempPassword}\n\n"
+            . "Log in with it and you will be asked to set a new password right away: {$loginUrl}\n\n"
+            . "If you did not request this, contact your administrator immediately.\n";
+
+        Mailer::send($user['email'], $user['full_name'], 'LeaveSync: your temporary password', $html, $text);
+
+        return $generic;
+    }
+
+    /**
+     * 12-character temporary password from an unambiguous alphabet
+     * (no 0/O, 1/l/I) so it survives being read from an email.
+     */
+    private static function generateTemporaryPassword() {
+        $alphabet = 'ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz23456789';
+        $max = strlen($alphabet) - 1;
+        $password = '';
+        for ($i = 0; $i < 12; $i++) {
+            $password .= $alphabet[random_int(0, $max)];
+        }
+        return $password;
     }
 
     /**

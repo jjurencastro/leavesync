@@ -215,6 +215,7 @@ leavesync/
 ### Authentication (`/api/auth.php`)
 - `POST ?action=register` - Register new user
 - `POST ?action=login` - User login
+- `POST ?action=forgot_password` - Email a temporary password; user must set a new one at next login
 - `GET ?action=logout` - User logout
 - `GET ?action=profile` - Get current user profile
 - `GET ?action=mfa_setup` - Setup MFA

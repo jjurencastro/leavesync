@@ -92,6 +92,27 @@ server {
 2. Fill in registration form
 3. Test login with credentials
 
+### 6. Email Notifications (SMTP)
+
+LeaveSync emails supervisors/HR when a leave request awaits their approval, and emails a
+temporary password for self-service resets. Email is optional — without it, in-app
+notifications still work and mail-dependent features silently skip delivery.
+
+1. In `.env`, set:
+   ```env
+   MAIL_HOST=smtp.gmail.com
+   MAIL_PORT=587
+   MAIL_SECURE=tls
+   MAIL_USER=your_email@gmail.com
+   MAIL_PASSWORD=your_gmail_app_password
+   MAIL_FROM=your_email@gmail.com
+   MAIL_FROM_NAME=LeaveSync
+   ```
+2. For Gmail, enable 2-Step Verification on the account, then create an App Password at
+   https://myaccount.google.com/apppasswords and use it as `MAIL_PASSWORD` (not the normal password).
+3. On Railway, add the same `MAIL_*` entries under **Variables**.
+4. Leave `MAIL_HOST`/`MAIL_USER` blank to disable outbound email entirely.
+
 ## Features Overview
 
 ### For Employees

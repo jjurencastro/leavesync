@@ -184,6 +184,10 @@ class AuthManager {
             new_password: newPassword
         });
     }
+
+    static async forgotPassword(username) {
+        return APIClient.post('auth.php?action=forgot_password', { username });
+    }
 }
 
 // Leave Requests
