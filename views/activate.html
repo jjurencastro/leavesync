@@ -10,8 +10,8 @@
     <div class="container auth-container">
         <div class="card">
             <div class="card-header">
-                <h2 class="text-center">Activate Your Account</h2>
-                <p class="text-center" style="color: var(--text-light); margin: 0.5rem 0;">
+                <h2 class="text-center" id="page-title">Activate Your Account</h2>
+                <p class="text-center" id="page-subtitle" style="color: var(--text-light); margin: 0.5rem 0;">
                     Set your password to finish activating your administrator-created account.
                 </p>
             </div>
@@ -45,7 +45,7 @@
                         <span>I understand that the device I am using now will be registered as my trusted device.</span>
                     </label>
 
-                    <button type="submit" class="btn btn-primary" style="width: 100%;">Set Password and Activate</button>
+                    <button type="submit" id="submit-btn" class="btn btn-primary" style="width: 100%;">Set Password and Activate</button>
                 </form>
                 <button id="logout-btn" class="btn btn-danger" style="width: 100%; margin-top: 0.5rem;">Cancel</button>
             </div>
@@ -54,10 +54,16 @@
 
     <script src="/js/app.js"></script>
     <script>
+        let isResetFlow = false;
+
         document.getElementById('logout-btn').addEventListener('click', async () => {
             const button = document.getElementById('logout-btn');
             button.disabled = true;
-            const result = await AuthManager.cancelActivation();
+            // Reset flow: Cancel must only log out. First activation: Cancel removes
+            // the abandoned account (cancelActivation rejects established accounts).
+            const result = isResetFlow
+                ? (await AuthManager.logout(), { success: true })
+                : await AuthManager.cancelActivation();
             if (result.success) {
                 window.location.href = '/login';
                 return;
@@ -70,10 +76,19 @@
             await checkAuth();
             const activationInfo = await AuthManager.getActivationInfo();
             if (activationInfo.success) {
+                isResetFlow = !!activationInfo.data.is_reset;
                 document.getElementById('username').value = activationInfo.data.user.username;
                 const user = activationInfo.data.user;
                 document.getElementById('account-details').textContent =
                     `${user.full_name} | ${user.email}`;
+
+                if (isResetFlow) {
+                    document.title = 'Reset Password - LeaveSync';
+                    document.getElementById('page-title').textContent = 'Reset Your Password';
+                    document.getElementById('page-subtitle').textContent =
+                        'Set a new password to regain access to your account.';
+                    document.getElementById('submit-btn').textContent = 'Set New Password';
+                }
             }
         })();
 

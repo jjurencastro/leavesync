@@ -266,6 +266,9 @@ class UserRegistration {
 
     /**
      * Remove an account whose activation was abandoned before a password was set.
+     * Never deletes an established account: any account that has been through a
+     * password reset (or ever had a password) is rejected, so a reset-in-progress
+     * account cannot be wiped via this endpoint.
      */
     public static function cancelActivation($user_id) {
         $db = Database::getInstance();
@@ -279,6 +282,16 @@ class UserRegistration {
         }
 
         if ((int) $user['is_active'] !== 0 || (int) $user['password_set'] !== 0) {
+            return ['success' => false, 'message' => 'This account can no longer be cancelled'];
+        }
+
+        // An established account mid-password-reset also has is_active=0/password_set=0,
+        // but must never be deletable here. Its reset request is the tell.
+        $wasReset = $db->getRow(
+            "SELECT id FROM audit_log WHERE user_id = ? AND action IN ('password_reset_requested', 'password_set', 'password_changed') LIMIT 1",
+            [$user_id]
+        );
+        if ($wasReset) {
             return ['success' => false, 'message' => 'This account can no longer be cancelled'];
         }
 
@@ -328,10 +341,20 @@ class UserRegistration {
             [$user_id]
         );
 
+        // A password-reset flow (vs first-time activation) is identified by a
+        // prior password_reset_requested audit entry. This lets the activation
+        // page show "Reset your password" wording and swap the account-deleting
+        // Cancel button for a plain logout for established users.
+        $reset = $db->getRow(
+            "SELECT id FROM audit_log WHERE user_id = ? AND action = 'password_reset_requested' LIMIT 1",
+            [$user_id]
+        );
+
         return [
             'success' => true,
             'data' => [
                 'user' => $user,
+                'is_reset' => (bool)$reset,
             ]
         ];
     }
