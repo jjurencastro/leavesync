@@ -18,7 +18,31 @@ require_once __DIR__ . '/../src/leave/EmployeeDelegation.php';
 require_once __DIR__ . '/../src/leave/ManagerLeaveQueue.php';
 require_once __DIR__ . '/../src/leave/LeaveAccrual.php';
 require_once __DIR__ . '/../src/leave/CalendarRange.php';
+require_once __DIR__ . '/../src/leave/LeaveAttachment.php';
+require_once __DIR__ . '/../src/leave/LeaveRequestAccess.php';
+require_once __DIR__ . '/../src/auth/AuditLogger.php';
 require_once __DIR__ . '/../src/mail/Mailer.php';
+
+// Binary download must run before the JSON Content-Type header below is sent.
+if (($_GET['action'] ?? '') === 'download_attachment') {
+    if (!Auth::isAuthenticated()) {
+        http_response_code(401);
+        exit('Unauthorized');
+    }
+    $__viewer = Auth::getCurrentUser();
+    try {
+        $__att = LeaveAttachment::getForDownload((int) ($_GET['id'] ?? 0), $__viewer);
+        header('Content-Type: ' . $__att['mime_type']);
+        header('Content-Disposition: attachment; filename="' . preg_replace('/[^A-Za-z0-9._-]/', '_', $__att['original_name']) . '"');
+        header('Content-Length: ' . $__att['file_size']);
+        header('X-Content-Type-Options: nosniff');
+        echo $__att['file_data'];
+    } catch (Exception $e) {
+        http_response_code(404);
+        echo 'Not found';
+    }
+    exit;
+}
 
 header('Content-Type: application/json');
 
@@ -59,6 +83,21 @@ try {
         case 'get':
             if (empty($_GET['id'])) throw new Exception('Leave request ID required');
             echo json_encode(getLeaveRequest($_GET['id'], $user));
+            break;
+
+        case 'upload_attachment':
+            if ($method !== 'POST') throw new Exception('Method not allowed');
+            echo json_encode(LeaveAttachment::attach($_FILES['file'] ?? [], $_POST['leave_request_id'] ?? ($_GET['leave_request_id'] ?? 0), $user));
+            break;
+
+        case 'list_attachments':
+            if (empty($_GET['leave_request_id'])) throw new Exception('Leave request ID required');
+            echo json_encode(['success' => true, 'data' => LeaveAttachment::listForRequest($_GET['leave_request_id'], $user)]);
+            break;
+
+        case 'delete_attachment':
+            if ($method !== 'POST') throw new Exception('Method not allowed');
+            echo json_encode(LeaveAttachment::remove($_GET['id'] ?? ($data['id'] ?? 0), $user));
             break;
 
         case 'update':
@@ -340,7 +379,7 @@ function getLeaveRequest($id, $user) {
 
     $request = $db->getRow(
         "SELECT lr.*, u.full_name, u.email, u.supervisor_id AS requester_supervisor_id,
-            lr.assigned_supervisor_id, lt.name as leave_type_name, m.full_name as manager_name,
+            lr.assigned_supervisor_id, lt.name as leave_type_name, lt.requires_documentation, m.full_name as manager_name,
             asup.full_name as assigned_supervisor_name,
             rsup.full_name as requester_supervisor_name
          FROM leave_requests lr
@@ -362,6 +401,10 @@ function getLeaveRequest($id, $user) {
     }
 
     addApprovalState($request);
+
+    // Supporting documents (optional). Surface the flag plus any attachments so
+    // the UI can prompt the employee and let approvers review them.
+    $request['attachments'] = LeaveAttachment::listForRequest((int) $request['id'], $user);
 
     // Include every verified approval, including a supervisor approval while HR is pending.
     if ($request['digital_signature']) {
@@ -710,7 +753,7 @@ function getEmployeeCalendar($user, $from, $to) {
 function getAvailableLeaveTypes($user) {
     global $db;
 
-    $types = $db->getResults("SELECT id, name FROM leave_types");
+    $types = $db->getResults("SELECT id, name, requires_documentation FROM leave_types");
     $types = array_values(array_filter($types, function ($type) use ($user) {
         if ($type['name'] === 'Maternity Leave') {
             return $user['gender'] === 'female';

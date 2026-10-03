@@ -320,3 +320,20 @@ INSERT INTO leave_types (name, description, days_per_year, is_paid, requires_doc
 ('Maternity Leave', 'Leave for maternity (RA 11210); female employees only', 105, 1, 1),
 ('Paternity Leave', 'Leave for paternity (RA 8187); male employees only', 7, 1, 1),
 ('Bereavement Leave', 'Leave for the death of an immediate family member', 3, 1, 1);
+
+-- Supporting-document attachments for leave requests (medical certificates etc.).
+-- File bytes are stored in the database (LONGBLOB) so they survive ephemeral
+-- filesystems (Railway redeploys) without needing an external object store.
+CREATE TABLE IF NOT EXISTS leave_attachments (
+    id INT PRIMARY KEY AUTO_INCREMENT,
+    leave_request_id INT NOT NULL,
+    user_id INT NOT NULL COMMENT 'uploader (the request owner)',
+    original_name VARCHAR(255) NOT NULL,
+    mime_type VARCHAR(100) NOT NULL,
+    file_size INT UNSIGNED NOT NULL,
+    file_data LONGBLOB NOT NULL,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (leave_request_id) REFERENCES leave_requests(id) ON DELETE CASCADE,
+    FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
+    INDEX idx_leave_request_id (leave_request_id)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
