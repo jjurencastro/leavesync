@@ -11,6 +11,7 @@ require_once __DIR__ . '/../src/auth/DeviceChangeRequest.php';
 require_once __DIR__ . '/../src/auth/UserRegistration.php';
 require_once __DIR__ . '/../src/security/DeviceFingerprint.php';
 require_once __DIR__ . '/../src/leave/ManagerLeaveQueue.php';
+require_once __DIR__ . '/../src/leave/CalendarRange.php';
 require_once __DIR__ . '/../src/security/Permission.php';
 
 header('Content-Type: application/json');
@@ -246,6 +247,7 @@ function getManagerDelegationOptions($user) {
 
 function getManagerCalendar($user, $from, $to) {
     global $db;
+    [$from, $to] = CalendarRange::normalize($from, $to);
     $rows = $db->getResults(
         "SELECT lr.id, lr.user_id, u.full_name, u.department, lt.name AS leave_type_name,
                 lr.start_date, lr.end_date, lr.number_of_days, lr.status

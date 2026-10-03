@@ -12,6 +12,7 @@ require_once __DIR__ . '/../src/auth/DeviceChangeRequest.php';
 require_once __DIR__ . '/../src/auth/UserRegistration.php';
 require_once __DIR__ . '/../src/security/DeviceFingerprint.php';
 require_once __DIR__ . '/../src/security/Permission.php';
+require_once __DIR__ . '/../src/leave/OrgCalendar.php';
 require_once __DIR__ . '/../src/database/SchemaSupport.php';
 
 header('Content-Type: application/json');
@@ -68,6 +69,10 @@ try {
 
         case 'statistics':
             echo json_encode(getHRStatistics($user));
+            break;
+
+        case 'calendar':
+            echo json_encode(OrgCalendar::fetch($_GET['from'] ?? null, $_GET['to'] ?? null, $_GET['department'] ?? null));
             break;
 
         case 'employees':

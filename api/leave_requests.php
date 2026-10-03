@@ -17,6 +17,7 @@ require_once __DIR__ . '/../src/leave/EmployeeBalanceSummary.php';
 require_once __DIR__ . '/../src/leave/EmployeeDelegation.php';
 require_once __DIR__ . '/../src/leave/ManagerLeaveQueue.php';
 require_once __DIR__ . '/../src/leave/LeaveAccrual.php';
+require_once __DIR__ . '/../src/leave/CalendarRange.php';
 require_once __DIR__ . '/../src/mail/Mailer.php';
 
 header('Content-Type: application/json');
@@ -689,6 +690,7 @@ function getLeaveBalance($user_id) {
 
 function getEmployeeCalendar($user, $from, $to) {
         global $db;
+        [$from, $to] = CalendarRange::normalize($from, $to);
         $rows = $db->getResults(
                 "SELECT lr.id, lt.name AS leave_type_name, lr.start_date, lr.end_date, lr.number_of_days, lr.status,
                                 lr.supervisor_status, lr.hr_status
