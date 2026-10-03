@@ -185,9 +185,27 @@ class UserRegistration {
             [$identifier, $identifier]
         );
 
-        // Accounts that never finished activation have no password to reset
-        if (!$user || empty($user['password_set'])) {
+        // TEMP DIAGNOSTIC
+        error_log("RESET-DEBUG: identifier='{$identifier}' user_found=" . ($user ? 'yes(id=' . $user['id'] . ',password_set=' . $user['password_set'] . ')' : 'no'));
+
+        if (!$user) {
             return $generic;
+        }
+
+        // Accounts that never finished activation have no password to reset.
+        // A reset-in-progress account also has password_set = 0 (an earlier
+        // request set it), so allow a re-request when a previous reset is on
+        // record — otherwise a lost email would lock the account out forever.
+        // The 5-minute cooldown below still rate-limits repeat sends.
+        if (empty($user['password_set'])) {
+            $pendingReset = $db->getRow(
+                "SELECT id FROM audit_log WHERE user_id = ? AND action = 'password_reset_requested' LIMIT 1",
+                [$user['id']]
+            );
+            error_log("RESET-DEBUG: password_set=0, pendingReset=" . ($pendingReset ? 'yes' : 'no'));
+            if (!$pendingReset) {
+                return $generic;
+            }
         }
 
         // Cooldown: ignore repeat requests within 5 minutes (audit_log is the ledger)
@@ -196,6 +214,7 @@ class UserRegistration {
             [$user['id']]
         );
         if ($recent) {
+            error_log("RESET-DEBUG: blocked by 5-minute cooldown for user {$user['id']}");
             return $generic;
         }
 
@@ -223,7 +242,10 @@ class UserRegistration {
             . "Log in with it and you will be asked to set a new password right away: {$loginUrl}\n\n"
             . "If you did not request this, contact your administrator immediately.\n";
 
-        Mailer::send($user['email'], $user['full_name'], 'LeaveSync: your temporary password', $html, $text);
+        // TEMP DIAGNOSTIC
+        error_log("RESET-DEBUG: attempting send to {$user['email']}; MAIL_TRANSPORT=" . MAIL_TRANSPORT . "; configured=" . (Mailer::isConfigured() ? 'yes' : 'no'));
+        $sent = Mailer::send($user['email'], $user['full_name'], 'LeaveSync: your temporary password', $html, $text);
+        error_log("RESET-DEBUG: Mailer::send returned " . var_export($sent, true));
 
         return $generic;
     }

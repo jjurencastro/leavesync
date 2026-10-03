@@ -10,6 +10,7 @@ require_once __DIR__ . '/../src/auth/MFA.php';
 require_once __DIR__ . '/../src/security/DeviceFingerprint.php';
 require_once __DIR__ . '/../src/leave/EmployeeNotifications.php';
 require_once __DIR__ . '/../src/leave/EmployeeProfile.php';
+require_once __DIR__ . '/../src/mail/Mailer.php';
 
 header('Content-Type: application/json');
 
@@ -18,6 +19,20 @@ $action = $_GET['action'] ?? '';
 $data = parseRequestPayload();
 
 try {
+    // TEMP DIAGNOSTIC - remove after debugging
+    if ($action === 'mail_debug') {
+        echo json_encode([
+            'MAIL_TRANSPORT' => MAIL_TRANSPORT,
+            'BREVO_API_KEY_set' => BREVO_API_KEY !== '',
+            'BREVO_API_KEY_prefix' => BREVO_API_KEY !== '' ? substr(BREVO_API_KEY, 0, 10) . '...' : '(empty)',
+            'MAIL_FROM' => MAIL_FROM,
+            'getenv_MAIL_TRANSPORT' => getenv('MAIL_TRANSPORT'),
+            'getenv_BREVO_API_KEY' => getenv('BREVO_API_KEY') !== false ? 'set' : 'NOT SET',
+            'isConfigured' => Mailer::isConfigured(),
+        ]);
+        exit;
+    }
+
     switch ($action) {
         case 'login':
             if ($method !== 'POST') throw new Exception('Method not allowed');
