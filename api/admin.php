@@ -12,6 +12,7 @@ require_once __DIR__ . '/../src/security/DigitalSignature.php';
 require_once __DIR__ . '/../src/security/DeviceFingerprint.php';
 require_once __DIR__ . '/../src/security/Permission.php';
 require_once __DIR__ . '/../src/leave/LeavePolicy.php';
+require_once __DIR__ . '/../src/leave/LeaveAccrual.php';
 require_once __DIR__ . '/../src/database/SchemaSupport.php';
 
 header('Content-Type: application/json');
@@ -130,6 +131,11 @@ try {
         case 'update_settings':
             if ($method !== 'PUT') throw new Exception('Method not allowed');
             echo json_encode(updateAppSettings(parseRequestPayload(), $user));
+            break;
+
+        case 'run_leave_reset':
+            if ($method !== 'POST') throw new Exception('Method not allowed');
+            echo json_encode(runLeaveReset($user));
             break;
 
         case 'permissions':
@@ -711,6 +717,25 @@ function updateAppSettings($data, $user) {
     }
     Auth::auditLog($user['id'], 'update_app_settings', 'settings', null, $data);
     return ['success' => true, 'message' => 'Application settings updated'];
+}
+
+/**
+ * Force the yearly leave-balance reset for every user. The reset is lapse-based:
+ * each user's balance is set to the current leave year's allowance and any
+ * unused days are discarded.
+ */
+function runLeaveReset($user) {
+    $count = LeaveAccrual::resetAll();
+    Auth::auditLog($user['id'], 'run_leave_reset', 'settings', null, [
+        'leave_year' => LeaveAccrual::currentLeaveYear(),
+        'users_reset' => $count,
+    ]);
+    return [
+        'success' => true,
+        'message' => "Leave balances reset for {$count} user(s) for leave year " . LeaveAccrual::currentLeaveYear(),
+        'leave_year' => LeaveAccrual::currentLeaveYear(),
+        'users_reset' => $count,
+    ];
 }
 
 function getRolePermissions() {

@@ -16,6 +16,7 @@ require_once __DIR__ . '/../src/leave/EmployeeLeaveFilters.php';
 require_once __DIR__ . '/../src/leave/EmployeeBalanceSummary.php';
 require_once __DIR__ . '/../src/leave/EmployeeDelegation.php';
 require_once __DIR__ . '/../src/leave/ManagerLeaveQueue.php';
+require_once __DIR__ . '/../src/leave/LeaveAccrual.php';
 require_once __DIR__ . '/../src/mail/Mailer.php';
 
 header('Content-Type: application/json');
@@ -666,6 +667,9 @@ function addApprovalState(&$request) {
 
 function getLeaveBalance($user_id) {
     global $db;
+
+    // Lazy yearly reset: bring balances up to the current leave year first.
+    LeaveAccrual::ensureCurrent($user_id);
 
     $balances = $db->getResults(
         "SELECT lb.*, lt.name as leave_type_name 
