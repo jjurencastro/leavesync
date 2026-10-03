@@ -33,6 +33,13 @@ try {
         exit;
     }
 
+    // TEMP DIAGNOSTIC - actually attempt a Brevo send and return the raw result
+    if ($action === 'mail_test') {
+        $to = $data['to'] ?? ($_GET['to'] ?? '');
+        echo json_encode(Mailer::debugBrevo($to));
+        exit;
+    }
+
     switch ($action) {
         case 'login':
             if ($method !== 'POST') throw new Exception('Method not allowed');

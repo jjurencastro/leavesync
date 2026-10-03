@@ -103,6 +103,39 @@ class Mailer {
     }
 
     /**
+     * TEMP DIAGNOSTIC: raw Brevo call that returns the full HTTP response
+     * instead of swallowing it. Remove after debugging.
+     */
+    public static function debugBrevo($toEmail) {
+        $payload = json_encode([
+            'sender' => ['email' => MAIL_FROM, 'name' => MAIL_FROM_NAME],
+            'to' => [['email' => $toEmail, 'name' => 'Test']],
+            'subject' => 'LeaveSync debug',
+            'htmlContent' => '<p>debug</p>',
+            'textContent' => 'debug',
+        ]);
+        $ch = curl_init('https://api.brevo.com/v3/smtp/email');
+        curl_setopt_array($ch, [
+            CURLOPT_RETURNTRANSFER => true,
+            CURLOPT_POST => true,
+            CURLOPT_HTTPHEADER => [
+                'accept: application/json',
+                'api-key: ' . BREVO_API_KEY,
+                'content-type: application/json',
+            ],
+            CURLOPT_POSTFIELDS => $payload,
+            CURLOPT_CONNECTTIMEOUT => 10,
+            CURLOPT_TIMEOUT => 15,
+            CURLOPT_SSL_VERIFYPEER => true,
+        ]);
+        $response = curl_exec($ch);
+        $status = (int) curl_getinfo($ch, CURLINFO_HTTP_CODE);
+        $curlError = curl_error($ch);
+        curl_close($ch);
+        return ['http_status' => $status, 'response' => $response, 'curl_error' => $curlError, 'from' => MAIL_FROM];
+    }
+
+    /**
      * PHPMailer over SMTP (Gmail app password etc.). Short timeouts so a blocked
      * port fails fast instead of hanging the request.
      */
