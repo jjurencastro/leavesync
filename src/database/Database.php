@@ -101,6 +101,8 @@ class Database {
     }
 
     private function __clone() {}
-    private function __wakeup() {}
+    public function __wakeup() {
+        throw new LogicException("Database instances cannot be unserialized");
+    }
 }
 ?>
