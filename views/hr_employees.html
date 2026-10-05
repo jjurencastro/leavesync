@@ -16,10 +16,130 @@
     <div class="container page-container"><h1>Employee Records</h1><div class="card"><div class="card-body"><input id="employee-search" class="form-control" placeholder="Search employee, department, or role" oninput="renderEmployees()"><table class="table"><thead><tr><th>Name</th><th>Department</th><th>Position</th><th>Role</th><th>Supervisor</th><th>Status</th><th>Action</th></tr></thead><tbody id="employee-table"><tr><td colspan="7">Loading...</td></tr></tbody></table></div></div></div></div></div>
 <script src="/js/app.js"></script><script>
 let employees = [];
+let departmentPositionsData = { departments: [], department_positions: {} };
+let supervisorOptions = [];
 (async function init() { const user = await checkAuth(); if (!user || user.role !== 'hr') { window.location.href = '/dashboard'; return; } initUserMenu(user); initSidebarMenu(); loadEmployees(); })();
-async function loadEmployees() { const result = await APIClient.get('hr.php?action=employees'); if (!result.success) return UIManager.showAlert(result.message || 'Unable to load employee records', 'danger'); employees = result.data || []; renderEmployees(); }
+async function loadEmployees() {
+    const [employeesResult, departmentsResult] = await Promise.all([
+        APIClient.get('hr.php?action=employees'),
+        APIClient.get('hr.php?action=department_positions')
+    ]);
+    if (!employeesResult.success) return UIManager.showAlert(employeesResult.message || 'Unable to load employee records', 'danger');
+    if (!departmentsResult.success) return UIManager.showAlert(departmentsResult.message || 'Unable to load department and position options', 'danger');
+    employees = employeesResult.data || [];
+    departmentPositionsData = departmentsResult.data || { departments: [], department_positions: {} };
+    renderEmployees();
+}
 function renderEmployees() { const term = (document.getElementById('employee-search').value || '').toLowerCase(); const rows = employees.filter(u => [u.full_name, u.department, u.position, u.role].join(' ').toLowerCase().includes(term)); const tbody = document.getElementById('employee-table'); tbody.innerHTML = rows.length ? rows.map(u => `<tr><td>${escapeAttr(u.full_name)}</td><td>${escapeAttr(u.department || '')}</td><td>${escapeAttr(u.position || '')}</td><td>${escapeAttr(u.role || '')}</td><td>${escapeAttr(u.supervisor_name || 'None assigned')}</td><td>${Number(u.is_active) ? 'Active' : (u.deleted_at ? 'Deactivated' : 'Pending')}</td><td><button class="btn btn-small btn-secondary" onclick="reassignEmployee(${u.id})">Reassign</button>${u.deleted_at ? `<button class="btn btn-small btn-success" onclick="restoreEmployee(${u.id})">Restore</button>` : ''}</td></tr>`).join('') : '<tr><td colspan="7">No matching employees</td></tr>'; }
 function escapeAttr(value) { return String(value || '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
-async function reassignEmployee(id) { const department = prompt('New department (leave blank to keep current):'); const supervisorId = prompt('New supervisor ID (leave blank to keep current):'); const payload = {}; if (department) payload.department = department; if (supervisorId) payload.supervisor_id = supervisorId; if (!Object.keys(payload).length) return; const result = await APIClient.put(`hr.php?action=reassign_employee&id=${id}`, payload); UIManager.showAlert(result.message || 'Unable to update employee', result.success ? 'success' : 'danger'); if (result.success) loadEmployees(); }
+function buildSelectOptions(items, selectedValue) {
+    return items.map(value => `<option value="${escapeAttr(value)}" ${String(value) === String(selectedValue) ? 'selected' : ''}>${escapeAttr(value)}</option>`).join('');
+}
+function getEligibleSupervisors(department, position, employeeId) {
+    return supervisorOptions.filter(supervisor => {
+        if (Number(supervisor.id) === Number(employeeId)) return false;
+        if (department === 'ADMIN') return supervisor.role === 'admin';
+        if (position === 'Dean') return supervisor.role === 'hr';
+        return supervisor.role === 'manager' && supervisor.department === department;
+    });
+}
+async function reassignEmployee(id) {
+    const employee = employees.find(item => Number(item.id) === Number(id));
+    if (!employee) return;
+    const supervisorsResult = await APIClient.get(`hr.php?action=supervisor_options&exclude_id=${id}`);
+    if (!supervisorsResult.success) {
+        UIManager.showAlert(supervisorsResult.message || 'Unable to load supervisor options', 'danger');
+        return;
+    }
+    supervisorOptions = supervisorsResult.data || [];
+    const departments = departmentPositionsData.departments || [];
+    const department = departments.includes(employee.department) ? employee.department : (departments[0] || '');
+    const positions = departmentPositionsData.department_positions[department] || [];
+    const position = positions.includes(employee.position) ? employee.position : (positions[0] || '');
+    const roles = ['employee', 'manager', 'hr'];
+    const eligibleSupervisors = getEligibleSupervisors(department, position, id);
+    const selectedSupervisor = eligibleSupervisors.some(item => Number(item.id) === Number(employee.supervisor_id))
+        ? String(employee.supervisor_id)
+        : '';
+    const content = `
+        <form id="reassign-employee-form">
+            <div class="form-group">
+                <label for="reassign-department">Department</label>
+                <select id="reassign-department" class="form-control" required>${buildSelectOptions(departments, department)}</select>
+            </div>
+            <div class="form-group">
+                <label for="reassign-position">Position</label>
+                <select id="reassign-position" class="form-control" required>${buildSelectOptions(positions, position)}</select>
+            </div>
+            <div class="form-group">
+                <label for="reassign-role">Role</label>
+                <select id="reassign-role" class="form-control" required>${buildSelectOptions(roles, employee.role)}</select>
+            </div>
+            <div class="form-group">
+                <label for="reassign-supervisor">Supervisor</label>
+                <select id="reassign-supervisor" class="form-control" required></select>
+            </div>
+            <div class="flex-between mt-2">
+                <button type="button" class="btn btn-secondary" onclick="UIManager.hideModal()">Cancel</button>
+                <button type="submit" id="reassign-submit" class="btn btn-secondary" disabled>Reassign</button>
+            </div>
+        </form>
+    `;
+    UIManager.showModal(content, `Reassign ${employee.full_name}`);
+    const departmentSelect = document.getElementById('reassign-department');
+    const positionSelect = document.getElementById('reassign-position');
+    const roleSelect = document.getElementById('reassign-role');
+    const supervisorSelect = document.getElementById('reassign-supervisor');
+    const submitButton = document.getElementById('reassign-submit');
+
+    function refreshSupervisorOptions(preferredId = '') {
+        const eligible = getEligibleSupervisors(departmentSelect.value, positionSelect.value, id);
+        supervisorSelect.innerHTML = '<option value="">Select supervisor</option>' +
+            eligible.map(supervisor => `<option value="${supervisor.id}">${escapeAttr(supervisor.full_name)}</option>`).join('');
+        if (eligible.some(supervisor => String(supervisor.id) === String(preferredId))) {
+            supervisorSelect.value = String(preferredId);
+        }
+    }
+    function markReassignmentDirty() {
+        const changed = departmentSelect.value !== (employee.department || '')
+            || positionSelect.value !== (employee.position || '')
+            || roleSelect.value !== (employee.role || '')
+            || supervisorSelect.value !== String(employee.supervisor_id || '');
+        const valid = Boolean(departmentSelect.value && positionSelect.value && roleSelect.value && supervisorSelect.value);
+        const canSubmit = changed && valid;
+        submitButton.disabled = !canSubmit;
+        submitButton.classList.toggle('btn-success', canSubmit);
+        submitButton.classList.toggle('btn-secondary', !canSubmit);
+    }
+
+    refreshSupervisorOptions(selectedSupervisor);
+    departmentSelect.addEventListener('change', () => {
+        const nextPositions = departmentPositionsData.department_positions[departmentSelect.value] || [];
+        positionSelect.innerHTML = buildSelectOptions(nextPositions, nextPositions.includes(positionSelect.value) ? positionSelect.value : (nextPositions[0] || ''));
+        refreshSupervisorOptions('');
+        markReassignmentDirty();
+    });
+    positionSelect.addEventListener('change', () => {
+        refreshSupervisorOptions('');
+        markReassignmentDirty();
+    });
+    roleSelect.addEventListener('change', markReassignmentDirty);
+    supervisorSelect.addEventListener('change', markReassignmentDirty);
+    document.getElementById('reassign-employee-form').addEventListener('submit', event => submitEmployeeReassignment(event, id));
+}
+async function submitEmployeeReassignment(event, id) {
+    event.preventDefault();
+    const result = await APIClient.put(`hr.php?action=reassign_employee&id=${id}`, {
+        department: document.getElementById('reassign-department').value,
+        position: document.getElementById('reassign-position').value,
+        role: document.getElementById('reassign-role').value,
+        supervisor_id: document.getElementById('reassign-supervisor').value
+    });
+    UIManager.showAlert(result.message || 'Unable to update employee', result.success ? 'success' : 'danger');
+    if (result.success) {
+        UIManager.hideModal();
+        await loadEmployees();
+    }
+}
 async function restoreEmployee(id) { if (!confirm('Restore this employee account?')) return; const result = await APIClient.put(`hr.php?action=restore_employee&id=${id}`, {}); UIManager.showAlert(result.message || 'Unable to restore employee', result.success ? 'success' : 'danger'); if (result.success) loadEmployees(); }
 </script></body></html>

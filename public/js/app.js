@@ -445,7 +445,8 @@ class UIManager {
         const stageLabels = {
             supervisor_review: 'Awaiting Supervisor Review',
             hr_review: 'Awaiting HR Review',
-            completed: 'Completed'
+            completed: 'Completed',
+            cancelled: 'Cancelled'
         };
         const overallStatus = req.overall_status || req.status;
         const stage = stageLabels[req.approval_stage] || 'In Progress';

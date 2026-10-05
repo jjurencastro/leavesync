@@ -45,7 +45,9 @@ try {
             break;
 
         case 'supervisor_options':
-            echo json_encode(['success' => true, 'data' => UserRegistration::getEligibleSupervisors($user['id'])]);
+            $excludeId = filter_var($_GET['exclude_id'] ?? $user['id'], FILTER_VALIDATE_INT);
+            if (!$excludeId) throw new Exception('Valid employee ID required');
+            echo json_encode(['success' => true, 'data' => UserRegistration::getEligibleSupervisors($excludeId)]);
             break;
 
         case 'update_details':
@@ -256,23 +258,37 @@ function getHREmployees() {
 function reassignEmployee($id, $data, $user) {
     global $db;
     if (!$id) throw new Exception('Employee ID required');
-    $target = $db->getRow("SELECT id, role, department FROM users WHERE id = ? AND role <> 'admin'", [$id]);
+    $target = $db->getRow("SELECT id, role, department, position FROM users WHERE id = ? AND role <> 'admin'", [$id]);
     if (!$target) throw new Exception('Employee not found');
 
     $updates = [];
     $values = [];
+    $department = isset($data['department']) ? trim((string) $data['department']) : $target['department'];
+    $position = isset($data['position']) ? trim((string) $data['position']) : $target['position'];
+    if ((isset($data['department']) || isset($data['position']))
+        && !UserRegistration::isValidDepartmentPosition($department, $position)) {
+        throw new Exception('Selected department and position are not valid');
+    }
+
     if (isset($data['department'])) {
         $updates[] = 'department = ?';
-        $values[] = trim((string) $data['department']);
+        $values[] = $department;
     }
     if (isset($data['position'])) {
         $updates[] = 'position = ?';
-        $values[] = trim((string) $data['position']);
+        $values[] = $position;
+    }
+    if (isset($data['role'])) {
+        $role = trim((string) $data['role']);
+        if (!in_array($role, ['employee', 'manager', 'hr'], true)) {
+            throw new Exception('Selected role is not valid');
+        }
+        $updates[] = 'role = ?';
+        $values[] = $role;
     }
     if (isset($data['supervisor_id'])) {
         $supervisorId = (int) $data['supervisor_id'];
-        $department = $data['department'] ?? $target['department'];
-        if (!UserRegistration::isEligibleSupervisor($supervisorId, $id, $department, $data['position'] ?? null)) {
+        if (!UserRegistration::isEligibleSupervisor($supervisorId, $id, $department, $position)) {
             throw new Exception('Selected supervisor is not eligible for this employee');
         }
         $updates[] = 'supervisor_id = ?';
