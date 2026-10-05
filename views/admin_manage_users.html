@@ -272,6 +272,12 @@
         }
 
         async function toggleUserActive(id, currentlyActive) {
+            const user = allUsersData.find(item => Number(item.id) === Number(id));
+            if (!user) return;
+            if (!currentlyActive && Number(user.password_set) === 0 && !user.deleted_at) {
+                UIManager.showAlert('This account cannot be deactivated before activation', 'warning');
+                return;
+            }
             const action = currentlyActive ? 'deactivate_user' : 'restore_user';
             const verb = currentlyActive ? 'deactivate' : 'activate';
             if (!confirm(`Are you sure you want to ${verb} this account?`)) return;
@@ -360,6 +366,7 @@
                 );
                 const row = document.createElement('tr');
                 const roleOptions = TIER_ROLES.map(r => `<option value="${escapeAttr(r.value)}" ${r.value === u.role ? 'selected' : ''}>${escapeAttr(r.label)}</option>`).join('');
+                const isPendingActivation = Number(u.is_active) !== 1 && Number(u.password_set) === 0 && !u.deleted_at;
                 const statusBadge = u.deleted_at
                     ? `<span style="background: #fee2e2; color: #991b1b; font-size: 0.75rem; padding: 2px 6px; border-radius: 4px; font-weight: 600;">Deactivated</span>`
                     : Number(u.is_active) === 1
@@ -377,7 +384,7 @@
                         <div style="display: flex; gap: 0.35rem; align-items: center;">
                             <button id="${saveButtonId}" class="btn btn-small btn-secondary" disabled onclick="updateManagedUser(${u.id})">Save</button>
                             <button class="btn btn-small btn-secondary" onclick="editUserAccount(${u.id})">Edit</button>
-                            ${u.role !== 'admin' ? `<button class="btn btn-small ${u.deleted_at ? 'btn-success' : 'btn-warning'}" onclick="toggleUserActive(${u.id}, ${Number(u.is_active) === 1 && !u.deleted_at})">${u.deleted_at ? 'Activate' : 'Deactivate'}</button>` : ''}
+                            ${u.role !== 'admin' ? `<button class="btn btn-small ${u.deleted_at ? 'btn-success' : 'btn-warning'}" ${isPendingActivation ? 'disabled title="Available after account activation"' : `onclick="toggleUserActive(${u.id}, ${Number(u.is_active) === 1 && !u.deleted_at})"`}>${u.deleted_at ? 'Activate' : 'Deactivate'}</button>` : ''}
                             <button class="btn btn-small btn-danger" onclick="deleteUserAccount(${u.id})">Delete</button>
                         </div>
                     </td>
