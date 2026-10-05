@@ -446,6 +446,7 @@ class UIManager {
             supervisor_review: 'Awaiting Supervisor Review',
             hr_review: 'Awaiting HR Review',
             completed: 'Completed',
+            rejected: 'Rejected',
             cancelled: 'Cancelled'
         };
         const overallStatus = req.overall_status || req.status;

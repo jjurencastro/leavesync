@@ -700,8 +700,13 @@ function addApprovalState(&$request) {
         return;
     }
 
-    if ($request['status'] === 'approved' || $request['status'] === 'rejected') {
+    if ($request['status'] === 'approved') {
         $request['approval_stage'] = 'completed';
+        return;
+    }
+
+    if ($request['status'] === 'rejected') {
+        $request['approval_stage'] = 'rejected';
         return;
     }
 
