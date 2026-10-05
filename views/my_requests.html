@@ -88,6 +88,16 @@
         let currentUser = null;
         let currentFilter = 'all';
 
+        function escapeAttr(str) {
+            if (str === null || str === undefined) return '';
+            return String(str)
+                .replace(/&/g, '&amp;')
+                .replace(/"/g, '&quot;')
+                .replace(/'/g, '&#39;')
+                .replace(/</g, '&lt;')
+                .replace(/>/g, '&gt;');
+        }
+
         // Check authentication
         (async () => {
             currentUser = await checkAuth();
@@ -145,7 +155,7 @@
                         <td>${UIManager.formatDate(req.start_date)}</td>
                         <td>${UIManager.formatDate(req.end_date)}</td>
                         <td>${req.number_of_days}</td>
-                        <td>${req.reason.substring(0, 30)}...</td>
+                        <td>${escapeAttr((req.reason || '').substring(0, 30))}...</td>
                         <td>${UIManager.getApprovalStageBadges(req)}</td>
                         <td>
                             <button class="btn btn-small btn-secondary" onclick="viewRequest(${req.id})">View</button>
@@ -221,7 +231,7 @@
             const content = `
                 <form onsubmit="submitEditRequest(event, ${id})">
                     <label for="edit-request-reason">Reason</label>
-                    <textarea id="edit-request-reason" rows="5" required>${req.reason || ''}</textarea>
+                    <textarea id="edit-request-reason" rows="5" required>${escapeAttr(req.reason)}</textarea>
                     <div class="flex-between mt-2">
                         <button type="button" class="btn btn-secondary" onclick="UIManager.hideModal()">Cancel</button>
                         <button type="submit" class="btn btn-primary">Save Changes</button>
