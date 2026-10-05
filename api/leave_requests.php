@@ -483,7 +483,7 @@ function cancelLeaveRequest($data, $user) {
     }
 
     $db->execute(
-        "UPDATE leave_requests SET status = 'cancelled', supervisor_status = 'not_required', hr_status = 'rejected' WHERE id = ?",
+        "UPDATE leave_requests SET status = 'cancelled', supervisor_status = 'not_required', hr_status = 'pending' WHERE id = ?",
         [$id]
     );
 

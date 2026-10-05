@@ -449,8 +449,10 @@ class UIManager {
         };
         const overallStatus = req.overall_status || req.status;
         const stage = stageLabels[req.approval_stage] || 'In Progress';
+        const supervisorStatus = overallStatus === 'cancelled' ? 'not_required' : req.supervisor_status;
+        const hrStatus = overallStatus === 'cancelled' ? 'not_required' : req.hr_status;
 
-        return `Outcome: ${this.getStatusBadge(overallStatus)}<br><small>Current Stage: ${stage}</small><br>Supervisor: ${this.getStatusBadge(req.supervisor_status)} &nbsp; HR: ${this.getStatusBadge(req.hr_status)}`;
+        return `Outcome: ${this.getStatusBadge(overallStatus)}<br><small>Current Stage: ${stage}</small><br>Supervisor: ${this.getStatusBadge(supervisorStatus)} &nbsp; HR: ${this.getStatusBadge(hrStatus)}`;
     }
 }
 
