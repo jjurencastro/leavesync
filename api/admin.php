@@ -177,9 +177,10 @@ try {
 function getUsers() {
     global $db;
 
+    $deletedAt = SchemaSupport::hasColumn($db, 'users', 'deleted_at') ? 'u.deleted_at' : 'NULL AS deleted_at';
     $users = $db->getResults(
         "SELECT u.id, u.username, u.email, u.full_name, u.department, u.position, u.role, u.is_active, u.password_set, u.created_at,
-                u.supervisor_id, sup.full_name AS supervisor_name
+                $deletedAt, u.supervisor_id, sup.full_name AS supervisor_name
          FROM users u
          LEFT JOIN users sup ON u.supervisor_id = sup.id
          ORDER BY u.created_at DESC"

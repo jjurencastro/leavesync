@@ -74,6 +74,7 @@
                             <option value="">All statuses</option>
                             <option value="active">Active</option>
                             <option value="pending">Pending Activation</option>
+                            <option value="deactivated">Deactivated</option>
                         </select>
                     </div>
                 </div>
@@ -272,7 +273,7 @@
 
         async function toggleUserActive(id, currentlyActive) {
             const action = currentlyActive ? 'deactivate_user' : 'restore_user';
-            const verb = currentlyActive ? 'deactivate' : 'restore';
+            const verb = currentlyActive ? 'deactivate' : 'activate';
             if (!confirm(`Are you sure you want to ${verb} this account?`)) return;
             const result = await APIClient.put(`admin.php?action=${action}&id=${id}`, {});
             UIManager.showAlert(result.message || `Unable to ${verb} account`, result.success ? 'success' : 'danger');
@@ -299,8 +300,9 @@
                 if (search && !((u.full_name || '').toLowerCase().includes(search) || (u.username || '').toLowerCase().includes(search))) return false;
                 if (department && u.department !== department) return false;
                 if (role && u.role !== role) return false;
-                if (status === 'active' && Number(u.is_active) !== 1) return false;
-                if (status === 'pending' && Number(u.is_active) === 1) return false;
+                if (status === 'active' && (Number(u.is_active) !== 1 || u.deleted_at)) return false;
+                if (status === 'pending' && (Number(u.is_active) === 1 || u.deleted_at)) return false;
+                if (status === 'deactivated' && !u.deleted_at) return false;
                 return true;
             });
         }
@@ -375,7 +377,7 @@
                         <div style="display: flex; gap: 0.35rem; align-items: center;">
                             <button id="${saveButtonId}" class="btn btn-small btn-secondary" disabled onclick="updateManagedUser(${u.id})">Save</button>
                             <button class="btn btn-small btn-secondary" onclick="editUserAccount(${u.id})">Edit</button>
-                            ${u.role !== 'admin' ? `<button class="btn btn-small ${u.deleted_at ? 'btn-success' : 'btn-warning'}" onclick="toggleUserActive(${u.id}, ${Number(u.is_active) === 1 && !u.deleted_at})">${u.deleted_at ? 'Restore' : 'Deactivate'}</button>` : ''}
+                            ${u.role !== 'admin' ? `<button class="btn btn-small ${u.deleted_at ? 'btn-success' : 'btn-warning'}" onclick="toggleUserActive(${u.id}, ${Number(u.is_active) === 1 && !u.deleted_at})">${u.deleted_at ? 'Activate' : 'Deactivate'}</button>` : ''}
                             <button class="btn btn-small btn-danger" onclick="deleteUserAccount(${u.id})">Delete</button>
                         </div>
                     </td>
