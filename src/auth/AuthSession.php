@@ -80,6 +80,14 @@ class AuthSession {
                 // temporary password is valid and must let the user in so the activation
                 // page can force them to set a new password.
                 if (!password_verify($password, $user['password_hash'])) {
+                    $passwordReset = $db->getRow(
+                        "SELECT id FROM audit_log WHERE user_id = ? AND action = 'password_reset_requested' LIMIT 1",
+                        [$user['id']]
+                    );
+                    if ($passwordReset) {
+                        AuditLogger::log($user['id'], 'login_failed', 'user', $user['id']);
+                        return ['success' => false, 'message' => 'Invalid credentials'];
+                    }
                     return ['success' => false, 'message' => 'Please continue with Google to set up and activate your account.'];
                 }
             }
