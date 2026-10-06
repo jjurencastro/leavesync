@@ -199,6 +199,51 @@ try {
             echo json_encode(['success' => true, 'data' => $user]);
             break;
 
+        case 'profile_details':
+            if (!Auth::isAuthenticated()) {
+                http_response_code(401);
+                throw new Exception('Unauthorized');
+            }
+            $user = Auth::getCurrentUser();
+            $db = Database::getInstance();
+            EmployeeProfile::ensureDetailsTable($db);
+            $row = $db->getRow("SELECT * FROM employee_profile_details WHERE user_id = ?", [$user['id']]);
+            $details = [];
+            foreach (array_keys(EmployeeProfile::DETAIL_FIELDS) as $field) {
+                $details[$field] = $row[$field] ?? null;
+            }
+            echo json_encode(['success' => true, 'data' => $details]);
+            break;
+
+        case 'update_profile_details':
+            if (!Auth::isAuthenticated()) {
+                http_response_code(401);
+                throw new Exception('Unauthorized');
+            }
+            $user = Auth::getCurrentUser();
+
+            [$clean, $errors] = EmployeeProfile::sanitizeProfileDetails($data);
+            if (!empty($errors)) {
+                throw new Exception(implode('. ', $errors));
+            }
+            if (empty($clean)) {
+                throw new Exception('No valid profile fields provided');
+            }
+
+            $db = Database::getInstance();
+            EmployeeProfile::ensureDetailsTable($db);
+            $columns = array_keys($clean);
+            $updates = array_map(function ($c) { return "$c = VALUES($c)"; }, $columns);
+            $db->execute(
+                "INSERT INTO employee_profile_details (user_id, " . implode(', ', $columns) . ") VALUES (?, " . implode(', ', array_fill(0, count($columns), '?')) . ") ON DUPLICATE KEY UPDATE " . implode(', ', $updates),
+                array_merge([$user['id']], array_values($clean))
+            );
+
+            Auth::auditLog($user['id'], 'update_employee_profile_details', 'user', $user['id']);
+
+            echo json_encode(['success' => true, 'message' => 'Details saved']);
+            break;
+
         case 'update_profile':
             if (!Auth::isAuthenticated()) {
                 http_response_code(401);

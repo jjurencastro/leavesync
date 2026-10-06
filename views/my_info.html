@@ -96,6 +96,20 @@
             </div>
         </div>
 
+        <!-- Optional personal details -->
+        <div class="card">
+            <div class="card-header" style="display: flex; justify-content: space-between; align-items: center; gap: 1rem;">
+                <h2>Personal &amp; Emergency Details <small class="text-muted" style="font-weight: 400;">(optional)</small></h2>
+                <div style="display: flex; gap: 0.5rem;">
+                    <button type="button" class="btn btn-small btn-secondary" id="cancel-details-button" style="display: none;" onclick="cancelDetailsEdit()">Cancel</button>
+                    <button type="button" class="btn btn-small btn-primary" id="edit-details-button" onclick="toggleDetailsEditor()">Edit</button>
+                </div>
+            </div>
+            <div class="card-body">
+                <table class="table" id="details-table"></table>
+            </div>
+        </div>
+
     </div>
         </div>
     </div>
@@ -146,8 +160,106 @@
 
         let profileEditing = false;
 
+        const DETAIL_FIELDS = [
+            { key: 'nickname', label: 'Nickname', type: 'text', max: 50 },
+            { key: 'date_of_birth', label: 'Date of Birth', type: 'date' },
+            { key: 'civil_status', label: 'Civil Status', type: 'select', options: ['single', 'married', 'widowed', 'separated', 'divorced'] },
+            { key: 'contact_number', label: 'Contact Number', type: 'tel', max: 25 },
+            { key: 'address', label: 'Address', type: 'text', max: 255 },
+            { key: 'emergency_contact_name', label: 'Emergency Contact Name', type: 'text', max: 100 },
+            { key: 'emergency_contact_relationship', label: 'Emergency Contact Relationship', type: 'text', max: 50 },
+            { key: 'emergency_contact_number', label: 'Emergency Contact Number', type: 'tel', max: 25 }
+        ];
+        let profileDetails = {};
+        let detailsEditing = false;
+
+        function detailDisplay(field, value) {
+            if (!value) return '-';
+            if (field.type === 'date') return UIManager.formatDate(value);
+            if (field.type === 'select') return value.charAt(0).toUpperCase() + value.slice(1);
+            return value;
+        }
+
+        function renderDetails() {
+            const table = document.getElementById('details-table');
+            table.innerHTML = '';
+            DETAIL_FIELDS.forEach(field => {
+                const row = table.insertRow();
+                const th = document.createElement('th');
+                th.textContent = field.label;
+                const td = row.insertCell();
+                row.insertBefore(th, td);
+                const value = profileDetails[field.key] || '';
+
+                if (!detailsEditing) {
+                    td.textContent = detailDisplay(field, value);
+                    return;
+                }
+
+                let input;
+                if (field.type === 'select') {
+                    input = document.createElement('select');
+                    [''].concat(field.options).forEach(opt => {
+                        const o = document.createElement('option');
+                        o.value = opt;
+                        o.textContent = opt ? opt.charAt(0).toUpperCase() + opt.slice(1) : 'Select';
+                        o.selected = opt === value;
+                        input.appendChild(o);
+                    });
+                } else {
+                    input = document.createElement('input');
+                    input.type = field.type;
+                    input.value = value;
+                    if (field.max) input.maxLength = field.max;
+                    if (field.type === 'date') input.max = new Date().toISOString().slice(0, 10);
+                }
+                input.id = 'detail-' + field.key;
+                input.className = 'form-control';
+                td.appendChild(input);
+            });
+        }
+
+        async function loadDetails() {
+            const result = await AuthManager.getProfileDetails();
+            if (result.success) profileDetails = result.data || {};
+            renderDetails();
+        }
+
+        function setDetailsEditing(editing) {
+            detailsEditing = editing;
+            document.getElementById('edit-details-button').textContent = editing ? 'Save' : 'Edit';
+            document.getElementById('cancel-details-button').style.display = editing ? '' : 'none';
+            renderDetails();
+        }
+
+        function cancelDetailsEdit() {
+            setDetailsEditing(false);
+        }
+
+        async function toggleDetailsEditor() {
+            if (!detailsEditing) {
+                setDetailsEditing(true);
+                return;
+            }
+
+            const payload = {};
+            DETAIL_FIELDS.forEach(field => {
+                payload[field.key] = document.getElementById('detail-' + field.key).value.trim();
+            });
+
+            const result = await AuthManager.updateProfileDetails(payload);
+            if (result.success) {
+                UIManager.showAlert('Details saved', 'success');
+                profileDetails = payload;
+                setDetailsEditing(false);
+            } else {
+                UIManager.showAlert(result.message || 'Unable to save details', 'danger');
+            }
+        }
+
         // Load profile
         loadProfile();
+        loadDetails();
 
         async function loadProfile() {
             const profile = await AuthManager.getProfile();

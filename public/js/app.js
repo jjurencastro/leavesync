@@ -166,6 +166,14 @@ class AuthManager {
         return APIClient.post('auth.php?action=update_profile', data);
     }
 
+    static async getProfileDetails() {
+        return APIClient.get('auth.php?action=profile_details');
+    }
+
+    static async updateProfileDetails(data) {
+        return APIClient.post('auth.php?action=update_profile_details', data);
+    }
+
     static async getNotifications() {
         return APIClient.get('auth.php?action=notifications');
     }
