@@ -323,7 +323,9 @@ function listLeaveRequests($user, $statusFilter = 'all', $searchFilter = '') {
                 LIMIT 50";
         $requests = $db->getResults($sql, [$user['id'], $user['id'], $user['id'], $user['id']]);
     } else if ($user['role'] === 'hr') {
-        // HR sees requests awaiting HR review and terminal rejections for recordkeeping.
+        // HR sees all leave requests like admin does, but can only approve if:
+        // 1. Already approved by supervisor, OR
+        // 2. HR is the backup approver (supervisor on leave)
         $sql = "SELECT lr.*, u.full_name, lt.name as leave_type_name,
                        asup.full_name as assigned_supervisor_name,
                        rsup.full_name as supervisor_name,
@@ -333,10 +335,8 @@ function listLeaveRequests($user, $statusFilter = 'all', $searchFilter = '') {
                 JOIN leave_types lt ON lr.leave_type_id = lt.id
                 LEFT JOIN users asup ON lr.assigned_supervisor_id = asup.id
                 LEFT JOIN users rsup ON u.supervisor_id = rsup.id
-                     WHERE lr.supervisor_status IN ('approved', 'not_required')
-                         OR lr.status = 'rejected'
                 ORDER BY lr.created_at DESC
-                LIMIT 50";
+                LIMIT 100";
         $requests = $db->getResults($sql, []);
     } else if ($user['role'] === 'admin') {
         // Admins see all requests
