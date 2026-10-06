@@ -18,18 +18,18 @@ class FakeRegistrationDb {
             return null;
         }
 
-        if ($normalized === "SELECT id FROM users WHERE id = ? AND id <> ? AND (is_active = 1 OR (is_active = 0 AND password_set = 0)) AND role = 'manager' AND department = ?") {
-            if ((int)$params[0] === 2 && (int)$params[1] === 0 && $params[2] === 'CCS') {
-                return ['id' => 2];
+        if ($normalized === "SELECT id FROM users WHERE id = ? AND id <> ? AND (is_active = 1 OR (is_active = 0 AND password_set = 0)) AND role IN ('admin', 'hr', 'manager')") {
+            $supervisorId = (int)$params[0];
+            if (in_array($supervisorId, [1, 2, 3, 4], true) && $supervisorId !== (int)$params[1]) {
+                return ['id' => $supervisorId];
             }
             return null;
         }
 
-        if ($normalized === "SELECT id FROM users WHERE id = ? AND id <> ? AND (is_active = 1 OR (is_active = 0 AND password_set = 0)) AND role = 'hr'") {
-            if ((int)$params[0] === 3 && (int)$params[1] === 0) {
-                return ['id' => 3];
-            }
-            return null;
+        // Reporting lines for the loop check: user 4 (a manager) reports to user 5
+        if ($normalized === "SELECT supervisor_id FROM users WHERE id = ?") {
+            $reportsTo = [4 => 5, 5 => 1];
+            return isset($reportsTo[(int)$params[0]]) ? ['supervisor_id' => $reportsTo[(int)$params[0]]] : null;
         }
 
         return null;
@@ -42,6 +42,42 @@ $fakeDb = new FakeRegistrationDb();
 $adminSupervisor = UserRegistration::resolveEligibleSupervisor('admin', 0, 'ADMIN', 'HR Officer', $fakeDb);
 if (!$adminSupervisor || $adminSupervisor['role'] !== 'admin') {
     fwrite(STDERR, "FAIL: Expected admin supervisor to resolve for ADMIN department" . PHP_EOL);
+    exit(1);
+}
+
+// Test cross-department supervisors: a CCS dean can supervise a CTE instructor and a BED teacher
+foreach ([['CTE', 'Instructor'], ['BED', 'Teacher'], ['ADMIN', 'Staff']] as [$dept, $pos]) {
+    $crossDept = UserRegistration::resolveEligibleSupervisor('dean_ccs', 0, $dept, $pos, $fakeDb);
+    if (!$crossDept || (int)$crossDept['id'] !== 2) {
+        fwrite(STDERR, "FAIL: Expected any active supervisor to be eligible for $dept $pos" . PHP_EOL);
+        exit(1);
+    }
+}
+
+// HR may supervise non-Dean staff, and an admin may supervise academic staff
+if (!UserRegistration::isEligibleSupervisor(3, 0, 'CCS', 'Instructor', $fakeDb) || !UserRegistration::isEligibleSupervisor(1, 0, 'CCS', 'Instructor', $fakeDb)) {
+    fwrite(STDERR, "FAIL: Expected HR and admin to be eligible supervisors for academic staff" . PHP_EOL);
+    exit(1);
+}
+
+// Non-supervisors, unknown users and the user themselves are never eligible
+if (UserRegistration::isEligibleSupervisor(99, 0, 'CCS', 'Instructor', $fakeDb) || UserRegistration::isEligibleSupervisor(2, 2, 'CCS', 'Instructor', $fakeDb)) {
+    fwrite(STDERR, "FAIL: Expected unknown users and self to be rejected as supervisor" . PHP_EOL);
+    exit(1);
+}
+
+// Reporting loops are rejected: user 4 reports to 5, so 4 cannot become 5's supervisor
+if (UserRegistration::isEligibleSupervisor(4, 5, 'CCS', 'Instructor', $fakeDb)) {
+    fwrite(STDERR, "FAIL: Expected a supervisor who reports to the user to be rejected" . PHP_EOL);
+    exit(1);
+}
+
+// BED department positions
+if (!UserRegistration::isValidDepartmentPosition('BED', 'Principal')
+    || UserRegistration::getDefaultRoleForPosition('BED', 'Principal') !== 'manager'
+    || UserRegistration::getDefaultRoleForPosition('BED', 'Teacher') !== 'employee'
+    || !in_array('Principal', UserRegistration::getDepartmentOptions()['department_positions']['BED'], true)) {
+    fwrite(STDERR, "FAIL: Expected BED department with a manager-level Principal" . PHP_EOL);
     exit(1);
 }
 

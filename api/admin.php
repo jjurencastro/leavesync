@@ -480,7 +480,7 @@ function updateUser($id, $data) {
             $updates[] = "position = ?";
             $values[] = $position;
         }
-        if ($department !== 'ADMIN' && $position === 'Dean') {
+        if ($department !== 'ADMIN' && in_array($position, ['Dean', 'Principal'], true)) {
             $updates[] = "role = ?";
             $values[] = 'manager';
         }
@@ -488,8 +488,8 @@ function updateUser($id, $data) {
     if (isset($data['role'])) {
         $department = $data['department'] ?? $user['department'];
         $position = $data['position'] ?? $user['position'];
-        if ($department !== 'ADMIN' && $position === 'Dean' && $data['role'] !== 'manager') {
-            throw new Exception('A Dean must use the manager role');
+        if ($department !== 'ADMIN' && in_array($position, ['Dean', 'Principal'], true) && $data['role'] !== 'manager') {
+            throw new Exception('A ' . $position . ' must use the manager role');
         }
         if (!in_array($data['role'], ['employee', 'manager', 'hr', 'admin'], true)) {
             throw new Exception('Invalid role');

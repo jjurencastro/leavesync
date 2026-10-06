@@ -48,13 +48,16 @@ function getReassignPosition() {
         ? (document.getElementById('reassign-custom-position')?.value || '').trim()
         : (select?.value || '');
 }
+function supervisorLabel(s) {
+    const details = [s.position, s.department].filter(Boolean).join(', ');
+    return details ? `${s.full_name} (${details})` : s.full_name;
+}
+// Any active supervisor, HR or admin may be chosen; same-department people are listed first
 function getEligibleSupervisors(department, position, employeeId) {
-    return supervisorOptions.filter(supervisor => {
-        if (Number(supervisor.id) === Number(employeeId)) return false;
-        if (department === 'ADMIN') return supervisor.role === 'admin';
-        if (position === 'Dean') return supervisor.role === 'hr';
-        return supervisor.role === 'manager' && supervisor.department === department;
-    });
+    return supervisorOptions
+        .filter(supervisor => Number(supervisor.id) !== Number(employeeId))
+        .sort((x, y) => (y.department === department) - (x.department === department)
+            || String(x.full_name).localeCompare(String(y.full_name)));
 }
 async function reassignEmployee(id) {
     const employee = employees.find(item => Number(item.id) === Number(id));
@@ -109,7 +112,7 @@ async function reassignEmployee(id) {
     function refreshSupervisorOptions(preferredId = '') {
         const eligible = getEligibleSupervisors(departmentSelect.value, getReassignPosition(), id);
         supervisorSelect.innerHTML = '<option value="">Select supervisor</option>' +
-            eligible.map(supervisor => `<option value="${supervisor.id}">${escapeAttr(supervisor.full_name)}</option>`).join('');
+            eligible.map(supervisor => `<option value="${supervisor.id}">${escapeAttr(supervisorLabel(supervisor))}</option>`).join('');
         if (eligible.some(supervisor => String(supervisor.id) === String(preferredId))) {
             supervisorSelect.value = String(preferredId);
         }

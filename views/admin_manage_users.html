@@ -133,16 +133,19 @@
             }
         }
 
-        // Hierarchy: ADMIN staff report to admin, Deans report to HR, other academic positions report to their department's Dean
+        // Any active supervisor, HR or admin may be chosen; same-department people are listed first
         function getEligibleSupervisors(department, position, excludeId) {
-            return allUsersData.filter(s => {
-                if ((Number(s.is_active) === 0 && Number(s.password_set) === 1) || Number(s.id) === Number(excludeId)) return false;
-                if (s.role === 'admin') return true;
-                if (department === 'ADMIN') return s.role === 'admin';
-                if (position === 'Dean') return s.role === 'hr';
-                if (position) return s.role === 'manager' && s.department === department;
-                return false;
-            });
+            return allUsersData
+                .filter(s => !((Number(s.is_active) === 0 && Number(s.password_set) === 1) || Number(s.id) === Number(excludeId))
+                    && ['manager', 'hr', 'admin'].includes(s.role))
+                .map(s => ({ ...s, label: supervisorLabel(s) }))
+                .sort((x, y) => (y.department === department) - (x.department === department)
+                    || String(x.full_name).localeCompare(String(y.full_name)));
+        }
+
+        function supervisorLabel(s) {
+            const details = [s.position, s.department].filter(Boolean).join(', ');
+            return details ? `${s.full_name} (${details})` : s.full_name;
         }
 
         function escapeAttr(str) {
@@ -379,7 +382,7 @@
                 // so the user's current supervisor is actually selected.
                 const supervisorOptions = buildOptions(
                     getEligibleSupervisors(u.department, u.position, u.id),
-                    u.supervisor_id, 'id', 'full_name'
+                    u.supervisor_id, 'id', 'label'
                 );
                 const row = document.createElement('tr');
                 const roleOptions = TIER_ROLES.map(r => `<option value="${escapeAttr(r.value)}" ${r.value === u.role ? 'selected' : ''}>${escapeAttr(r.label)}</option>`).join('');
@@ -445,7 +448,7 @@
                 selectedSupervisor = String(currentSupervisor);
             }
 
-            supervisorSelect.innerHTML = `<option value="">Select supervisor</option>${buildOptions(eligibleSupervisors, selectedSupervisor, 'id', 'full_name')}`;
+            supervisorSelect.innerHTML = `<option value="">Select supervisor</option>${buildOptions(eligibleSupervisors, selectedSupervisor, 'id', 'label')}`;
             markManagedUserDirty(id);
         }
 
@@ -478,7 +481,7 @@
                 selectedSupervisor = String(currentSupervisor);
             }
 
-            supervisorSelect.innerHTML = `<option value="">Select supervisor</option>${buildOptions(eligibleSupervisors, selectedSupervisor, 'id', 'full_name')}`;
+            supervisorSelect.innerHTML = `<option value="">Select supervisor</option>${buildOptions(eligibleSupervisors, selectedSupervisor, 'id', 'label')}`;
 
             // Keep the tier/role suggestion in sync with the newly selected position
             // (e.g. Dean -> manager, Instructor -> employee) so it doesn't stay stuck
@@ -501,7 +504,7 @@
             const selectedSupervisor = eligibleSupervisors.some(s => String(s.id) === String(currentSupervisor))
                 ? currentSupervisor
                 : (user && eligibleSupervisors.some(s => String(s.id) === String(user.supervisor_id)) ? String(user.supervisor_id) : '');
-            supervisorSelect.innerHTML = `<option value="">Select supervisor</option>${buildOptions(eligibleSupervisors, selectedSupervisor, 'id', 'full_name')}`;
+            supervisorSelect.innerHTML = `<option value="">Select supervisor</option>${buildOptions(eligibleSupervisors, selectedSupervisor, 'id', 'label')}`;
             markManagedUserDirty(id);
         }
 

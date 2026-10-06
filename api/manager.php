@@ -44,7 +44,7 @@ try {
             break;
 
         case 'supervisor_options':
-            echo json_encode(['success' => true, 'data' => UserRegistration::getEligibleSupervisors($user['id'], $user['department'])]);
+            echo json_encode(['success' => true, 'data' => UserRegistration::getEligibleSupervisors($user['id'])]);
             break;
 
         case 'update_details':
