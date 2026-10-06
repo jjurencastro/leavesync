@@ -885,6 +885,7 @@ function countWeekdays(DateTime $start, DateTime $end) {
 /**
  * Notify whoever needs to act first on a newly-created request: the requester's
  * supervisor for Tier 1 (employee), or HR directly for Tier 2 (manager).
+ * Also notify the primary supervisor when they're being bypassed due to leave.
  */
 function notifyNextApprover($requester, $message, $entity_id, $assignedSupervisorId = null) {
     global $db;
@@ -894,6 +895,23 @@ function notifyNextApprover($requester, $message, $entity_id, $assignedSuperviso
         $approver = $db->getRow("SELECT email, full_name FROM users WHERE id = ?", [$assignedSupervisorId]);
         if ($approver) {
             emailApprover($approver, $message);
+        }
+
+        // If a backup approver was assigned (not the primary supervisor), notify the primary supervisor
+        // that their request was escalated due to their unavailability
+        if (!empty($requester['supervisor_id']) && (int) $requester['supervisor_id'] !== (int) $assignedSupervisorId) {
+            $primarySupervisor = $db->getRow("SELECT id, full_name FROM users WHERE id = ?", [$requester['supervisor_id']]);
+            if ($primarySupervisor) {
+                $escalatedMessage = "A leave request from {$requester['full_name']} has been escalated to a backup approver "
+                    . "because you are unavailable. You can review the request upon your return.";
+                createNotification(
+                    $primarySupervisor['id'],
+                    'Leave Request Escalated',
+                    $escalatedMessage,
+                    'leave_request',
+                    $entity_id
+                );
+            }
         }
         return;
     }
