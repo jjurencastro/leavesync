@@ -32,7 +32,6 @@ $viewRoutes = [
     '/team-requests'           => ['file' => 'views/team_leave_requests.html', 'auth' => true, 'allow' => ['manager']],
     '/device-requests'         => ['file' => 'views/manager_device_requests.html', 'auth' => true, 'allow' => ['manager']],
     '/my-info'                 => ['file' => 'views/my_info.html', 'auth' => true],
-    '/notifications'           => ['file' => 'views/notifications.html', 'auth' => true],
     '/settings'                => ['file' => 'views/settings.html', 'auth' => true],
     '/admin'                   => ['file' => 'views/admin.html', 'auth' => true, 'allow' => ['admin']],
     '/admin/leave-requests'    => ['file' => 'views/admin_leave_requests.html', 'auth' => true, 'allow' => ['admin']],

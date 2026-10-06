@@ -975,6 +975,13 @@ textarea {
 
 .notification-dropdown-footer {
     display: block;
+    width: 100%;
+    background: none;
+    border-left: 0;
+    border-right: 0;
+    border-bottom: 0;
+    font: inherit;
+    cursor: pointer;
     padding: 0.7rem 1rem;
     text-align: center;
     font-weight: 600;
@@ -1440,4 +1447,15 @@ textarea {
         box-shadow: 0 1px 3px rgba(16, 42, 67, 0.16);
         border: none;
     }
+}
+
+.notification-modal .modal-content {
+    max-width: 36rem;
+    max-height: 85vh;
+    overflow-y: auto;
+}
+
+.notification-modal-actions {
+    text-align: right;
+    margin-bottom: 0.5rem;
 }

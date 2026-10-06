@@ -627,7 +627,7 @@ function initNotificationBell() {
                 <button type="button" class="notification-link-button" id="notification-mark-all">Mark all as read</button>
             </div>
             <div class="notification-dropdown-list" id="notification-dropdown-list"></div>
-            <a class="notification-dropdown-footer" href="/notifications">View all</a>
+            <button type="button" class="notification-dropdown-footer" id="notification-view-all">View all</button>
         </div>
     `;
 
@@ -682,9 +682,58 @@ function initNotificationBell() {
         const result = await AuthManager.markAllNotificationsRead();
         if (result.success) {
             await refresh();
-            if (typeof window.onNotificationsChanged === 'function') window.onNotificationsChanged();
         }
     });
+
+    const openAllModal = async () => {
+        dropdown.classList.remove('open');
+        let modal = document.getElementById('notification-modal');
+        if (!modal) {
+            modal = document.createElement('div');
+            modal.className = 'modal notification-modal';
+            modal.id = 'notification-modal';
+            modal.innerHTML = `
+                <div class="modal-content">
+                    <div class="modal-header">
+                        <h2>All Notifications</h2>
+                        <button type="button" class="modal-close" aria-label="Close">&times;</button>
+                    </div>
+                    <div class="modal-body">
+                        <div class="notification-modal-actions"><button type="button" class="btn btn-secondary btn-small" id="notification-modal-mark-all">Mark all as read</button></div>
+                        <div id="notification-modal-list"></div>
+                    </div>
+                </div>`;
+            document.body.appendChild(modal);
+            const close = () => modal.classList.remove('active');
+            modal.querySelector('.modal-close').addEventListener('click', close);
+            modal.addEventListener('click', (e) => { if (e.target === modal) close(); });
+            document.addEventListener('keydown', (e) => { if (e.key === 'Escape') close(); });
+            modal.querySelector('#notification-modal-mark-all').addEventListener('click', async () => {
+                const r = await AuthManager.markAllNotificationsRead();
+                if (r.success) { await renderModal(); refresh(); }
+            });
+        }
+        modal.classList.add('active');
+        await renderModal();
+    };
+
+    const renderModal = async () => {
+        const result = await AuthManager.getAllNotifications();
+        const box = document.getElementById('notification-modal-list');
+        const btn = document.getElementById('notification-modal-mark-all');
+        const items = result.success && Array.isArray(result.data) ? result.data : [];
+        btn.disabled = Number(result.summary?.unread || 0) === 0;
+        box.innerHTML = items.length ? items.map(n => `
+            <div class="notification-page-item ${n.read_state === 'unread' ? 'unread' : ''}">
+                <div class="flex-between" style="gap: 0.75rem; flex-wrap: wrap;">
+                    <strong>${escapeNotificationText(n.title || 'Notification')}</strong>
+                    <small class="text-muted">${escapeNotificationText(UIManager.formatDate(n.created_at))}</small>
+                </div>
+                <p style="margin: 0.25rem 0 0;">${escapeNotificationText(n.message || '')}</p>
+            </div>`).join('') : '<p class="notification-empty">No notifications yet.</p>';
+    };
+
+    wrapper.querySelector('#notification-view-all').addEventListener('click', openAllModal);
 
     refresh();
     setInterval(refresh, 60000);
