@@ -177,6 +177,7 @@
         }
 
         async function viewRequest(id) {
+            requestModalMode = 'view';
             const result = await LeaveRequestManager.getRequest(id);
             if (!result.success) {
                 UIManager.showAlert(result.message || 'Failed to load leave request', 'danger');
@@ -224,18 +225,49 @@
             UIManager.showModal(content, 'Leave Request Details');
         }
 
+        let requestModalMode = 'view';
+        function refreshRequestModal(id) {
+            return requestModalMode === 'edit' ? editRequest(id) : viewRequest(id);
+        }
+
         async function editRequest(id) {
-            const result = await LeaveRequestManager.getRequest(id);
+            requestModalMode = 'edit';
+            const [result, typesResult] = await Promise.all([
+                LeaveRequestManager.getRequest(id),
+                LeaveRequestManager.getLeaveTypes()
+            ]);
             if (!result.success) {
                 UIManager.showAlert(result.message || 'Failed to load leave request', 'danger');
                 return;
             }
 
             const req = result.data;
+            const locked = req.supervisor_status === 'approved';
+            const types = (typesResult.success ? sortLeaveTypes(typesResult.data) : [])
+                .map((t) => `<option value="${Number(t.id)}" ${Number(t.id) === Number(req.leave_type_id) ? 'selected' : ''}>${escapeAttr(t.name)}</option>`)
+                .join('');
             const content = `
                 <form onsubmit="submitEditRequest(event, ${id})">
-                    <label for="edit-request-reason">Reason</label>
-                    <textarea id="edit-request-reason" rows="5" required>${escapeAttr(req.reason)}</textarea>
+                    ${locked ? '<div class="alert alert-info">The supervisor already approved this request, so only the reason and documents can be changed.</div>' : ''}
+                    <div class="form-group">
+                        <label for="edit-request-type">Leave Type</label>
+                        <select id="edit-request-type" ${locked ? 'disabled' : ''}>${types}</select>
+                    </div>
+                    <div style="display: grid; grid-template-columns: 1fr 1fr; gap: .75rem;">
+                        <div class="form-group">
+                            <label for="edit-request-start">Start Date</label>
+                            <input type="date" id="edit-request-start" value="${escapeAttr(req.start_date)}" ${locked ? 'disabled' : ''} required>
+                        </div>
+                        <div class="form-group">
+                            <label for="edit-request-end">End Date</label>
+                            <input type="date" id="edit-request-end" value="${escapeAttr(req.end_date)}" ${locked ? 'disabled' : ''} required>
+                        </div>
+                    </div>
+                    <div class="form-group">
+                        <label for="edit-request-reason">Reason</label>
+                        <textarea id="edit-request-reason" rows="4" required>${escapeAttr(req.reason)}</textarea>
+                    </div>
+                    <table class="table" style="width: 100%;">${renderAttachmentRow(req, true)}</table>
                     <div class="flex-between mt-2">
                         <button type="button" class="btn btn-secondary" onclick="UIManager.hideModal()">Cancel</button>
                         <button type="submit" class="btn btn-primary">Save Changes</button>
@@ -250,7 +282,15 @@
             const reason = document.getElementById('edit-request-reason').value.trim();
             if (!reason) return;
 
-            const updateResult = await LeaveRequestManager.updateRequest(id, reason);
+            const payload = { reason };
+            const typeSelect = document.getElementById('edit-request-type');
+            if (!typeSelect.disabled) {
+                payload.leave_type_id = typeSelect.value;
+                payload.start_date = document.getElementById('edit-request-start').value;
+                payload.end_date = document.getElementById('edit-request-end').value;
+            }
+
+            const updateResult = await LeaveRequestManager.updateRequest(id, payload);
             if (updateResult.success) {
                 UIManager.hideModal();
                 UIManager.showAlert('Leave request updated', 'success');

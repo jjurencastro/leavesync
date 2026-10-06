@@ -247,8 +247,9 @@ class LeaveRequestManager {
         return APIClient.get(`leave_requests.php?action=get&id=${id}`);
     }
 
-    static async updateRequest(id, reason) {
-        return APIClient.put(`leave_requests.php?action=update&id=${id}`, { reason });
+    static async updateRequest(id, fields) {
+        const payload = typeof fields === 'string' ? { reason: fields } : fields;
+        return APIClient.put(`leave_requests.php?action=update&id=${id}`, payload);
     }
 
     static async cancelRequest(id) {
@@ -928,9 +929,9 @@ async function addLeaveAttachment(requestId) {
     if (problem) { UIManager.showAlert(problem, 'danger'); return; }
     const result = await LeaveRequestManager.uploadAttachment(file, requestId);
     UIManager.showAlert(result.message || (result.success ? 'Document attached' : 'Upload failed'), result.success ? 'success' : 'danger');
-    if (result.success && typeof viewRequest === 'function') {
-        document.querySelectorAll('.modal-overlay, .modal').forEach((el) => el.remove());
-        viewRequest(requestId);
+    if (result.success && typeof refreshRequestModal === 'function') {
+        UIManager.hideModal();
+        refreshRequestModal(requestId);
     }
 }
 
@@ -938,8 +939,8 @@ async function removeLeaveAttachment(attachmentId, requestId) {
     if (!confirm('Remove this document?')) return;
     const result = await LeaveRequestManager.deleteAttachment(attachmentId);
     UIManager.showAlert(result.message || (result.success ? 'Document removed' : 'Failed to remove'), result.success ? 'success' : 'danger');
-    if (result.success && typeof viewRequest === 'function') {
-        document.querySelectorAll('.modal-overlay, .modal').forEach((el) => el.remove());
-        viewRequest(requestId);
+    if (result.success && typeof refreshRequestModal === 'function') {
+        UIManager.hideModal();
+        refreshRequestModal(requestId);
     }
 }

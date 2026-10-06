@@ -437,25 +437,110 @@ function updateLeaveRequest($id, $data, $user) {
         throw new Exception('Cannot update this leave request');
     }
 
-    $updatable = ['reason'];
-    $updates = [];
-    $values = [];
+    $newType = (int) ($data['leave_type_id'] ?? $request['leave_type_id']);
+    $newStart = $data['start_date'] ?? $request['start_date'];
+    $newEnd = $data['end_date'] ?? $request['end_date'];
+    $newReason = array_key_exists('reason', $data) ? trim((string) $data['reason']) : $request['reason'];
 
-    foreach ($updatable as $field) {
-        if (isset($data[$field])) {
-            $updates[] = "$field = ?";
-            $values[] = $data[$field];
+    if ($newReason === '') {
+        throw new Exception('Reason is required');
+    }
+
+    $scheduleChanged = $newType !== (int) $request['leave_type_id']
+        || $newStart !== $request['start_date']
+        || $newEnd !== $request['end_date'];
+
+    $days = (float) $request['number_of_days'];
+
+    if ($scheduleChanged) {
+        // Once the supervisor has approved, the type and dates are what they signed off on.
+        if ($request['supervisor_status'] === 'approved') {
+            throw new Exception('Leave type and dates can no longer be changed after supervisor approval. Cancel and file a new request instead.');
+        }
+
+        $start = new DateTime($newStart);
+        $end = new DateTime($newEnd);
+        if ($end < $start) {
+            throw new Exception('End date must be after start date');
+        }
+        $days = countWeekdays($start, $end);
+        if ($days === 0) {
+            throw new Exception('The selected date range contains no weekdays.');
+        }
+
+        $overlap = $db->getRow(
+            "SELECT id FROM leave_requests
+             WHERE user_id = ? AND id <> ? AND status IN ('pending', 'approved')
+               AND start_date <= ? AND end_date >= ? LIMIT 1",
+            [$user['id'], $id, $newEnd, $newStart]
+        );
+        if ($overlap) {
+            throw new Exception('You already have a pending or approved leave request for one or more of these dates.');
+        }
+
+        $leaveType = $db->getRow("SELECT id, name FROM leave_types WHERE id = ?", [$newType]);
+        if (!$leaveType) {
+            throw new Exception('Invalid leave type');
+        }
+        if ($leaveType['name'] === 'Maternity Leave' && $user['gender'] !== 'female') {
+            throw new Exception('Maternity Leave is only available to female employees');
+        }
+        if ($leaveType['name'] === 'Paternity Leave' && $user['gender'] !== 'male') {
+            throw new Exception('Paternity Leave is only available to male employees');
+        }
+        if ($leaveType['name'] === 'Vacation Leave') {
+            $today = new DateTime('today');
+            if ($start < $today || $today->diff($start)->days < 3) {
+                throw new Exception('Vacation Leave must be filed at least 3 days before the requested start date');
+            }
+        }
+        if ($leaveType['name'] === 'Leave Without Pay') {
+            $remaining = $db->getRow(
+                "SELECT COALESCE(SUM(lb.balance), 0) AS total_remaining
+                 FROM leave_balances lb JOIN leave_types lt ON lb.leave_type_id = lt.id
+                 WHERE lb.user_id = ? AND lt.name IN ('Vacation Leave', 'Sick Leave')",
+                [$user['id']]
+            );
+            if ((float) ($remaining['total_remaining'] ?? 0) > 0) {
+                throw new Exception('Leave Without Pay can only be filed once Vacation and Sick leave balances are exhausted');
+            }
+        }
+
+        // Days held by this request on the same type are available again for the check.
+        $balance = $db->getRow(
+            "SELECT balance FROM leave_balances WHERE user_id = ? AND leave_type_id = ?",
+            [$user['id'], $newType]
+        );
+        $available = (float) ($balance['balance'] ?? 0)
+            + ($newType === (int) $request['leave_type_id'] ? (float) $request['number_of_days'] : 0);
+        if (!$balance || $available < $days) {
+            throw new Exception('Insufficient leave balance');
         }
     }
 
-    if (empty($updates)) {
-        throw new Exception('No valid fields to update');
-    }
-
-    $values[] = $id;
-    $sql = "UPDATE leave_requests SET " . implode(', ', $updates) . " WHERE id = ?";
-
-    if (!$db->execute($sql, $values)) {
+    $pdo = $db->getConnection();
+    $pdo->beginTransaction();
+    try {
+        if ($scheduleChanged) {
+            // Release the old reservation, then reserve the new one.
+            $db->execute(
+                "UPDATE leave_balances SET pending_days = pending_days - ?, balance = balance + ?
+                 WHERE user_id = ? AND leave_type_id = ?",
+                [$request['number_of_days'], $request['number_of_days'], $user['id'], $request['leave_type_id']]
+            );
+            $db->execute(
+                "UPDATE leave_balances SET pending_days = pending_days + ?, balance = balance - ?
+                 WHERE user_id = ? AND leave_type_id = ?",
+                [$days, $days, $user['id'], $newType]
+            );
+        }
+        $db->execute(
+            "UPDATE leave_requests SET leave_type_id = ?, start_date = ?, end_date = ?, number_of_days = ?, reason = ? WHERE id = ?",
+            [$newType, $newStart, $newEnd, $days, $newReason, $id]
+        );
+        $pdo->commit();
+    } catch (Exception $e) {
+        if ($pdo->inTransaction()) $pdo->rollBack();
         throw new Exception('Failed to update leave request');
     }
 
