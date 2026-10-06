@@ -518,8 +518,8 @@ function updateLeaveRequest($id, $data, $user) {
         }
     }
 
-    $pdo = $db->getConnection();
-    $pdo->beginTransaction();
+    $conn = $db->getConnection();
+    $conn->begin_transaction();
     try {
         if ($scheduleChanged) {
             // Release the old reservation, then reserve the new one.
@@ -538,9 +538,9 @@ function updateLeaveRequest($id, $data, $user) {
             "UPDATE leave_requests SET leave_type_id = ?, start_date = ?, end_date = ?, number_of_days = ?, reason = ? WHERE id = ?",
             [$newType, $newStart, $newEnd, $days, $newReason, $id]
         );
-        $pdo->commit();
+        $conn->commit();
     } catch (Exception $e) {
-        if ($pdo->inTransaction()) $pdo->rollBack();
+        $conn->rollback();
         throw new Exception('Failed to update leave request');
     }
 
