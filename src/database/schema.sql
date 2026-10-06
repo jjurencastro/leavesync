@@ -122,7 +122,7 @@ CREATE TABLE IF NOT EXISTS leave_requests (
     reason TEXT,
     status ENUM('pending', 'approved', 'rejected', 'cancelled') DEFAULT 'pending',
     -- Tier 1 (employee) requests need both stages; Tier 2 (manager) requests skip straight to 'not_required' for supervisor_status
-    supervisor_status ENUM('pending', 'approved', 'rejected', 'not_required') DEFAULT 'pending',
+    supervisor_status ENUM('pending', 'approved', 'rejected', 'not_required', 'escalated_to_hr') DEFAULT 'pending',
     hr_status ENUM('pending', 'approved', 'rejected') DEFAULT 'pending',
     manager_id INT,
     assigned_supervisor_id INT,

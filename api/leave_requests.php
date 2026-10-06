@@ -658,10 +658,23 @@ function approveLeaveRequest($data, $user) {
         if ($isHRApproval) {
             // HR acting as backup supervisor: auto-complete the request
             // Mark supervisor_status as 'escalated_to_hr' to show supervisor was unavailable
-            $db->execute(
-                "UPDATE leave_requests SET status = 'approved', supervisor_status = 'escalated_to_hr', hr_status = 'approved', manager_id = ?, hr_id = ?, manager_comments = ?, hr_comments = ? WHERE id = ?",
-                [$user['id'], $user['id'], $data['comments'] ?? '', $data['comments'] ?? '', $data['id']]
-            );
+            try {
+                $db->execute(
+                    "UPDATE leave_requests SET status = 'approved', supervisor_status = 'escalated_to_hr', hr_status = 'approved', manager_id = ?, hr_id = ?, manager_comments = ?, hr_comments = ? WHERE id = ?",
+                    [$user['id'], $user['id'], $data['comments'] ?? '', $data['comments'] ?? '', $data['id']]
+                );
+            } catch (Exception $e) {
+                // Fallback if escalated_to_hr status doesn't exist yet (migration not run)
+                if (strpos($e->getMessage(), 'Data truncated') !== false || strpos($e->getMessage(), 'escalated_to_hr') !== false) {
+                    error_log("Warning: escalated_to_hr status not available, falling back to approved. Run migration endpoint.");
+                    $db->execute(
+                        "UPDATE leave_requests SET status = 'approved', supervisor_status = 'approved', hr_status = 'approved', manager_id = ?, hr_id = ?, manager_comments = ?, hr_comments = ? WHERE id = ?",
+                        [$user['id'], $user['id'], $data['comments'] ?? '', $data['comments'] ?? '', $data['id']]
+                    );
+                } else {
+                    throw $e;
+                }
+            }
 
             // Move the days from pending to used now that it's fully approved
             $db->execute(
