@@ -310,6 +310,13 @@ try {
 
             $summary = EmployeeNotifications::summarize($rows);
             $summary['unread'] = (int) ($unreadRow['unread'] ?? $summary['unread']);
+            $deviceRow = $db->getRow(
+                "SELECT COUNT(*) AS unread FROM notifications
+                 WHERE user_id = ? AND is_read = 0 AND related_entity_type = 'device_change'
+                   AND title IN ('New Device Change Request', 'Device Change Request Escalated')",
+                [$user['id']]
+            );
+            $summary['unread_device_requests'] = (int) ($deviceRow['unread'] ?? 0);
 
             echo json_encode([
                 'success' => true,

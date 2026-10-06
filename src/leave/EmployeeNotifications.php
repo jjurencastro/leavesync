@@ -15,6 +15,8 @@ class EmployeeNotifications {
             'created_at' => $notification['created_at'] ?? null,
             'read_state' => !empty($notification['is_read']) ? 'read' : 'unread',
             'notification_type' => $notification['notification_type'] ?? 'info',
+            'related_entity_type' => $notification['related_entity_type'] ?? null,
+            'related_entity_id' => $notification['related_entity_id'] ?? null,
         ];
     }
 

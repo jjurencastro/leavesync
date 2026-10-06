@@ -240,7 +240,7 @@ function getHRStatistics($user) {
             'pending_hr_requests' => $db->getRow("SELECT COUNT(*) AS count FROM leave_requests WHERE status = 'pending' AND hr_status = 'pending' AND supervisor_status IN ('approved', 'not_required')")['count'],
             'approved_leave_requests' => $db->getRow("SELECT COUNT(*) AS count FROM leave_requests WHERE status = 'approved'")['count'],
             'rejected_leave_requests' => $db->getRow("SELECT COUNT(*) AS count FROM leave_requests WHERE status = 'rejected'")['count'],
-            'pending_device_requests' => $db->getRow("SELECT COUNT(*) AS count FROM device_change_requests dcr JOIN users u ON dcr.user_id = u.id WHERE dcr.status = 'pending' AND u.supervisor_id = ?", [$user['id']])['count'],
+            'pending_device_requests' => $db->getRow("SELECT COUNT(*) AS count FROM device_change_requests dcr JOIN users u ON dcr.user_id = u.id WHERE dcr.status = 'pending' AND dcr.assigned_approver_id = ?", [$user['id']])['count'],
         ]
     ];
 }

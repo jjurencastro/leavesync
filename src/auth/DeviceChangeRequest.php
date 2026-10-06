@@ -9,8 +9,26 @@ require_once __DIR__ . '/../security/DeviceFingerprint.php';
 require_once __DIR__ . '/../security/WebAuthnService.php';
 require_once __DIR__ . '/AuditLogger.php';
 require_once __DIR__ . '/../leave/ApprovalChain.php';
+require_once __DIR__ . '/../database/SchemaSupport.php';
 
 class DeviceChangeRequest {
+
+    /**
+     * Older databases predate the assigned_approver_id column, which makes every
+     * device-request query fail. Add it on demand when it is missing.
+     */
+    private static function ensureApproverColumn() {
+        $db = Database::getInstance();
+        if (SchemaSupport::hasColumn($db, 'device_change_requests', 'assigned_approver_id')) {
+            return;
+        }
+        try {
+            $db->getConnection()->query("ALTER TABLE device_change_requests ADD COLUMN assigned_approver_id INT NULL");
+            $db->getConnection()->query("ALTER TABLE device_change_requests ADD INDEX idx_assigned_approver_id (assigned_approver_id)");
+        } catch (Throwable $e) {
+            error_log('Could not add assigned_approver_id column: ' . $e->getMessage());
+        }
+    }
 
     /**
      * Whether the user already has a pending device-change request for this
@@ -30,7 +48,9 @@ class DeviceChangeRequest {
      * instead of trusting (or auto-verifying) an unrecognized device.
      */
     public static function create($user, array $data) {
+        $assignedApproverId = null;
         try {
+            self::ensureApproverColumn();
             $db = Database::getInstance();
             $fingerprint_hash = DeviceFingerprint::generateFromData($data);
             $info = DeviceFingerprint::getDeviceInfo($data);
@@ -40,7 +60,6 @@ class DeviceChangeRequest {
             }
 
             // Determine who should approve: supervisor if available, else backup approver/HR
-            $assignedApproverId = null;
             if (!empty($user['supervisor_id'])) {
                 try {
                     $filedDate = date('Y-m-d');
@@ -75,7 +94,7 @@ class DeviceChangeRequest {
                 [$user['id']]
             );
             if ($fullUser) {
-                self::notifyApprovers($fullUser);
+                self::notifyApprovers($fullUser, $assignedApproverId);
             }
         } catch (Exception $e) {
             error_log("Device request notification error: " . $e->getMessage());
@@ -134,6 +153,7 @@ class DeviceChangeRequest {
      * no supervisor on file, which only the System Administrator can approve.
      */
     public static function getPendingForAdmin() {
+        self::ensureApproverColumn();
         $db = Database::getInstance();
         return $db->getResults(
             "SELECT dcr.id, dcr.user_id, dcr.fingerprint_hash, dcr.device_info, dcr.ip_address, dcr.browser_info,
@@ -149,6 +169,7 @@ class DeviceChangeRequest {
      * Pending requests from a manager's own direct reports (Tier 1 employees who chose them as supervisor).
      */
     public static function getPendingForSupervisor($supervisor_id) {
+        self::ensureApproverColumn();
         $db = Database::getInstance();
         return $db->getResults(
             "SELECT dcr.id, dcr.user_id, dcr.fingerprint_hash, dcr.device_info, dcr.ip_address, dcr.browser_info,
@@ -167,6 +188,7 @@ class DeviceChangeRequest {
      * an HR user's direct reports are never Tier 1 employees.
      */
     public static function getPendingForHR($hr_id) {
+        self::ensureApproverColumn();
         $db = Database::getInstance();
         return $db->getResults(
             "SELECT dcr.id, dcr.user_id, dcr.fingerprint_hash, dcr.device_info, dcr.ip_address, dcr.browser_info,
@@ -230,7 +252,7 @@ class DeviceChangeRequest {
     /**
      * Create a notification for the user and notify approvers
      */
-    private static function notifyApprovers($user) {
+    private static function notifyApprovers($user, $assignedApproverId = null) {
         try {
             $db = Database::getInstance();
             
@@ -245,6 +267,12 @@ class DeviceChangeRequest {
                 $approvers = $db->getResults(
                     "SELECT id, email, full_name FROM users WHERE role = 'admin' AND is_active = 1"
                 );
+            } elseif (!empty($assignedApproverId)) {
+                // Assigned approver (the supervisor, or a backup/HR when the supervisor is unavailable)
+                $approvers = $db->getResults(
+                    "SELECT id, email, full_name FROM users WHERE id = ? AND is_active = 1",
+                    [$assignedApproverId]
+                );
             } else {
                 // Employees: notify their supervisor first
                 if (!empty($user['supervisor_id'])) {
@@ -255,6 +283,18 @@ class DeviceChangeRequest {
                 } else {
                     $approvers = [];
                 }
+            }
+
+            // Tell the primary supervisor their request was escalated while they're unavailable
+            if (!empty($assignedApproverId) && !empty($user['supervisor_id'])
+                && (int) $user['supervisor_id'] !== (int) $assignedApproverId
+                && !in_array($user['role'], ['admin', 'hr', 'manager'], true)) {
+                self::createNotification(
+                    $user['supervisor_id'],
+                    'Device Change Request Escalated',
+                    "A device change request from {$user['full_name']} has been escalated to a backup approver because you are unavailable.",
+                    'device_change'
+                );
             }
 
             // Create notifications

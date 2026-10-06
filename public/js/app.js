@@ -571,7 +571,7 @@ function createUserAvatar(user) {
 
 // Wire up the top-right user menu (avatar, full name + Settings/Logout dropdown) shared by every authenticated page
 function initUserMenu(user) {
-    initNotificationBell();
+    initNotificationBell(user && user.role);
     initApprovalBadge(user);
     const nameEl = document.getElementById('user-fullname');
     if (nameEl) {
@@ -626,6 +626,7 @@ function applyManagerSidebarLinks(role, activePage) {
     }
 
     applyApprovalBadge();
+    applyDeviceRequestBadge();
 }
 
 // Initialize on page load
@@ -647,13 +648,36 @@ async function logout() {
 // ---------------------------------------------------------------------------
 // Notification bell (top header, before the profile menu)
 // ---------------------------------------------------------------------------
+// Page a notification should open, based on its type and the viewer's role ('' = none)
+function notificationTarget(n, role) {
+    const approverPages = {
+        leave_request: { manager: '/team-requests', hr: '/hr/leave-requests', admin: '/admin/leave-requests' },
+        device_change: { manager: '/device-requests', hr: '/hr/device-requests', admin: '/admin/device-requests' }
+    };
+    const type = n.related_entity_type;
+    const title = n.title || '';
+    if (type === 'device_change') {
+        return /^(New Device Change Request|Device Change Request Escalated)$/.test(title) ? (approverPages.device_change[role] || '') : '';
+    }
+    if (type === 'leave_request') {
+        const forApprover = /^(New Leave Request|Leave Request Escalated|Approval Reminder)$/.test(title);
+        if (forApprover) return approverPages.leave_request[role] || '';
+        return ['employee', 'manager'].includes(role) ? '/my-requests' : '';
+    }
+    if (type === 'user' && title === 'New Account Pending Approval' && role === 'admin') {
+        return '/admin/manage-users';
+    }
+    return '';
+}
+
 function escapeNotificationText(value) {
     return String(value === null || value === undefined ? '' : value)
         .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
         .replace(/"/g, '&quot;').replace(/'/g, '&#39;');
 }
 
-function initNotificationBell() {
+function initNotificationBell(role) {
+    const currentRole = role;
     const topbar = document.querySelector('.topbar');
     if (!topbar || document.getElementById('notification-bell')) return;
 
@@ -697,7 +721,7 @@ function initNotificationBell() {
             return;
         }
         list.innerHTML = items.map(n => `
-            <button type="button" class="notification-entry ${n.read_state === 'unread' ? 'unread' : ''}" data-id="${Number(n.id)}" data-unread="${n.read_state === 'unread' ? '1' : '0'}">
+            <button type="button" class="notification-entry ${n.read_state === 'unread' ? 'unread' : ''}" data-id="${Number(n.id)}" data-unread="${n.read_state === 'unread' ? '1' : '0'}" data-href="${escapeNotificationText(notificationTarget(n, currentRole))}">
                 <span class="notification-entry-title">${escapeNotificationText(n.title || 'Notification')}</span>
                 <span class="notification-entry-message">${escapeNotificationText(n.message || '')}</span>
                 <span class="notification-entry-time">${escapeNotificationText(UIManager.formatDate(n.created_at))}</span>
@@ -705,7 +729,12 @@ function initNotificationBell() {
         `).join('');
     };
 
-    const refresh = async () => render(await AuthManager.getNotifications());
+    const refresh = async () => {
+        const result = await AuthManager.getNotifications();
+        window.__unreadDeviceNotifs = Number(result?.summary?.unread_device_requests || 0);
+        applyDeviceRequestBadge();
+        render(result);
+    };
     window.refreshNotificationBell = refresh;
 
     bell.addEventListener('click', (e) => {
@@ -719,9 +748,17 @@ function initNotificationBell() {
 
     list.addEventListener('click', async (e) => {
         const entry = e.target.closest('.notification-entry');
-        if (!entry || entry.dataset.unread !== '1') return;
-        await AuthManager.markNotificationRead(entry.dataset.id);
-        refresh();
+        if (!entry) return;
+        if (entry.dataset.unread === '1') {
+            await AuthManager.markNotificationRead(entry.dataset.id);
+        }
+        const href = entry.dataset.href;
+        if (href && href !== window.location.pathname) {
+            window.location.href = href;
+            return;
+        }
+        if (href) window.location.reload();
+        else refresh();
     });
 
     wrapper.querySelector('#notification-mark-all').addEventListener('click', async () => {
@@ -1035,6 +1072,20 @@ function applyApprovalBadge() {
         badge.className = 'approval-badge';
         badge.textContent = count > 99 ? '99+' : String(count);
         badge.title = count + ' awaiting your approval';
+        el.appendChild(badge);
+    });
+}
+
+// Sidebar badge on Device Change Requests, matching the unread device-change notifications in the bell
+function applyDeviceRequestBadge() {
+    const count = Number(window.__unreadDeviceNotifs || 0);
+    document.querySelectorAll('.device-request-badge').forEach((el) => el.remove());
+    if (count <= 0) return;
+    document.querySelectorAll('.sidebar a[href$="/device-requests"]').forEach((el) => {
+        const badge = document.createElement('span');
+        badge.className = 'approval-badge device-request-badge';
+        badge.textContent = count > 99 ? '99+' : String(count);
+        badge.title = count + ' unread device change request notification(s)';
         el.appendChild(badge);
     });
 }
