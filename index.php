@@ -113,7 +113,7 @@ elseif (array_key_exists($request_uri, $viewRoutes)) {
                 }
             } elseif ($request_uri === '/pending-approval') {
                 if (!$activated) {
-                    header('Location: $isPasswordResetFlow ? '/reset-password' : '/activate');
+                    header('Location: ' . ($isPasswordResetFlow ? '/reset-password' : '/activate'));
                     exit;
                 }
                 if ($approved) {
