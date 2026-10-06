@@ -2264,3 +2264,55 @@ label {
         padding-bottom: calc(3rem + env(safe-area-inset-bottom));
     }
 }
+
+@media (max-width: 900px) {
+    .table.info-grid:not(:has(thead)) tbody tr {
+        display: flex;
+        flex-direction: column;
+        padding: 0.3rem 0;
+        border-bottom: 1px solid var(--border-color);
+    }
+
+    .table.info-grid:not(:has(thead)) th,
+    .table.info-grid:not(:has(thead)) td {
+        display: block;
+        width: auto;
+        padding: 0;
+    }
+
+    .table.info-grid:not(:has(thead)) th {
+        font-size: 0.66rem;
+    }
+}
+
+@media (max-width: 767px) {
+    .card-header {
+        flex-wrap: nowrap;
+    }
+
+    .card-header h2 {
+        font-size: 0.98rem;
+    }
+
+    .card-header .btn-small {
+        min-height: 30px;
+    }
+}
+
+.info-grid,
+.info-grid tbody,
+.info-grid tr {
+    white-space: normal;
+    overflow: visible;
+    min-width: 0;
+}
+
+.info-grid tbody {
+    grid-template-columns: repeat(auto-fill, minmax(min(100%, 230px), 1fr));
+}
+
+@media (max-width: 767px) {
+    .info-grid tbody {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+}
