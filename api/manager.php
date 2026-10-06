@@ -164,7 +164,7 @@ function updateDepartmentUserDetails($id, $user, $data) {
     $position = $data['position'] ?? $target['position'];
     if (isset($data['department']) || isset($data['position'])) {
         if (!UserRegistration::isValidDepartmentPosition($department, $position)) {
-            throw new Exception('Please select a valid position for the chosen department');
+            throw new Exception('Enter a position of 1-50 characters with no leading or trailing spaces for a valid department');
         }
         if (isset($data['department'])) {
             $updates[] = "department = ?";

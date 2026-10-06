@@ -120,6 +120,7 @@
 
         let allUsersData = [];
         let departmentPositionsData = { departments: [], department_positions: {} };
+        const OTHER_POSITION_VALUE = '__other__';
 
         async function loadDepartmentPositions() {
             try {
@@ -161,6 +162,23 @@
                 const isSelected = sel !== '' && val === sel;
                 return `<option value="${escapeAttr(val)}" ${isSelected ? 'selected' : ''}>${escapeAttr(item[labelKey])}</option>`;
             }).join('');
+        }
+
+        function getPositionOptions(department, selectedPosition) {
+            const positions = departmentPositionsData.department_positions[department] || [];
+            const selectedValue = positions.includes(selectedPosition) ? selectedPosition : OTHER_POSITION_VALUE;
+            return buildOptions(
+                positions.map(position => ({ value: position, label: position })),
+                selectedValue, 'value', 'label'
+            ) + `<option value="${OTHER_POSITION_VALUE}" ${selectedValue === OTHER_POSITION_VALUE ? 'selected' : ''}>Other</option>`;
+        }
+
+        function getManagedPosition(id) {
+            const select = document.getElementById(`managed-position-${id}`);
+            if (!select) return '';
+            return select.value === OTHER_POSITION_VALUE
+                ? (document.getElementById(`managed-custom-position-${id}`)?.value || '').trim()
+                : select.value;
         }
 
         function editUserAccount(id) {
@@ -354,10 +372,9 @@
                 const saveButtonId = `managed-save-${u.id}`;
                 const departmentOptions = departmentPositionsData.departments
                     .map(d => `<option value="${escapeAttr(d)}" ${d === u.department ? 'selected' : ''}>${escapeAttr(d)}</option>`).join('');
-                const positionOptions = buildOptions(
-                    (departmentPositionsData.department_positions[u.department] || []).map(p => ({ value: p, label: p })),
-                    u.position, 'value', 'label'
-                );
+                const positions = departmentPositionsData.department_positions[u.department] || [];
+                const customPosition = !positions.includes(u.position);
+                const positionOptions = getPositionOptions(u.department, u.position);
                 // supervisor_id arrives as a string from the API; compare as strings
                 // so the user's current supervisor is actually selected.
                 const supervisorOptions = buildOptions(
@@ -377,7 +394,10 @@
                     <td>${escapeAttr(u.full_name)}<br>${statusBadge}</td>
                     <td>${escapeAttr(u.username)}</td>
                     <td><select id="${departmentSelectId}" class="form-control" onchange="onManagedUserDepartmentChange(${u.id})">${departmentOptions}</select></td>
-                    <td><select id="${positionSelectId}" class="form-control" onchange="onManagedUserPositionChange(${u.id})">${positionOptions}</select></td>
+                    <td>
+                        <select id="${positionSelectId}" class="form-control" onchange="onManagedUserPositionChange(${u.id})">${positionOptions}</select>
+                        <input id="managed-custom-position-${u.id}" class="form-control" maxlength="50" placeholder="Enter position title" value="${customPosition ? escapeAttr(u.position) : ''}" style="margin-top: 0.35rem; ${customPosition ? '' : 'display: none;'}" oninput="onManagedUserCustomPositionInput(${u.id})">
+                    </td>
                     <td><select id="${supervisorSelectId}" class="form-control" required onchange="markManagedUserDirty(${u.id})"><option value="">Select supervisor</option>${supervisorOptions}</select></td>
                     <td><select id="${roleSelectId}" class="form-control" onchange="markManagedUserDirty(${u.id})">${roleOptions}</select></td>
                     <td>
@@ -401,30 +421,25 @@
             if (!deptSelect || !positionSelect || !supervisorSelect) return;
 
             const department = deptSelect.value;
-            const currentPosition = positionSelect.value;
+            const currentPosition = getManagedPosition(id);
             const currentSupervisor = supervisorSelect.value;
 
             const positions = departmentPositionsData.department_positions[department] || [];
-            let selectedPosition = '';
-            if (user && department === user.department && positions.includes(user.position)) {
-                selectedPosition = user.position;
-            } else if (positions.includes(currentPosition)) {
-                selectedPosition = currentPosition;
-            } else if (positions.length > 0) {
-                selectedPosition = positions[0];
-            }
+            const selectedPosition = positions.includes(currentPosition)
+                ? currentPosition
+                : (currentPosition ? OTHER_POSITION_VALUE : (positions[0] || OTHER_POSITION_VALUE));
+            positionSelect.innerHTML = getPositionOptions(department, selectedPosition === OTHER_POSITION_VALUE ? '' : selectedPosition);
+            positionSelect.value = selectedPosition;
+            const customPositionInput = document.getElementById(`managed-custom-position-${id}`);
+            customPositionInput.style.display = selectedPosition === OTHER_POSITION_VALUE ? '' : 'none';
+            customPositionInput.required = selectedPosition === OTHER_POSITION_VALUE;
 
-            positionSelect.innerHTML = buildOptions(
-                positions.map(p => ({ value: p, label: p })),
-                selectedPosition, 'value', 'label'
-            );
-
-            const eligibleSupervisors = getEligibleSupervisors(department, positionSelect.value, id);
+            const eligibleSupervisors = getEligibleSupervisors(department, getManagedPosition(id), id);
             let selectedSupervisor = '';
             const origSupervisorId = (user && user.supervisor_id !== null && user.supervisor_id !== undefined && user.supervisor_id !== '' && user.supervisor_id !== 0) ? String(user.supervisor_id) : '';
             const eligibleIds = eligibleSupervisors.map(s => String(s.id));
 
-            if (user && department === user.department && positionSelect.value === user.position && eligibleIds.includes(origSupervisorId)) {
+            if (user && department === user.department && getManagedPosition(id) === user.position && eligibleIds.includes(origSupervisorId)) {
                 selectedSupervisor = origSupervisorId;
             } else if (eligibleIds.includes(String(currentSupervisor))) {
                 selectedSupervisor = String(currentSupervisor);
@@ -443,8 +458,14 @@
             if (!deptSelect || !positionSelect || !supervisorSelect) return;
 
             const department = deptSelect.value;
-            const position = positionSelect.value;
+            const position = getManagedPosition(id);
             const currentSupervisor = supervisorSelect.value;
+
+            const customPositionInput = document.getElementById(`managed-custom-position-${id}`);
+            const isCustom = positionSelect.value === OTHER_POSITION_VALUE;
+            customPositionInput.style.display = isCustom ? '' : 'none';
+            customPositionInput.required = isCustom;
+            if (!isCustom) customPositionInput.value = '';
 
             const eligibleSupervisors = getEligibleSupervisors(department, position, id);
             let selectedSupervisor = '';
@@ -470,13 +491,29 @@
             markManagedUserDirty(id);
         }
 
+        function onManagedUserCustomPositionInput(id) {
+            const user = allUsersData.find(item => Number(item.id) === Number(id));
+            const department = document.getElementById(`managed-department-${id}`)?.value || '';
+            const supervisorSelect = document.getElementById(`managed-supervisor-${id}`);
+            if (!supervisorSelect) return;
+            const eligibleSupervisors = getEligibleSupervisors(department, getManagedPosition(id), id);
+            const currentSupervisor = supervisorSelect.value;
+            const selectedSupervisor = eligibleSupervisors.some(s => String(s.id) === String(currentSupervisor))
+                ? currentSupervisor
+                : (user && eligibleSupervisors.some(s => String(s.id) === String(user.supervisor_id)) ? String(user.supervisor_id) : '');
+            supervisorSelect.innerHTML = `<option value="">Select supervisor</option>${buildOptions(eligibleSupervisors, selectedSupervisor, 'id', 'full_name')}`;
+            markManagedUserDirty(id);
+        }
+
         function markManagedUserDirty(id) {
             const user = allUsersData.find(item => Number(item.id) === Number(id));
             const saveButton = document.getElementById(`managed-save-${id}`);
             if (!user || !saveButton) return;
 
             const deptVal = document.getElementById(`managed-department-${id}`)?.value || '';
-            const posVal = document.getElementById(`managed-position-${id}`)?.value || '';
+            const posVal = getManagedPosition(id);
+            const customInput = document.getElementById(`managed-custom-position-${id}`);
+            const positionValid = posVal !== '' && posVal.length <= 50 && posVal === posVal.trim();
             const supVal = document.getElementById(`managed-supervisor-${id}`)?.value || '';
             const roleVal = document.getElementById(`managed-role-${id}`)?.value || '';
 
@@ -486,19 +523,24 @@
             const origRole = user.role || '';
 
             const changed = (deptVal !== origDept) || (posVal !== origPos) || (supVal !== origSup) || (roleVal !== origRole);
+            const canSave = changed && positionValid && (!customInput?.required || Boolean(customInput.value.trim()));
 
-            saveButton.disabled = !changed;
-            saveButton.classList.toggle('btn-success', changed);
-            saveButton.classList.toggle('btn-secondary', !changed);
+            saveButton.disabled = !canSave;
+            saveButton.classList.toggle('btn-success', canSave);
+            saveButton.classList.toggle('btn-secondary', !canSave);
         }
 
         async function updateManagedUser(id) {
             const department = document.getElementById(`managed-department-${id}`).value;
-            const position = document.getElementById(`managed-position-${id}`).value;
+            const position = getManagedPosition(id);
             const supervisorId = document.getElementById(`managed-supervisor-${id}`).value;
             const role = document.getElementById(`managed-role-${id}`).value;
             if (!supervisorId) {
                 UIManager.showAlert('Please select a supervisor', 'danger');
+                return;
+            }
+            if (!position || position.length > 50 || position !== position.trim()) {
+                UIManager.showAlert('Please enter a valid position title (50 characters or fewer)', 'danger');
                 return;
             }
             const result = await APIClient.put(`admin.php?action=update_user&id=${id}`, {

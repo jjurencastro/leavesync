@@ -224,7 +224,7 @@ function createUser($data) {
         throw new Exception('Please select a valid gender option');
     }
     if (!UserRegistration::isValidDepartmentPosition($data['department'], $data['position'])) {
-        throw new Exception('Please select a valid position for the chosen department');
+        throw new Exception('Enter a position of 1-50 characters with no leading or trailing spaces for a valid department');
     }
 
     $supervisorId = (int) $data['supervisor_id'];
@@ -267,7 +267,7 @@ function createUser($data) {
         $data['position'],
         $data['gender'],
         $supervisorId,
-        UserRegistration::POSITION_ROLE_MAP[$data['position']],
+        UserRegistration::getDefaultRoleForPosition($data['department'], $data['position']),
         $key_pair['public_key']
     ];
     $db->execute($sql, $values);
@@ -346,7 +346,7 @@ function bulkCreateUsers($payload) {
         }
 
         if (!UserRegistration::isValidDepartmentPosition($department, $position)) {
-            $rowErrors[] = "Invalid position '{$position}' for department '{$department}'";
+            $rowErrors[] = "Position must be 1-50 characters with no leading or trailing spaces for a valid department";
         }
 
         $supervisorUser = null;
@@ -410,7 +410,7 @@ function bulkCreateUsers($payload) {
             $validData['position'],
             $validData['gender'],
             $validData['supervisor_id'],
-            UserRegistration::POSITION_ROLE_MAP[$validData['position']],
+            UserRegistration::getDefaultRoleForPosition($validData['department'], $validData['position']),
             $key_pair['public_key']
         ];
         $db->execute($sql, $values);
@@ -470,7 +470,7 @@ function updateUser($id, $data) {
         $department = $data['department'] ?? $user['department'];
         $position = $data['position'] ?? $user['position'];
         if (!UserRegistration::isValidDepartmentPosition($department, $position)) {
-            throw new Exception('Please select a valid position for the chosen department');
+            throw new Exception('Enter a position of 1-50 characters with no leading or trailing spaces for a valid department');
         }
         if (isset($data['department'])) {
             $updates[] = "department = ?";
@@ -480,14 +480,15 @@ function updateUser($id, $data) {
             $updates[] = "position = ?";
             $values[] = $position;
         }
-        if ($position === 'Dean') {
+        if ($department !== 'ADMIN' && $position === 'Dean') {
             $updates[] = "role = ?";
             $values[] = 'manager';
         }
     }
     if (isset($data['role'])) {
+        $department = $data['department'] ?? $user['department'];
         $position = $data['position'] ?? $user['position'];
-        if ($position === 'Dean' && $data['role'] !== 'manager') {
+        if ($department !== 'ADMIN' && $position === 'Dean' && $data['role'] !== 'manager') {
             throw new Exception('A Dean must use the manager role');
         }
         if (!in_array($data['role'], ['employee', 'manager', 'hr', 'admin'], true)) {
@@ -896,7 +897,7 @@ function buildXlsxTemplate($departments, $positions, $supervisors) {
         . '<dataValidations count="4">'
         . '<dataValidation type="list" allowBlank="1" showInputMessage="1" showErrorMessage="1" sqref="D2:D' . $maxDataRow . '"><formula1>' . $genderRange . '</formula1></dataValidation>'
         . '<dataValidation type="list" allowBlank="1" showInputMessage="1" showErrorMessage="1" sqref="E2:E' . $maxDataRow . '"><formula1>' . $deptRange . '</formula1></dataValidation>'
-        . '<dataValidation type="list" allowBlank="1" showInputMessage="1" showErrorMessage="1" sqref="F2:F' . $maxDataRow . '"><formula1>' . $posRange . '</formula1></dataValidation>'
+        . '<dataValidation type="list" allowBlank="1" showInputMessage="1" showErrorMessage="0" sqref="F2:F' . $maxDataRow . '"><formula1>' . $posRange . '</formula1></dataValidation>'
         . '<dataValidation type="list" allowBlank="1" showInputMessage="1" showErrorMessage="1" sqref="G2:G' . $maxDataRow . '"><formula1>' . $supRange . '</formula1></dataValidation>'
         . '</dataValidations>'
         . '</worksheet>';

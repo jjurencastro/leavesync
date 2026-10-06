@@ -18,6 +18,7 @@
 let employees = [];
 let departmentPositionsData = { departments: [], department_positions: {} };
 let supervisorOptions = [];
+const OTHER_POSITION_VALUE = '__other__';
 (async function init() { const user = await checkAuth(); if (!user || user.role !== 'hr') { window.location.href = '/dashboard'; return; } initUserMenu(user); initSidebarMenu(); loadEmployees(); })();
 async function loadEmployees() {
     const [employeesResult, departmentsResult] = await Promise.all([
@@ -34,6 +35,18 @@ function renderEmployees() { const term = (document.getElementById('employee-sea
 function escapeAttr(value) { return String(value || '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
 function buildSelectOptions(items, selectedValue) {
     return items.map(value => `<option value="${escapeAttr(value)}" ${String(value) === String(selectedValue) ? 'selected' : ''}>${escapeAttr(value)}</option>`).join('');
+}
+function getPositionOptions(department, selectedPosition) {
+    const positions = departmentPositionsData.department_positions[department] || [];
+    const selectedValue = positions.includes(selectedPosition) ? selectedPosition : OTHER_POSITION_VALUE;
+    return buildSelectOptions(positions, selectedValue) +
+        `<option value="${OTHER_POSITION_VALUE}" ${selectedValue === OTHER_POSITION_VALUE ? 'selected' : ''}>Other</option>`;
+}
+function getReassignPosition() {
+    const select = document.getElementById('reassign-position');
+    return select?.value === OTHER_POSITION_VALUE
+        ? (document.getElementById('reassign-custom-position')?.value || '').trim()
+        : (select?.value || '');
 }
 function getEligibleSupervisors(department, position, employeeId) {
     return supervisorOptions.filter(supervisor => {
@@ -55,9 +68,9 @@ async function reassignEmployee(id) {
     const departments = departmentPositionsData.departments || [];
     const department = departments.includes(employee.department) ? employee.department : (departments[0] || '');
     const positions = departmentPositionsData.department_positions[department] || [];
-    const position = positions.includes(employee.position) ? employee.position : (positions[0] || '');
+    const isCustomPosition = !positions.includes(employee.position);
     const roles = ['employee', 'manager', 'hr'];
-    const eligibleSupervisors = getEligibleSupervisors(department, position, id);
+    const eligibleSupervisors = getEligibleSupervisors(department, employee.position, id);
     const selectedSupervisor = eligibleSupervisors.some(item => Number(item.id) === Number(employee.supervisor_id))
         ? String(employee.supervisor_id)
         : '';
@@ -69,7 +82,8 @@ async function reassignEmployee(id) {
             </div>
             <div class="form-group">
                 <label for="reassign-position">Position</label>
-                <select id="reassign-position" class="form-control" required>${buildSelectOptions(positions, position)}</select>
+                <select id="reassign-position" class="form-control" required>${getPositionOptions(department, employee.position)}</select>
+                <input id="reassign-custom-position" class="form-control" maxlength="50" placeholder="Enter position title" value="${isCustomPosition ? escapeAttr(employee.position) : ''}" ${isCustomPosition ? 'required' : ''} style="margin-top: 0.5rem; ${isCustomPosition ? '' : 'display: none;'}">
             </div>
             <div class="form-group">
                 <label for="reassign-role">Role</label>
@@ -93,7 +107,7 @@ async function reassignEmployee(id) {
     const submitButton = document.getElementById('reassign-submit');
 
     function refreshSupervisorOptions(preferredId = '') {
-        const eligible = getEligibleSupervisors(departmentSelect.value, positionSelect.value, id);
+        const eligible = getEligibleSupervisors(departmentSelect.value, getReassignPosition(), id);
         supervisorSelect.innerHTML = '<option value="">Select supervisor</option>' +
             eligible.map(supervisor => `<option value="${supervisor.id}">${escapeAttr(supervisor.full_name)}</option>`).join('');
         if (eligible.some(supervisor => String(supervisor.id) === String(preferredId))) {
@@ -102,10 +116,10 @@ async function reassignEmployee(id) {
     }
     function markReassignmentDirty() {
         const changed = departmentSelect.value !== (employee.department || '')
-            || positionSelect.value !== (employee.position || '')
+            || getReassignPosition() !== (employee.position || '')
             || roleSelect.value !== (employee.role || '')
             || supervisorSelect.value !== String(employee.supervisor_id || '');
-        const valid = Boolean(departmentSelect.value && positionSelect.value && roleSelect.value && supervisorSelect.value);
+        const valid = Boolean(departmentSelect.value && getReassignPosition() && roleSelect.value && supervisorSelect.value);
         const canSubmit = changed && valid;
         submitButton.disabled = !canSubmit;
         submitButton.classList.toggle('btn-success', canSubmit);
@@ -115,11 +129,26 @@ async function reassignEmployee(id) {
     refreshSupervisorOptions(selectedSupervisor);
     departmentSelect.addEventListener('change', () => {
         const nextPositions = departmentPositionsData.department_positions[departmentSelect.value] || [];
-        positionSelect.innerHTML = buildSelectOptions(nextPositions, nextPositions.includes(positionSelect.value) ? positionSelect.value : (nextPositions[0] || ''));
+        const currentPosition = getReassignPosition();
+        const nextPosition = nextPositions.includes(currentPosition) ? currentPosition : (currentPosition ? OTHER_POSITION_VALUE : (nextPositions[0] || OTHER_POSITION_VALUE));
+        positionSelect.innerHTML = getPositionOptions(departmentSelect.value, nextPosition === OTHER_POSITION_VALUE ? '' : nextPosition);
+        positionSelect.value = nextPosition;
+        const customPositionInput = document.getElementById('reassign-custom-position');
+        customPositionInput.style.display = nextPosition === OTHER_POSITION_VALUE ? '' : 'none';
+        customPositionInput.required = nextPosition === OTHER_POSITION_VALUE;
         refreshSupervisorOptions('');
         markReassignmentDirty();
     });
     positionSelect.addEventListener('change', () => {
+        const customPositionInput = document.getElementById('reassign-custom-position');
+        const isCustom = positionSelect.value === OTHER_POSITION_VALUE;
+        customPositionInput.style.display = isCustom ? '' : 'none';
+        customPositionInput.required = isCustom;
+        if (!isCustom) customPositionInput.value = '';
+        refreshSupervisorOptions('');
+        markReassignmentDirty();
+    });
+    document.getElementById('reassign-custom-position').addEventListener('input', () => {
         refreshSupervisorOptions('');
         markReassignmentDirty();
     });
@@ -131,7 +160,7 @@ async function submitEmployeeReassignment(event, id) {
     event.preventDefault();
     const result = await APIClient.put(`hr.php?action=reassign_employee&id=${id}`, {
         department: document.getElementById('reassign-department').value,
-        position: document.getElementById('reassign-position').value,
+        position: getReassignPosition(),
         role: document.getElementById('reassign-role').value,
         supervisor_id: document.getElementById('reassign-supervisor').value
     });

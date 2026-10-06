@@ -449,8 +449,20 @@ class UserRegistration {
     }
 
     public static function isValidDepartmentPosition($department, $position) {
+        $position = (string) $position;
+        $positionLength = preg_match_all('/./us', $position, $matches);
         return in_array($department, self::ALLOWED_DEPARTMENTS, true)
-            && in_array($position, self::DEPARTMENT_POSITIONS[$department] ?? [], true);
+            && $position !== ''
+            && $position === trim($position)
+            && $positionLength !== false
+            && $positionLength <= 50;
+    }
+
+    public static function getDefaultRoleForPosition($department, $position) {
+        if (!in_array($position, self::DEPARTMENT_POSITIONS[$department] ?? [], true)) {
+            return 'employee';
+        }
+        return self::POSITION_ROLE_MAP[$position] ?? 'employee';
     }
 
     public static function getDepartmentOptions() {

@@ -174,7 +174,7 @@ function updateAssignedUserDetails($id, $user, $data) {
     $position = $data['position'] ?? $target['position'];
     if (isset($data['department']) || isset($data['position'])) {
         if (!UserRegistration::isValidDepartmentPosition($department, $position)) {
-            throw new Exception('Please select a valid position for the chosen department');
+            throw new Exception('Enter a position of 1-50 characters with no leading or trailing spaces for a valid department');
         }
         if (isset($data['department'])) {
             $updates[] = "department = ?";
@@ -267,7 +267,7 @@ function reassignEmployee($id, $data, $user) {
     $position = isset($data['position']) ? trim((string) $data['position']) : $target['position'];
     if ((isset($data['department']) || isset($data['position']))
         && !UserRegistration::isValidDepartmentPosition($department, $position)) {
-        throw new Exception('Selected department and position are not valid');
+        throw new Exception('Enter a position of 1-50 characters with no leading or trailing spaces for a valid department');
     }
 
     if (isset($data['department'])) {

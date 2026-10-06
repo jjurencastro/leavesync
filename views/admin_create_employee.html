@@ -50,14 +50,18 @@
                 </div>
             </div>
             <div class="card-body">
-                <p>Enter the employee's account and organization details. They will use the matching Google email to set a password and activate the account.</p>
+                <p>Enter the employee's account and organization details. They will use the matching Google email to set a password and activate the account. Choose Other for a custom title; custom titles receive Employee access by default. Listed titles keep their current role rules.</p>
                 <form id="create-user-form" style="display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 0.75rem;">
                     <div class="form-group"><label for="new-username">Assigned username</label><input id="new-username" required minlength="3"></div>
                     <div class="form-group"><label for="new-email">Institutional email</label><input id="new-email" type="email" required></div>
                     <div class="form-group"><label for="new-full-name">Full name</label><input id="new-full-name" required></div>
                     <div class="form-group"><label for="new-gender">Gender</label><select id="new-gender" required><option value="">Select gender</option><option value="male">Male</option><option value="female">Female</option></select></div>
                     <div class="form-group"><label for="new-department">Department</label><select id="new-department" required><option value="">Select department</option></select></div>
-                    <div class="form-group"><label for="new-position">Position</label><select id="new-position" required><option value="">Select position</option></select></div>
+                    <div class="form-group">
+                        <label for="new-position">Position</label>
+                        <select id="new-position" required><option value="">Select position</option><option value="__other__">Other</option></select>
+                        <input id="new-custom-position" maxlength="50" placeholder="Enter position title" style="display: none; margin-top: 0.5rem;">
+                    </div>
                     <div class="form-group"><label for="new-supervisor">Immediate supervisor</label><select id="new-supervisor" required><option value="">Select supervisor</option></select></div>
                     <div style="display: flex; align-items: end;"><button type="submit" class="btn btn-primary">Create Account</button></div>
                 </form>
@@ -87,6 +91,7 @@
 
         let allUsersData = [];
         let departmentPositionsData = { departments: [], department_positions: {} };
+        const OTHER_POSITION_VALUE = '__other__';
 
         async function loadDepartmentPositions() {
             try {
@@ -120,8 +125,9 @@
             departmentSelect.onchange = updateCreateUserOptions;
             const positionSelect = document.getElementById('new-position');
             if (positionSelect) {
-                positionSelect.onchange = updateCreateUserSupervisors;
+                positionSelect.onchange = updateCreateUserPosition;
             }
+            document.getElementById('new-custom-position').oninput = updateCreateUserSupervisors;
             updateCreateUserOptions();
             const form = document.getElementById('create-user-form');
             if (form) {
@@ -134,13 +140,33 @@
             const positionSelect = document.getElementById('new-position');
             if (!positionSelect) return;
             positionSelect.innerHTML = '<option value="">Select position</option>' +
-                (departmentPositionsData.department_positions[department] || []).map(position => `<option value="${escapeAttr(position)}">${escapeAttr(position)}</option>`).join('');
+                (departmentPositionsData.department_positions[department] || []).map(position => `<option value="${escapeAttr(position)}">${escapeAttr(position)}</option>`).join('') +
+                '<option value="__other__">Other</option>';
+            positionSelect.value = '';
+            document.getElementById('new-custom-position').value = '';
+            updateCreateUserPosition();
+        }
+
+        function getCreateUserPosition() {
+            const selected = document.getElementById('new-position')?.value || '';
+            return selected === OTHER_POSITION_VALUE
+                ? (document.getElementById('new-custom-position')?.value || '').trim()
+                : selected;
+        }
+
+        function updateCreateUserPosition() {
+            const positionSelect = document.getElementById('new-position');
+            const customPosition = document.getElementById('new-custom-position');
+            const isCustom = positionSelect?.value === OTHER_POSITION_VALUE;
+            customPosition.style.display = isCustom ? '' : 'none';
+            customPosition.required = isCustom;
+            if (!isCustom) customPosition.value = '';
             updateCreateUserSupervisors();
         }
 
         function updateCreateUserSupervisors() {
             const department = document.getElementById('new-department')?.value || '';
-            const position = document.getElementById('new-position')?.value || '';
+            const position = getCreateUserPosition();
             const supervisorSelect = document.getElementById('new-supervisor');
             if (!supervisorSelect) return;
             supervisorSelect.innerHTML = '<option value="">Select supervisor</option>' +
@@ -155,7 +181,7 @@
                 full_name: document.getElementById('new-full-name').value.trim(),
                 gender: document.getElementById('new-gender').value,
                 department: document.getElementById('new-department').value,
-                position: document.getElementById('new-position').value,
+                position: getCreateUserPosition(),
                 supervisor_id: document.getElementById('new-supervisor').value
             });
             const message = document.getElementById('create-user-result');
@@ -171,8 +197,7 @@
         }
 
         function downloadCsvTemplate() {
-            // Server-generated: an .xlsx with dropdown lists for gender/department/position/supervisor
-            // pulled live from the database (falls back to a plain CSV if the server can't build one).
+            // The .xlsx provides dropdown suggestions; custom position titles may also be typed.
             window.location.href = '/api/admin.php?action=download_template';
         }
 
@@ -183,8 +208,9 @@
             const content = `
                 <div style="display: flex; flex-direction: column; gap: 1rem;">
                     <p style="margin: 0; color: var(--text-muted, #64748b); font-size: 0.9rem;">
-                        Download the template, fill it in using the dropdown lists for gender, department, position, and supervisor,
-                        then save it as CSV and upload it here. The supervisor column also accepts a plain username or institutional email.
+                        Download the template, use the dropdowns for standard values, and type a custom position title when needed.
+                        Choose an eligible immediate supervisor. Custom-position accounts receive Employee access by default.
+                        Save the sheet as CSV and upload it here. The supervisor column also accepts a plain username or institutional email.
                     </p>
                     <div style="display: flex; gap: 0.5rem; align-items: center; flex-wrap: wrap;">
                         <input type="file" id="bulk-csv-file" accept=".csv,text/csv" class="form-control" style="flex: 1; min-width: 220px;" onchange="handleBulkCsvSelect(event)">
@@ -320,9 +346,9 @@
                 if (!fullName) errors.push('Full name required');
                 if (!['male', 'female'].includes(gender)) errors.push('Gender must be male/female');
 
-                const validPositions = departmentPositionsData.department_positions[department] || [];
                 if (!departmentPositionsData.departments.includes(department)) errors.push(`Unknown dept '${department}'`);
-                else if (!validPositions.includes(position)) errors.push(`Invalid pos '${position}' for ${department}`);
+                else if (!position) errors.push('Position required');
+                else if (position.length > 50) errors.push('Position must be 50 characters or fewer');
 
                 const matchedSupervisor = resolveSupervisorClient(supervisorIdent, department, position);
                 if (!supervisorIdent) errors.push('Supervisor required');

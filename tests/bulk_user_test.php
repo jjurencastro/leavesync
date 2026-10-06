@@ -59,16 +59,36 @@ if (!$hrSupervisor || (int)$hrSupervisor['id'] !== 3) {
     exit(1);
 }
 
-// Test department-position validity
+// Test listed and custom position validity
 if (!UserRegistration::isValidDepartmentPosition('CCS', 'Instructor')) {
     fwrite(STDERR, "FAIL: Expected CCS Instructor to be valid" . PHP_EOL);
     exit(1);
 }
 
-if (UserRegistration::isValidDepartmentPosition('CCS', 'HR Officer')) {
-    fwrite(STDERR, "FAIL: Expected CCS HR Officer to be invalid" . PHP_EOL);
+if (!UserRegistration::isValidDepartmentPosition('CCS', 'Program Coordinator')) {
+    fwrite(STDERR, "FAIL: Expected a custom CCS position to be valid" . PHP_EOL);
+    exit(1);
+}
+
+if (UserRegistration::isValidDepartmentPosition('UNKNOWN', 'Program Coordinator')
+    || UserRegistration::isValidDepartmentPosition('CCS', '')
+    || UserRegistration::isValidDepartmentPosition('CCS', str_repeat('x', 51))) {
+    fwrite(STDERR, "FAIL: Expected an unknown department, empty title, or overlong title to be invalid" . PHP_EOL);
+    exit(1);
+}
+
+if (UserRegistration::getDefaultRoleForPosition('CCS', 'Program Coordinator') !== 'employee'
+    || UserRegistration::getDefaultRoleForPosition('CCS', 'HR Officer') !== 'employee'
+    || UserRegistration::getDefaultRoleForPosition('CCS', 'Dean') !== 'manager'
+    || UserRegistration::getDefaultRoleForPosition('ADMIN', 'HR Officer') !== 'hr') {
+    fwrite(STDERR, "FAIL: Expected custom positions to default to employee without changing listed role defaults" . PHP_EOL);
+    exit(1);
+}
+
+$customPositionSupervisor = UserRegistration::resolveEligibleSupervisor('dean_ccs', 0, 'CCS', 'Program Coordinator', $fakeDb);
+if (!$customPositionSupervisor || (int)$customPositionSupervisor['id'] !== 2) {
+    fwrite(STDERR, "FAIL: Expected a custom CCS position to resolve its department manager as supervisor" . PHP_EOL);
     exit(1);
 }
 
 echo "PASS: bulk user validation and supervisor resolution tests pass\n";
-
