@@ -493,8 +493,17 @@ class UIManager {
         };
         const overallStatus = req.overall_status || req.status;
         const stage = stageLabels[req.approval_stage] || 'In Progress';
-        const supervisorStatus = overallStatus === 'cancelled' ? 'not_required' : req.supervisor_status;
-        const hrStatus = overallStatus === 'cancelled' ? 'not_required' : req.hr_status;
+        
+        // If HR approved as backup supervisor (manager_id == hr_id and both are set),
+        // show HR as approver instead of supervisor
+        let supervisorStatus = overallStatus === 'cancelled' ? 'not_required' : req.supervisor_status;
+        let hrStatus = overallStatus === 'cancelled' ? 'not_required' : req.hr_status;
+        
+        if (overallStatus === 'approved' && req.manager_id && req.hr_id && 
+            req.manager_id === req.hr_id && supervisorStatus === 'approved' && hrStatus === 'approved') {
+            // HR approved as backup - show supervisor as N/A (escalated)
+            supervisorStatus = 'escalated_to_hr';
+        }
 
         return `Outcome: ${this.getStatusBadge(overallStatus)}<br><small>Current Stage: ${stage}</small><br>Supervisor: ${this.getStatusBadge(supervisorStatus)} &nbsp; HR: ${this.getStatusBadge(hrStatus)}`;
     }
