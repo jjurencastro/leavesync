@@ -254,7 +254,8 @@
                 return;
             }
 
-            const comments = prompt('Optional comments for the employee:') || '';
+            const comments = await promptDialog('Add an optional comment for the employee.', { title: 'Approve request', confirmText: 'Approve', placeholder: 'Optional comment' });
+            if (comments === null) return;
             const result = await LeaveRequestManager.approveRequest(id, comments, assertion);
             if (result.success) {
                 UIManager.showAlert('Leave request approved', 'success');
@@ -265,8 +266,8 @@
         }
 
         async function rejectTeamRequest(id) {
-            const comments = prompt('Reason for rejection (optional):') || '';
-            if (!confirm('Reject this leave request?')) return;
+            const comments = await promptDialog('Tell the employee why this request is being rejected.', { title: 'Reject request', confirmText: 'Reject', danger: true, required: true, placeholder: 'Reason for rejection' });
+            if (comments === null) return;
 
             const result = await LeaveRequestManager.rejectRequest(id, comments);
             if (result.success) {

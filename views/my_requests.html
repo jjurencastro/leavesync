@@ -263,6 +263,7 @@
                             <input type="date" id="edit-request-end" value="${escapeAttr(req.end_date)}" ${locked ? 'disabled' : ''} required>
                         </div>
                     </div>
+                    <div id="edit-leave-preview"></div>
                     <div class="form-group">
                         <label for="edit-request-reason">Reason</label>
                         <textarea id="edit-request-reason" rows="4" required>${escapeAttr(req.reason)}</textarea>
@@ -275,6 +276,25 @@
                 </form>
             `;
             UIManager.showModal(content, 'Edit Leave Request');
+
+            if (!locked) {
+                const [balanceResult, listResult] = await Promise.all([
+                    LeaveRequestManager.getLeaveBalance(),
+                    LeaveRequestManager.listRequests()
+                ]);
+                const update = () => renderLeavePreview(document.getElementById('edit-leave-preview'), {
+                    typeId: document.getElementById('edit-request-type').value,
+                    start: document.getElementById('edit-request-start').value,
+                    end: document.getElementById('edit-request-end').value,
+                    balances: balanceResult.success ? balanceResult.data : [],
+                    requests: listResult.success ? listResult.data : [],
+                    excludeId: id,
+                    refundDays: req.number_of_days,
+                    refundTypeId: req.leave_type_id
+                });
+                ['edit-request-type', 'edit-request-start', 'edit-request-end'].forEach((fid) => document.getElementById(fid).addEventListener('change', update));
+                update();
+            }
         }
 
         async function submitEditRequest(event, id) {
@@ -301,7 +321,7 @@
         }
 
         async function cancelRequest(id) {
-            if (!confirm('Cancel this leave request? This will restore the leave balance and stop the pending approval flow.')) {
+            if (!(await confirmDialog('Cancel this leave request? This will restore the leave balance and stop the pending approval flow.', { title: 'Cancel leave request', confirmText: 'Cancel request', danger: true }))) {
                 return;
             }
 

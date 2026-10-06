@@ -281,7 +281,7 @@
                 UIManager.showAlert('The admin account cannot be deleted', 'danger');
                 return;
             }
-            if (!confirm(`Are you sure you want to delete ${user.full_name}? This cannot be undone.`)) return;
+            if (!(await confirmDialog(`Are you sure you want to delete ${user.full_name}? This cannot be undone.`, { title: 'Delete user', confirmText: 'Delete', danger: true }))) return;
 
             const result = await APIClient.delete(`admin.php?action=delete_user&id=${id}`);
             if (result.success) {
@@ -301,7 +301,7 @@
             }
             const action = currentlyActive ? 'deactivate_user' : 'restore_user';
             const verb = currentlyActive ? 'deactivate' : 'activate';
-            if (!confirm(`Are you sure you want to ${verb} this account?`)) return;
+            if (!(await confirmDialog(`Are you sure you want to ${verb} this account?`, { title: 'Confirm', confirmText: 'Yes' }))) return;
             const result = await APIClient.put(`admin.php?action=${action}&id=${id}`, {});
             UIManager.showAlert(result.message || `Unable to ${verb} account`, result.success ? 'success' : 'danger');
             if (result.success) await loadManageUsers();

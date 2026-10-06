@@ -132,7 +132,7 @@
                 return;
             }
 
-            if (!confirm('Trust this device for the user?')) return;
+            if (!(await confirmDialog('Trust this device for the user?', { title: 'Trust device', confirmText: 'Trust' }))) return;
 
             const result = await APIClient.put(`admin.php?action=approve_device_request&id=${id}`, { webauthn_response: assertion });
             if (result.success) {
@@ -144,7 +144,7 @@
         }
 
         async function rejectDeviceRequest(id) {
-            if (!confirm('Reject this device change request?')) return;
+            if (!(await confirmDialog('Reject this device change request?', { title: 'Reject request', confirmText: 'Reject', danger: true }))) return;
 
             const result = await APIClient.put(`admin.php?action=reject_device_request&id=${id}`, {});
             if (result.success) {

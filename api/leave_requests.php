@@ -88,6 +88,10 @@ try {
             echo json_encode(getLeaveRequest($_GET['id'], $user));
             break;
 
+        case 'pending_summary':
+            echo json_encode(pendingApprovalSummary($user));
+            break;
+
         case 'upload_attachment':
             if ($method !== 'POST') throw new Exception('Method not allowed');
             echo json_encode(LeaveAttachment::attach($_FILES['file'] ?? [], $_POST['leave_request_id'] ?? ($_GET['leave_request_id'] ?? 0), $user));
@@ -701,6 +705,10 @@ function rejectLeaveRequest($data, $user) {
         throw new Exception('Unauthorized to reject requests');
     }
 
+    if (trim((string) ($data['comments'] ?? '')) === '') {
+        throw new Exception('Please provide a reason for rejecting this request');
+    }
+
     if (empty($data['id'])) {
         throw new Exception('Leave request ID required');
     }
@@ -941,6 +949,61 @@ function emailApprover($approver, $message) {
     $text = "Hello {$approver['full_name']},\n\n{$message}.\n\nLog in to LeaveSync to review and act on this request: {$loginUrl}\n";
 
     Mailer::send($approver['email'], $approver['full_name'] ?? '', 'LeaveSync: leave request awaiting your approval', $html, $text);
+}
+
+/**
+ * Count requests currently waiting on this approver and, as a side effect,
+ * send at most one reminder per request per day once it has waited 2+ days.
+ */
+function pendingApprovalSummary($user) {
+    global $db;
+
+    $role = $user['role'] ?? '';
+    if (!in_array($role, ['manager', 'hr', 'admin'], true)) {
+        return ['success' => true, 'data' => ['count' => 0, 'overdue' => 0]];
+    }
+
+    $waiting = $db->getResults(
+        "SELECT lr.id, lr.created_at, u.full_name
+         FROM leave_requests lr JOIN users u ON lr.user_id = u.id
+         WHERE lr.status = 'pending' AND lr.supervisor_status = 'pending' AND lr.assigned_supervisor_id = ?",
+        [$user['id']]
+    );
+    if (in_array($role, ['hr', 'admin'], true)) {
+        $hrQueue = $db->getResults(
+            "SELECT lr.id, lr.created_at, u.full_name
+             FROM leave_requests lr JOIN users u ON lr.user_id = u.id
+             WHERE lr.status = 'pending' AND lr.supervisor_status IN ('approved', 'not_required') AND lr.hr_status = 'pending'"
+        );
+        $seen = array_column($waiting, 'id');
+        foreach ($hrQueue as $row) {
+            if (!in_array($row['id'], $seen)) $waiting[] = $row;
+        }
+    }
+
+    $threshold = time() - 2 * 86400;
+    $overdue = 0;
+    foreach ($waiting as $row) {
+        if (strtotime($row['created_at']) > $threshold) continue;
+        $overdue++;
+        $recent = $db->getRow(
+            "SELECT id FROM notifications
+             WHERE user_id = ? AND title = 'Approval Reminder' AND related_entity_id = ?
+               AND created_at > (NOW() - INTERVAL 1 DAY) LIMIT 1",
+            [$user['id'], $row['id']]
+        );
+        if (!$recent) {
+            createNotification(
+                $user['id'],
+                'Approval Reminder',
+                "The leave request from {$row['full_name']} has been waiting for your approval since " . substr($row['created_at'], 0, 10) . '.',
+                'leave_request',
+                $row['id']
+            );
+        }
+    }
+
+    return ['success' => true, 'data' => ['count' => count($waiting), 'overdue' => $overdue]];
 }
 
 function createNotification($user_id, $title, $message, $type, $entity_id) {

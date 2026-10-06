@@ -79,6 +79,7 @@
                 <div class="form-group">
                     <label for="days-display">Number of Days</label>
                     <input type="text" id="days-display" disabled placeholder="0 days" style="background-color: var(--light-bg);">
+                    <div id="leave-preview"></div>
                 </div>
 
                 <div class="form-group">
@@ -106,6 +107,8 @@
     <script src="/js/app.js"></script>
     <script>
         const docRequired = {};
+        let previewBalances = [];
+        let previewRequests = [];
         // Check authentication
         (async () => {
             const user = await checkAuth();
@@ -129,9 +132,12 @@
                 });
             }
 
+            const existing = await LeaveRequestManager.listRequests();
+            if (existing.success) previewRequests = existing.data;
             const balanceResult = await LeaveRequestManager.getLeaveBalance();
             const pillsContainer = document.getElementById('balance-pills');
             if (balanceResult.success) {
+                previewBalances = balanceResult.data;
                 const allBalances = sortLeaveTypes(balanceResult.data, 'leave_type_name');
                 const vlSlExhausted = allBalances
                     .filter(b => b.leave_type_name === 'Vacation Leave' || b.leave_type_name === 'Sick Leave')
@@ -156,6 +162,17 @@
         // Calculate days
         document.getElementById('start-date').addEventListener('change', calculateDays);
         document.getElementById('end-date').addEventListener('change', calculateDays);
+
+        function updatePreview() {
+            renderLeavePreview(document.getElementById('leave-preview'), {
+                typeId: document.getElementById('leave-type').value,
+                start: document.getElementById('start-date').value,
+                end: document.getElementById('end-date').value,
+                balances: previewBalances,
+                requests: previewRequests
+            });
+        }
+        ['leave-type', 'start-date', 'end-date'].forEach((id) => document.getElementById(id).addEventListener('change', updatePreview));
 
         function calculateDays() {
             const startValue = document.getElementById('start-date').value;

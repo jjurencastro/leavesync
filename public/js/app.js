@@ -562,6 +562,7 @@ function createUserAvatar(user) {
 // Wire up the top-right user menu (avatar, full name + Settings/Logout dropdown) shared by every authenticated page
 function initUserMenu(user) {
     initNotificationBell();
+    initApprovalBadge(user);
     const nameEl = document.getElementById('user-fullname');
     if (nameEl) {
         nameEl.textContent = user.full_name || user.username;
@@ -613,6 +614,8 @@ function applyManagerSidebarLinks(role, activePage) {
         const activeClass = activePage === 'device-requests' ? ' active' : '';
         myInfoLink.insertAdjacentHTML('beforebegin', `<a href="/device-requests" class="sidebar-link${activeClass}">Device Change Requests</a>`);
     }
+
+    applyApprovalBadge();
 }
 
 // Initialize on page load
@@ -624,7 +627,7 @@ document.addEventListener('DOMContentLoaded', async () => {
 
 // Logout
 async function logout() {
-    if (confirm('Are you sure you want to logout?')) {
+    if (await confirmDialog('Are you sure you want to logout?', { title: 'Log out', confirmText: 'Log out' })) {
         await AuthManager.logout();
         window.location.href = '/login';
     }
@@ -936,11 +939,157 @@ async function addLeaveAttachment(requestId) {
 }
 
 async function removeLeaveAttachment(attachmentId, requestId) {
-    if (!confirm('Remove this document?')) return;
+    if (!(await confirmDialog('Remove this document?', { title: 'Remove document', confirmText: 'Remove', danger: true }))) return;
     const result = await LeaveRequestManager.deleteAttachment(attachmentId);
     UIManager.showAlert(result.message || (result.success ? 'Document removed' : 'Failed to remove'), result.success ? 'success' : 'danger');
     if (result.success && typeof refreshRequestModal === 'function') {
         UIManager.hideModal();
         refreshRequestModal(requestId);
     }
+}
+
+
+// Styled replacements for window.confirm / window.prompt.
+// confirmDialog resolves true/false; promptDialog resolves the entered text, or null if cancelled.
+function openDialog({ title, message, confirmText = 'Confirm', danger = false, input = null }) {
+    return new Promise((resolve) => {
+        const overlay = document.createElement('div');
+        overlay.className = 'modal dialog-modal active';
+        overlay.setAttribute('role', 'dialog');
+        overlay.setAttribute('aria-modal', 'true');
+        overlay.innerHTML = `
+            <div class="modal-content dialog-content">
+                <div class="modal-header"><h2 class="dialog-title"></h2></div>
+                <div class="modal-body">
+                    <p class="dialog-message"></p>
+                    ${input ? '<textarea class="dialog-input" rows="3"></textarea>' : ''}
+                    <div class="dialog-actions">
+                        <button type="button" class="btn btn-secondary" data-act="cancel">Cancel</button>
+                        <button type="button" class="btn ${danger ? 'btn-danger' : 'btn-primary'}" data-act="ok"></button>
+                    </div>
+                </div>
+            </div>`;
+        overlay.querySelector('.dialog-title').textContent = title || 'Please confirm';
+        overlay.querySelector('.dialog-message').textContent = message || '';
+        overlay.querySelector('[data-act="ok"]').textContent = confirmText;
+        const field = overlay.querySelector('.dialog-input');
+        if (field && input.placeholder) field.placeholder = input.placeholder;
+
+        const finish = (result) => {
+            document.removeEventListener('keydown', onKey);
+            overlay.remove();
+            resolve(result);
+        };
+        const accept = () => {
+            if (!field) return finish(true);
+            const value = field.value.trim();
+            if (input.required && !value) {
+                field.focus();
+                field.classList.add('input-error');
+                return;
+            }
+            finish(value);
+        };
+        const onKey = (e) => {
+            if (e.key === 'Escape') finish(field ? null : false);
+        };
+        overlay.addEventListener('click', (e) => {
+            if (e.target === overlay) finish(field ? null : false);
+        });
+        overlay.querySelector('[data-act="cancel"]').addEventListener('click', () => finish(field ? null : false));
+        overlay.querySelector('[data-act="ok"]').addEventListener('click', accept);
+        document.addEventListener('keydown', onKey);
+        document.body.appendChild(overlay);
+        (field || overlay.querySelector('[data-act="ok"]')).focus();
+    });
+}
+
+function confirmDialog(message, options = {}) {
+    return openDialog({ message, ...options });
+}
+
+function promptDialog(message, options = {}) {
+    return openDialog({ message, confirmText: 'Submit', ...options, input: { placeholder: options.placeholder, required: !!options.required } });
+}
+
+// Sidebar badge showing how many requests await this approver
+function applyApprovalBadge() {
+    const count = Number(window.__pendingApprovals || 0);
+    document.querySelectorAll('.approval-badge').forEach((el) => el.remove());
+    if (count <= 0) return;
+    const targets = document.querySelectorAll(
+        '.sidebar a[href="/team-requests"], .sidebar a[href="/hr/leave-requests"], .sidebar a[href="/admin/leave-requests"], .sidebar [data-toggle-target="leave-requests-submenu"]'
+    );
+    targets.forEach((el) => {
+        const badge = document.createElement('span');
+        badge.className = 'approval-badge';
+        badge.textContent = count > 99 ? '99+' : String(count);
+        badge.title = count + ' awaiting your approval';
+        el.appendChild(badge);
+    });
+}
+
+async function initApprovalBadge(user) {
+    if (!user || !['manager', 'hr', 'admin'].includes(user.role)) return;
+    const refresh = async () => {
+        const result = await APIClient.get('leave_requests.php?action=pending_summary');
+        if (result.success) {
+            window.__pendingApprovals = result.data.count;
+            applyApprovalBadge();
+        }
+    };
+    refresh();
+    setInterval(refresh, 120000);
+}
+
+
+// Live preview of days deducted, remaining balance and date conflicts for filing/editing a leave.
+function countWeekdaysClient(startValue, endValue) {
+    const start = new Date(`${startValue}T00:00:00`);
+    const end = new Date(`${endValue}T00:00:00`);
+    if (!startValue || !endValue || isNaN(start) || isNaN(end) || end < start) return 0;
+    let days = 0;
+    for (const d = new Date(start); d <= end; d.setDate(d.getDate() + 1)) {
+        if (d.getDay() !== 0 && d.getDay() !== 6) days++;
+    }
+    return days;
+}
+
+function renderLeavePreview(el, { typeId, start, end, balances = [], requests = [], excludeId = null, refundDays = 0, refundTypeId = null }) {
+    if (!el) return;
+    if (!start || !end) { el.innerHTML = ''; return; }
+    if (new Date(end) < new Date(start)) {
+        el.innerHTML = '<div class="leave-preview leave-preview-warn">End date must be on or after the start date.</div>';
+        return;
+    }
+    const days = countWeekdaysClient(start, end);
+    const lines = [];
+    let warn = false;
+    if (days === 0) {
+        lines.push('The selected dates contain no weekdays.');
+        warn = true;
+    } else {
+        lines.push(`This will use <strong>${days}</strong> working day${days > 1 ? 's' : ''}.`);
+        const bal = balances.find((b) => String(b.leave_type_id) === String(typeId));
+        if (bal) {
+            const available = Number(bal.balance) + (String(refundTypeId) === String(typeId) ? Number(refundDays) : 0);
+            const after = available - days;
+            if (after < 0) {
+                lines.push(`Not enough balance: you have ${available}, this needs ${days}.`);
+                warn = true;
+            } else {
+                lines.push(`Balance after: <strong>${after}</strong> of ${available}.`);
+            }
+        }
+    }
+    const conflict = requests.find((r) =>
+        Number(r.id) !== Number(excludeId)
+        && ['pending', 'approved'].includes(r.status)
+        && r.start_date <= end && r.end_date >= start
+    );
+    if (conflict) {
+        lines.push(`Overlaps your ${conflict.status} request (${conflict.start_date} to ${conflict.end_date}).`);
+        warn = true;
+    }
+    el.innerHTML = `<div class="leave-preview${warn ? ' leave-preview-warn' : ''}">${lines.join('<br>')}</div>`;
 }

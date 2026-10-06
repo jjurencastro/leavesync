@@ -173,5 +173,5 @@ async function submitEmployeeReassignment(event, id) {
         await loadEmployees();
     }
 }
-async function restoreEmployee(id) { if (!confirm('Restore this employee account?')) return; const result = await APIClient.put(`hr.php?action=restore_employee&id=${id}`, {}); UIManager.showAlert(result.message || 'Unable to restore employee', result.success ? 'success' : 'danger'); if (result.success) loadEmployees(); }
+async function restoreEmployee(id) { if (!(await confirmDialog('Restore this employee account?', { title: 'Restore employee', confirmText: 'Restore' }))) return; const result = await APIClient.put(`hr.php?action=restore_employee&id=${id}`, {}); UIManager.showAlert(result.message || 'Unable to restore employee', result.success ? 'success' : 'danger'); if (result.success) loadEmployees(); }
 </script></body></html>

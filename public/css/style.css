@@ -2323,3 +2323,15 @@ label {
 .attachment-size { color: var(--text-muted, #6b7280); font-size: .8rem; }
 .attachment-add { display: flex; align-items: center; gap: .5rem; flex-wrap: wrap; margin-top: .4rem; }
 .attachment-add input[type="file"] { max-width: 100%; flex: 1; min-width: 0; }
+
+/* Dialogs, approval badge and leave preview */
+.dialog-modal { z-index: 2100; }
+.dialog-content { max-width: 420px; width: calc(100% - 2rem); }
+.dialog-message { margin: 0 0 .75rem; line-height: 1.45; }
+.dialog-input { width: 100%; margin-bottom: .75rem; }
+.dialog-input.input-error { border-color: var(--danger, #dc2626); }
+.dialog-actions { display: flex; justify-content: flex-end; gap: .5rem; }
+.dialog-actions .btn { width: auto; }
+.approval-badge { display: inline-block; min-width: 18px; padding: 0 6px; margin-left: .5rem; border-radius: 999px; background: #dc2626; color: #fff; font-size: .7rem; font-weight: 700; line-height: 18px; text-align: center; vertical-align: middle; }
+.leave-preview { margin-top: .4rem; padding: .45rem .65rem; border-radius: 8px; background: #eff6ff; color: #1e3a8a; font-size: .85rem; line-height: 1.4; }
+.leave-preview-warn { background: #fef2f2; color: #991b1b; }
