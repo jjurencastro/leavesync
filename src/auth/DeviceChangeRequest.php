@@ -44,8 +44,12 @@ class DeviceChangeRequest {
 
         AuditLogger::log($user['id'], 'device_change_requested', 'user', $user['id']);
         
-        // Notify approvers
-        self::notifyApprovers($user);
+        // Notify approvers (don't fail if notification errors occur)
+        try {
+            self::notifyApprovers($user);
+        } catch (Exception $e) {
+            error_log("Device request notification error: " . $e->getMessage());
+        }
     }
 
     /**
@@ -183,8 +187,12 @@ class DeviceChangeRequest {
 
         AuditLogger::log($resolverUser['id'], "device_request_{$status}", 'device_change_request', $id);
         
-        // Notify the user
-        self::notifyUser($request['user_id'], $status);
+        // Notify the user (don't fail if notification errors occur)
+        try {
+            self::notifyUser($request['user_id'], $status);
+        } catch (Exception $e) {
+            error_log("Device request resolution notification error: " . $e->getMessage());
+        }
 
         return ['success' => true, 'message' => "Device request {$status}"];
     }
@@ -193,35 +201,45 @@ class DeviceChangeRequest {
      * Create a notification for the user and notify approvers
      */
     private static function notifyApprovers($user) {
-        $db = Database::getInstance();
-        
-        // Find who needs to approve
-        if ($user['role'] === 'admin' || $user['role'] === 'hr' || empty($user['supervisor_id'])) {
-            // Admin users and users with no supervisor need System Admin approval
-            $approvers = $db->getResults(
-                "SELECT id, email, full_name FROM users WHERE role = 'admin' AND is_active = 1"
-            );
-        } elseif ($user['role'] === 'manager') {
-            // Managers need Admin approval
-            $approvers = $db->getResults(
-                "SELECT id, email, full_name FROM users WHERE role = 'admin' AND is_active = 1"
-            );
-        } else {
-            // Employees: notify their supervisor first
-            $approvers = $db->getResults(
-                "SELECT id, email, full_name FROM users WHERE id = ? AND is_active = 1",
-                [$user['supervisor_id']]
-            );
-        }
+        try {
+            $db = Database::getInstance();
+            
+            // Find who needs to approve
+            if ($user['role'] === 'admin' || $user['role'] === 'hr' || empty($user['supervisor_id'])) {
+                // Admin users and users with no supervisor need System Admin approval
+                $approvers = $db->getResults(
+                    "SELECT id, email, full_name FROM users WHERE role = 'admin' AND is_active = 1"
+                );
+            } elseif ($user['role'] === 'manager') {
+                // Managers need Admin approval
+                $approvers = $db->getResults(
+                    "SELECT id, email, full_name FROM users WHERE role = 'admin' AND is_active = 1"
+                );
+            } else {
+                // Employees: notify their supervisor first
+                if (!empty($user['supervisor_id'])) {
+                    $approvers = $db->getResults(
+                        "SELECT id, email, full_name FROM users WHERE id = ? AND is_active = 1",
+                        [$user['supervisor_id']]
+                    );
+                } else {
+                    $approvers = [];
+                }
+            }
 
-        // Create notifications
-        foreach ($approvers as $approver) {
-            self::createNotification(
-                $approver['id'],
-                'New Device Change Request',
-                "{$user['full_name']} is requesting approval to use a new device",
-                'device_change'
-            );
+            // Create notifications
+            if (!empty($approvers)) {
+                foreach ($approvers as $approver) {
+                    self::createNotification(
+                        $approver['id'],
+                        'New Device Change Request',
+                        "{$user['full_name']} is requesting approval to use a new device",
+                        'device_change'
+                    );
+                }
+            }
+        } catch (Exception $e) {
+            error_log("Failed to notify approvers for device request: " . $e->getMessage());
         }
     }
 
