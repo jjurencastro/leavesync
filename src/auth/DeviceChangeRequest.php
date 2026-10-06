@@ -8,6 +8,7 @@ require_once __DIR__ . '/../database/Database.php';
 require_once __DIR__ . '/../security/DeviceFingerprint.php';
 require_once __DIR__ . '/../security/WebAuthnService.php';
 require_once __DIR__ . '/AuditLogger.php';
+require_once __DIR__ . '/../leave/ApprovalChain.php';
 
 class DeviceChangeRequest {
 
@@ -37,9 +38,19 @@ class DeviceChangeRequest {
             return; // Already awaiting admin review, don't create a duplicate
         }
 
+        // Determine who should approve: supervisor if available, else backup approver/HR
+        $assignedApproverId = null;
+        if (!empty($user['supervisor_id'])) {
+            $filedDate = date('Y-m-d');
+            $assignment = ApprovalChain::resolveFirstAvailable($db, $user['id'], $filedDate);
+            if ($assignment) {
+                $assignedApproverId = $assignment['id'];
+            }
+        }
+
         $db->execute(
-            "INSERT INTO device_change_requests (user_id, fingerprint_hash, device_info, ip_address, browser_info) VALUES (?, ?, ?, ?, ?)",
-            [$user['id'], $fingerprint_hash, json_encode($info), $info['ip_address'], $info['browser']]
+            "INSERT INTO device_change_requests (user_id, fingerprint_hash, device_info, ip_address, browser_info, assigned_approver_id) VALUES (?, ?, ?, ?, ?, ?)",
+            [$user['id'], $fingerprint_hash, json_encode($info), $info['ip_address'], $info['browser'], $assignedApproverId]
         );
 
         AuditLogger::log($user['id'], 'device_change_requested', 'user', $user['id']);
@@ -130,12 +141,12 @@ class DeviceChangeRequest {
         $db = Database::getInstance();
         return $db->getResults(
             "SELECT dcr.id, dcr.user_id, dcr.fingerprint_hash, dcr.device_info, dcr.ip_address, dcr.browser_info,
-                    dcr.status, dcr.requested_at, u.username, u.full_name, u.email
+                    dcr.status, dcr.requested_at, u.username, u.full_name, u.email, dcr.assigned_approver_id
              FROM device_change_requests dcr
              JOIN users u ON dcr.user_id = u.id
-             WHERE dcr.status = 'pending' AND u.supervisor_id = ? AND u.role = 'employee'
+             WHERE dcr.status = 'pending' AND (dcr.assigned_approver_id = ? OR (u.supervisor_id = ? AND dcr.assigned_approver_id IS NULL)) AND u.role = 'employee'
              ORDER BY dcr.requested_at DESC",
-            [$supervisor_id]
+            [$supervisor_id, $supervisor_id]
         );
     }
 
@@ -148,10 +159,10 @@ class DeviceChangeRequest {
         $db = Database::getInstance();
         return $db->getResults(
             "SELECT dcr.id, dcr.user_id, dcr.fingerprint_hash, dcr.device_info, dcr.ip_address, dcr.browser_info,
-                    dcr.status, dcr.requested_at, u.username, u.full_name, u.email
+                    dcr.status, dcr.requested_at, u.username, u.full_name, u.email, dcr.assigned_approver_id
              FROM device_change_requests dcr
              JOIN users u ON dcr.user_id = u.id
-             WHERE dcr.status = 'pending' AND u.supervisor_id = ?
+             WHERE dcr.status = 'pending' AND dcr.assigned_approver_id = ?
              ORDER BY dcr.requested_at DESC",
             [$hr_id]
         );

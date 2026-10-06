@@ -193,10 +193,13 @@ CREATE TABLE IF NOT EXISTS device_change_requests (
     requested_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     resolved_at TIMESTAMP NULL,
     resolved_by INT NULL,
+    assigned_approver_id INT NULL,
     FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
     FOREIGN KEY (resolved_by) REFERENCES users(id) ON DELETE SET NULL,
+    FOREIGN KEY (assigned_approver_id) REFERENCES users(id) ON DELETE SET NULL,
     INDEX idx_user_id (user_id),
-    INDEX idx_status (status)
+    INDEX idx_status (status),
+    INDEX idx_assigned_approver_id (assigned_approver_id)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 -- Leave Balances
