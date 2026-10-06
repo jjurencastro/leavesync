@@ -657,8 +657,9 @@ function approveLeaveRequest($data, $user) {
         
         if ($isHRApproval) {
             // HR acting as backup supervisor: auto-complete the request
+            // Mark supervisor_status as 'escalated_to_hr' to show supervisor was unavailable
             $db->execute(
-                "UPDATE leave_requests SET status = 'approved', supervisor_status = 'approved', hr_status = 'approved', manager_id = ?, hr_id = ?, manager_comments = ?, hr_comments = ? WHERE id = ?",
+                "UPDATE leave_requests SET status = 'approved', supervisor_status = 'escalated_to_hr', hr_status = 'approved', manager_id = ?, hr_id = ?, manager_comments = ?, hr_comments = ? WHERE id = ?",
                 [$user['id'], $user['id'], $data['comments'] ?? '', $data['comments'] ?? '', $data['id']]
             );
 

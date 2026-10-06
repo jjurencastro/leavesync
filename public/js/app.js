@@ -476,7 +476,8 @@ class UIManager {
             approved: '<span class="badge badge-approved">Approved</span>',
             rejected: '<span class="badge badge-rejected">Rejected</span>',
             cancelled: '<span class="badge badge-cancelled">Cancelled</span>',
-            not_required: '<span class="badge">N/A</span>'
+            not_required: '<span class="badge">N/A</span>',
+            escalated_to_hr: '<span class="badge badge-info">Escalated to HR</span>'
         };
         return badges[status] || `<span class="badge">${status}</span>`;
     }
