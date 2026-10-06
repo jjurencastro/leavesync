@@ -653,22 +653,52 @@ function approveLeaveRequest($data, $user) {
     }
 
     if ($stage === 'supervisor') {
-        $db->execute(
-            "UPDATE leave_requests SET supervisor_status = 'approved', manager_id = ?, manager_comments = ? WHERE id = ?",
-            [$user['id'], $data['comments'] ?? '', $data['id']]
-        );
+        $isHRApproval = in_array($user['role'], ['hr', 'admin'], true);
+        
+        if ($isHRApproval) {
+            // HR acting as backup supervisor: auto-complete the request
+            $db->execute(
+                "UPDATE leave_requests SET status = 'approved', supervisor_status = 'approved', hr_status = 'approved', manager_id = ?, hr_id = ?, manager_comments = ?, hr_comments = ? WHERE id = ?",
+                [$user['id'], $user['id'], $data['comments'] ?? '', $data['comments'] ?? '', $data['id']]
+            );
 
-        notifyHR("New leave request awaiting HR approval", $data['id']);
-        createNotification(
-            $request['user_id'],
-            'Leave Request: Supervisor Approved',
-            "Your supervisor approved your leave request from {$request['start_date']} to {$request['end_date']}. It now awaits HR approval.",
-            'leave_request',
-            $data['id']
-        );
+            // Move the days from pending to used now that it's fully approved
+            $db->execute(
+                "UPDATE leave_balances
+                 SET pending_days = pending_days - ?, used_days = used_days + ?
+                 WHERE user_id = ? AND leave_type_id = ?",
+                [$request['number_of_days'], $request['number_of_days'], $request['user_id'], $request['leave_type_id']]
+            );
 
-        Auth::auditLog($user['id'], 'approve_leave_request_supervisor', 'leave_request', $data['id']);
-        return ['success' => true, 'message' => 'Leave request approved by supervisor; awaiting HR'];
+            createNotification(
+                $request['user_id'],
+                'Leave Request Approved',
+                "Your leave request from {$request['start_date']} to {$request['end_date']} has been approved.",
+                'leave_request',
+                $request['id']
+            );
+
+            Auth::auditLog($user['id'], 'approve_leave_request_hr_backup', 'leave_request', $data['id']);
+            return ['success' => true, 'message' => 'Leave request approved'];
+        } else {
+            // Regular supervisor approval: proceed to HR review
+            $db->execute(
+                "UPDATE leave_requests SET supervisor_status = 'approved', manager_id = ?, manager_comments = ? WHERE id = ?",
+                [$user['id'], $data['comments'] ?? '', $data['id']]
+            );
+
+            notifyHR("New leave request awaiting HR approval", $data['id']);
+            createNotification(
+                $request['user_id'],
+                'Leave Request: Supervisor Approved',
+                "Your supervisor approved your leave request from {$request['start_date']} to {$request['end_date']}. It now awaits HR approval.",
+                'leave_request',
+                $data['id']
+            );
+
+            Auth::auditLog($user['id'], 'approve_leave_request_supervisor', 'leave_request', $data['id']);
+            return ['success' => true, 'message' => 'Leave request approved by supervisor; awaiting HR'];
+        }
     }
 
     // HR stage: finalize the request
