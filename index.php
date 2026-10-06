@@ -24,6 +24,7 @@ if (strpos($request_uri, '..') !== false) {
 $viewRoutes = [
     '/login'                  => ['file' => 'views/login.html', 'guest' => true],
     '/activate'                => ['file' => 'views/activate.html', 'auth' => true],
+    '/reset-password'          => ['file' => 'views/reset_password.html', 'auth' => true],
     '/pending-approval'        => ['file' => 'views/pending_approval.html', 'auth' => true],
     '/confirm-device-change'   => ['file' => 'views/confirm_device_change.html'],
     '/dashboard'               => ['file' => 'views/dashboard.html', 'auth' => true, 'allow' => ['employee', 'manager']],
@@ -88,18 +89,31 @@ elseif (array_key_exists($request_uri, $viewRoutes)) {
             }
 
             // Activation must be completed (and, after that, approved by an admin)
-            // before any page other than /activate or /pending-approval can be reached.
+            // before any page other than /activate, /reset-password, or /pending-approval can be reached.
             $activated = !empty($currentUser['password_set']);
             $approved = !empty($currentUser['is_active']);
+            
+            // Check if user is in password reset flow
+            $isPasswordResetFlow = (bool) $db->getRow(
+                "SELECT id FROM audit_log WHERE user_id = ? AND action = 'password_reset_requested' LIMIT 1",
+                [$currentUser['id']]
+            );
 
-            if ($request_uri === '/activate') {
-                if ($activated) {
-                    header('Location: ' . ($approved ? $landingPage : '/pending-approval'));
+            if ($request_uri === '/reset-password') {
+                // Password reset page: only for users with pending password reset
+                if (!$isPasswordResetFlow || $activated) {
+                    header('Location: ' . $landingPage);
+                    exit;
+                }
+            } elseif ($request_uri === '/activate') {
+                // Activation page: only for new accounts, not password resets
+                if ($isPasswordResetFlow || $activated) {
+                    header('Location: ' . ($isPasswordResetFlow ? '/reset-password' : ($approved ? $landingPage : '/pending-approval')));
                     exit;
                 }
             } elseif ($request_uri === '/pending-approval') {
                 if (!$activated) {
-                    header('Location: /activate');
+                    header('Location: $isPasswordResetFlow ? '/reset-password' : '/activate');
                     exit;
                 }
                 if ($approved) {
@@ -108,7 +122,7 @@ elseif (array_key_exists($request_uri, $viewRoutes)) {
                 }
             } else {
                 if (!$activated) {
-                    header('Location: /activate');
+                    header('Location: ' . ($isPasswordResetFlow ? '/reset-password' : '/activate'));
                     exit;
                 }
                 if (!$approved) {
