@@ -46,7 +46,15 @@ class DeviceChangeRequest {
         
         // Notify approvers (don't fail if notification errors occur)
         try {
-            self::notifyApprovers($user);
+            // Fetch full user record with supervisor info for notification
+            $db = Database::getInstance();
+            $fullUser = $db->getRow(
+                "SELECT id, username, email, full_name, role, supervisor_id FROM users WHERE id = ?",
+                [$user['id']]
+            );
+            if ($fullUser) {
+                self::notifyApprovers($fullUser);
+            }
         } catch (Exception $e) {
             error_log("Device request notification error: " . $e->getMessage());
         }
