@@ -86,6 +86,12 @@
                     <textarea id="reason" name="reason" required placeholder="Please provide a reason for your leave request..."></textarea>
                 </div>
 
+                <div class="form-group">
+                    <label for="attachment">Supporting Document <span id="attachment-hint" style="font-weight: normal; color: var(--text-muted, #6b7280);">(optional)</span></label>
+                    <input type="file" id="attachment" accept=".pdf,.jpg,.jpeg,.png,application/pdf,image/jpeg,image/png">
+                    <small style="color: var(--text-muted, #6b7280);">PDF, JPG or PNG, up to 5 MB (e.g. medical certificate).</small>
+                </div>
+
                     <div class="card-footer" style="justify-content: flex-end;">
                         <a href="/dashboard" class="btn btn-secondary">Cancel</a>
                         <button type="submit" class="btn btn-primary">Submit Request</button>
@@ -99,6 +105,7 @@
 
     <script src="/js/app.js"></script>
     <script>
+        const docRequired = {};
         // Check authentication
         (async () => {
             const user = await checkAuth();
@@ -112,6 +119,7 @@
 
             const typesResult = await LeaveRequestManager.getLeaveTypes();
             if (typesResult.success) {
+                typesResult.data.forEach((type) => { docRequired[type.id] = Number(type.requires_documentation) === 1; });
                 const select = document.getElementById('leave-type');
                 sortLeaveTypes(typesResult.data).forEach((type) => {
                     const option = document.createElement('option');
@@ -167,6 +175,11 @@
             }
         }
 
+        document.getElementById('leave-type').addEventListener('change', (e) => {
+            document.getElementById('attachment-hint').textContent = docRequired[e.target.value]
+                ? '(recommended for this leave type)' : '(optional)';
+        });
+
         // Submit form
         document.getElementById('leave-form').addEventListener('submit', async (e) => {
             e.preventDefault();
@@ -176,6 +189,13 @@
             const endDate = document.getElementById('end-date').value;
             const reason = document.getElementById('reason').value;
 
+            const attachment = document.getElementById('attachment').files[0];
+            const fileProblem = validateAttachmentFile(attachment);
+            if (fileProblem) {
+                UIManager.showAlert(fileProblem, 'danger');
+                return;
+            }
+
             const submitButton = document.querySelector('#leave-form button[type="submit"]');
             submitButton.disabled = true;
             submitButton.textContent = 'Submitting...';
@@ -183,10 +203,19 @@
             const result = await LeaveRequestManager.createRequest(leaveTypeId, startDate, endDate, reason);
 
             if (result.success) {
-                UIManager.showAlert('Leave request submitted successfully!', 'success');
+                let message = 'Leave request submitted successfully!';
+                let type = 'success';
+                if (attachment) {
+                    const upload = await LeaveRequestManager.uploadAttachment(attachment, result.id);
+                    if (!upload.success) {
+                        message += ' However, the document could not be attached (' + (upload.message || 'upload failed') + '). You can add it from My Requests.';
+                        type = 'warning';
+                    }
+                }
+                UIManager.showAlert(message, type);
                 setTimeout(() => {
                     window.location.href = '/my-requests';
-                }, 1500);
+                }, type === 'warning' ? 3500 : 1500);
             } else {
                 UIManager.showAlert(result.message || 'Failed to submit request', 'danger');
             }

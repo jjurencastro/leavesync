@@ -192,9 +192,11 @@
             });
         }
 
-        function viewLeaveRequest(id) {
-            const req = allLeaveRequests.find(r => Number(r.id) === Number(id));
-            if (!req) return;
+        async function viewLeaveRequest(id) {
+            const listed = allLeaveRequests.find(r => Number(r.id) === Number(id));
+            if (!listed) return;
+            const detail = await LeaveRequestManager.getRequest(id);
+            const req = detail.success ? { ...listed, ...detail.data } : listed;
 
             const content = `
                 <table class="table" style="width: 100%;">
@@ -208,6 +210,7 @@
                     <tr><th>Status</th><td>${UIManager.getApprovalStageBadges(req)}</td></tr>
                     ${req.manager_comments ? `<tr><th>Supervisor Comments</th><td>${escapeAttr(req.manager_comments)}</td></tr>` : ''}
                     ${req.hr_comments ? `<tr><th>HR Comments</th><td>${escapeAttr(req.hr_comments)}</td></tr>` : ''}
+                    ${renderAttachmentRow(req)}
                 </table>
             `;
             UIManager.showModal(content, 'Leave Request Details');

@@ -239,6 +239,7 @@
                     <tr><th>Status</th><td>${UIManager.getApprovalStageBadges(req)}</td></tr>
                     ${req.manager_comments ? `<tr><th>Supervisor Comments</th><td>${escapeAttr(req.manager_comments)}</td></tr>` : ''}
                     ${req.hr_comments ? `<tr><th>HR Comments</th><td>${escapeAttr(req.hr_comments)}</td></tr>` : ''}
+                    ${renderAttachmentRow(req)}
                 </table>
             `;
             UIManager.showModal(content, 'Leave Request Details');

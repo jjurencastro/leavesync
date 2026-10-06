@@ -2316,3 +2316,10 @@ label {
         grid-template-columns: repeat(2, minmax(0, 1fr));
     }
 }
+
+/* Leave request attachments */
+.attachment-item { display: flex; align-items: center; gap: .5rem; flex-wrap: wrap; margin-bottom: .3rem; }
+.attachment-item a { word-break: break-all; }
+.attachment-size { color: var(--text-muted, #6b7280); font-size: .8rem; }
+.attachment-add { display: flex; align-items: center; gap: .5rem; flex-wrap: wrap; margin-top: .4rem; }
+.attachment-add input[type="file"] { max-width: 100%; flex: 1; min-width: 0; }

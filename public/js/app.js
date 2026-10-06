@@ -219,6 +219,26 @@ class LeaveRequestManager {
         });
     }
 
+    static async uploadAttachment(file, requestId) {
+        const form = new FormData();
+        form.append('file', file);
+        form.append('leave_request_id', requestId);
+        try {
+            const response = await fetch(`${API_BASE}/leave_requests.php?action=upload_attachment`, {
+                method: 'POST',
+                body: form,
+                credentials: 'same-origin'
+            });
+            return await response.json();
+        } catch (error) {
+            return { success: false, message: 'Upload failed. Please try again.' };
+        }
+    }
+
+    static async deleteAttachment(id) {
+        return APIClient.post(`leave_requests.php?action=delete_attachment&id=${id}`, {});
+    }
+
     static async listRequests(status = 'all', search = '') {
         return APIClient.get(`leave_requests.php?action=list_filtered&status=${encodeURIComponent(status)}&search=${encodeURIComponent(search)}`);
     }
@@ -851,3 +871,75 @@ function initResponsiveShell() {
 }
 
 document.addEventListener('DOMContentLoaded', initResponsiveShell);
+
+
+// Supporting documents (medical certificates etc.)
+const ATTACHMENT_MAX_BYTES = 5 * 1024 * 1024;
+const ATTACHMENT_TYPES = ['application/pdf', 'image/jpeg', 'image/png'];
+
+function validateAttachmentFile(file) {
+    if (!file) return null;
+    if (!ATTACHMENT_TYPES.includes(file.type)) return 'Only PDF, JPG, and PNG files are allowed';
+    if (file.size <= 0 || file.size > ATTACHMENT_MAX_BYTES) return 'File must be up to 5 MB';
+    return null;
+}
+
+function attachmentEscape(value) {
+    const div = document.createElement('div');
+    div.textContent = value == null ? '' : String(value);
+    return div.innerHTML;
+}
+
+function formatFileSize(bytes) {
+    const size = Number(bytes) || 0;
+    return size >= 1048576 ? (size / 1048576).toFixed(1) + ' MB' : Math.max(1, Math.round(size / 1024)) + ' KB';
+}
+
+// Returns a table row listing a request's documents. With owner=true the
+// row also offers remove/add controls (removal only while pending).
+function renderAttachmentRow(req, owner = false) {
+    const list = req.attachments || [];
+    const items = list.map((a) => `
+        <div class="attachment-item">
+            <a href="${API_BASE}/leave_requests.php?action=download_attachment&id=${Number(a.id)}">${attachmentEscape(a.original_name)}</a>
+            <span class="attachment-size">${formatFileSize(a.file_size)}</span>
+            ${owner && req.status === 'pending' ? `<button type="button" class="btn btn-small btn-danger" onclick="removeLeaveAttachment(${Number(a.id)}, ${Number(req.id)})">Remove</button>` : ''}
+        </div>`).join('');
+    let empty = '';
+    if (!list.length) {
+        empty = Number(req.requires_documentation) === 1
+            ? '<span class="badge badge-pending">No document attached</span>'
+            : '<span style="color:var(--text-muted,#6b7280)">None</span>';
+    }
+    const canAdd = owner && !['cancelled', 'rejected'].includes(req.status);
+    const add = canAdd ? `
+        <div class="attachment-add">
+            <input type="file" id="attachment-input-${Number(req.id)}" accept=".pdf,.jpg,.jpeg,.png,application/pdf,image/jpeg,image/png">
+            <button type="button" class="btn btn-small btn-primary" onclick="addLeaveAttachment(${Number(req.id)})">Upload</button>
+        </div>` : '';
+    return `<tr><th>Documents</th><td>${items}${empty}${add}</td></tr>`;
+}
+
+async function addLeaveAttachment(requestId) {
+    const input = document.getElementById('attachment-input-' + requestId);
+    const file = input && input.files[0];
+    if (!file) { UIManager.showAlert('Choose a file first', 'warning'); return; }
+    const problem = validateAttachmentFile(file);
+    if (problem) { UIManager.showAlert(problem, 'danger'); return; }
+    const result = await LeaveRequestManager.uploadAttachment(file, requestId);
+    UIManager.showAlert(result.message || (result.success ? 'Document attached' : 'Upload failed'), result.success ? 'success' : 'danger');
+    if (result.success && typeof viewRequest === 'function') {
+        document.querySelectorAll('.modal-overlay, .modal').forEach((el) => el.remove());
+        viewRequest(requestId);
+    }
+}
+
+async function removeLeaveAttachment(attachmentId, requestId) {
+    if (!confirm('Remove this document?')) return;
+    const result = await LeaveRequestManager.deleteAttachment(attachmentId);
+    UIManager.showAlert(result.message || (result.success ? 'Document removed' : 'Failed to remove'), result.success ? 'success' : 'danger');
+    if (result.success && typeof viewRequest === 'function') {
+        document.querySelectorAll('.modal-overlay, .modal').forEach((el) => el.remove());
+        viewRequest(requestId);
+    }
+}
