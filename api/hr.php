@@ -319,11 +319,10 @@ function resolveDirectReportDeviceRequest($id, $status, $user, $webauthnResponse
 
     if (!$id) throw new Exception('Request ID required');
 
-    // Confirm this pending request actually belongs to one of this HR user's direct reports
+    // Confirm this pending request is assigned to this HR user (including backup-approver fallbacks)
     $request = $db->getRow(
         "SELECT dcr.id FROM device_change_requests dcr
-         JOIN users u ON dcr.user_id = u.id
-         WHERE dcr.id = ? AND dcr.status = 'pending' AND u.supervisor_id = ?",
+         WHERE dcr.id = ? AND dcr.status = 'pending' AND dcr.assigned_approver_id = ?",
         [$id, $user['id']]
     );
     if (!$request) throw new Exception('Pending device request not found');

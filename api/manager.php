@@ -331,12 +331,13 @@ function resolveSupervisorDeviceRequest($id, $status, $user, $webauthnResponse =
 
     if (!$id) throw new Exception('Request ID required');
 
-    // Confirm this pending request actually belongs to one of this manager's direct reports
+    // Confirm this pending request is assigned to this manager (or is a direct report's unassigned request)
     $request = $db->getRow(
         "SELECT dcr.id FROM device_change_requests dcr
          JOIN users u ON dcr.user_id = u.id
-         WHERE dcr.id = ? AND dcr.status = 'pending' AND u.supervisor_id = ? AND u.role = 'employee'",
-        [$id, $user['id']]
+         WHERE dcr.id = ? AND dcr.status = 'pending' AND u.role = 'employee'
+           AND (dcr.assigned_approver_id = ? OR (u.supervisor_id = ? AND dcr.assigned_approver_id IS NULL))",
+        [$id, $user['id'], $user['id']]
     );
     if (!$request) throw new Exception('Pending device request not found');
 
