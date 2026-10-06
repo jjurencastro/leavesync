@@ -156,6 +156,8 @@
         }
 
         initAdmin();
+    
+        document.addEventListener('leavesync:notifications', () => loadPendingDeviceRequests());
     </script>
 </body>
 </html>

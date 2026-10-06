@@ -729,11 +729,22 @@ function initNotificationBell(role) {
         `).join('');
     };
 
+    let seenUnreadIds = null;
     const refresh = async () => {
         const result = await AuthManager.getNotifications();
         window.__unreadDeviceNotifs = Number(result?.summary?.unread_device_requests || 0);
         applyDeviceRequestBadge();
         render(result);
+
+        const unreadItems = result && result.success && Array.isArray(result.data)
+            ? result.data.filter(n => n.read_state === 'unread') : [];
+        const fresh = seenUnreadIds ? unreadItems.filter(n => !seenUnreadIds.has(String(n.id))) : [];
+        seenUnreadIds = new Set(unreadItems.map(n => String(n.id)));
+        if (fresh.length) {
+            UIManager.showAlert(fresh.length === 1 ? `${fresh[0].title}: ${fresh[0].message}` : `${fresh.length} new notifications`, 'info');
+            document.dispatchEvent(new CustomEvent('leavesync:notifications', { detail: fresh }));
+            if (typeof initApprovalBadge.refreshNow === 'function') initApprovalBadge.refreshNow();
+        }
     };
     window.refreshNotificationBell = refresh;
 
@@ -819,7 +830,8 @@ function initNotificationBell(role) {
     wrapper.querySelector('#notification-view-all').addEventListener('click', openAllModal);
 
     refresh();
-    setInterval(refresh, 60000);
+    setInterval(() => { if (!document.hidden) refresh(); }, 10000);
+    document.addEventListener('visibilitychange', () => { if (!document.hidden) refresh(); });
 }
 
 // ---------------------------------------------------------------------------
@@ -1100,6 +1112,7 @@ async function initApprovalBadge(user) {
         }
     };
     refresh();
+    initApprovalBadge.refreshNow = refresh;
     setInterval(refresh, 120000);
 }
 
