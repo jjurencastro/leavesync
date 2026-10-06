@@ -170,6 +170,14 @@ class AuthManager {
         return APIClient.get('auth.php?action=notifications');
     }
 
+    static async getAllNotifications() {
+        return APIClient.get('auth.php?action=notifications&all=1');
+    }
+
+    static async markAllNotificationsRead() {
+        return APIClient.post('auth.php?action=mark_all_notifications_read', {});
+    }
+
     static async markNotificationRead(id) {
         return APIClient.post('auth.php?action=mark_notification_read', { id: id });
     }
@@ -520,6 +528,7 @@ function createUserAvatar(user) {
 
 // Wire up the top-right user menu (avatar, full name + Settings/Logout dropdown) shared by every authenticated page
 function initUserMenu(user) {
+    initNotificationBell();
     const nameEl = document.getElementById('user-fullname');
     if (nameEl) {
         nameEl.textContent = user.full_name || user.username;
@@ -587,3 +596,197 @@ async function logout() {
         window.location.href = '/login';
     }
 }
+
+
+// ---------------------------------------------------------------------------
+// Notification bell (top header, before the profile menu)
+// ---------------------------------------------------------------------------
+function escapeNotificationText(value) {
+    return String(value === null || value === undefined ? '' : value)
+        .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;').replace(/'/g, '&#39;');
+}
+
+function initNotificationBell() {
+    const topbar = document.querySelector('.topbar');
+    if (!topbar || document.getElementById('notification-bell')) return;
+
+    const wrapper = document.createElement('div');
+    wrapper.className = 'notification-menu';
+    wrapper.innerHTML = `
+        <button type="button" class="notification-bell" id="notification-bell" aria-label="Notifications" aria-haspopup="true">
+            <svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                <path d="M18 8a6 6 0 0 0-12 0c0 7-3 9-3 9h18s-3-2-3-9"></path>
+                <path d="M13.7 21a2 2 0 0 1-3.4 0"></path>
+            </svg>
+            <span class="notification-badge" id="notification-badge" hidden>0</span>
+        </button>
+        <div class="notification-dropdown" id="notification-dropdown">
+            <div class="notification-dropdown-header">
+                <strong>Notifications</strong>
+                <button type="button" class="notification-link-button" id="notification-mark-all">Mark all as read</button>
+            </div>
+            <div class="notification-dropdown-list" id="notification-dropdown-list"></div>
+            <a class="notification-dropdown-footer" href="/notifications">View all</a>
+        </div>
+    `;
+
+    const userMenu = topbar.querySelector('.user-menu');
+    topbar.insertBefore(wrapper, userMenu);
+
+    const bell = wrapper.querySelector('#notification-bell');
+    const dropdown = wrapper.querySelector('#notification-dropdown');
+    const list = wrapper.querySelector('#notification-dropdown-list');
+
+    const render = (result) => {
+        const badge = document.getElementById('notification-badge');
+        const unread = result && result.success ? Number(result.summary?.unread || 0) : 0;
+        badge.textContent = unread > 99 ? '99+' : String(unread);
+        badge.hidden = unread === 0;
+        wrapper.querySelector('#notification-mark-all').disabled = unread === 0;
+
+        const items = result && result.success && Array.isArray(result.data) ? result.data.slice(0, 8) : [];
+        if (!items.length) {
+            list.innerHTML = '<p class="notification-empty">No notifications yet.</p>';
+            return;
+        }
+        list.innerHTML = items.map(n => `
+            <button type="button" class="notification-entry ${n.read_state === 'unread' ? 'unread' : ''}" data-id="${Number(n.id)}" data-unread="${n.read_state === 'unread' ? '1' : '0'}">
+                <span class="notification-entry-title">${escapeNotificationText(n.title || 'Notification')}</span>
+                <span class="notification-entry-message">${escapeNotificationText(n.message || '')}</span>
+                <span class="notification-entry-time">${escapeNotificationText(UIManager.formatDate(n.created_at))}</span>
+            </button>
+        `).join('');
+    };
+
+    const refresh = async () => render(await AuthManager.getNotifications());
+    window.refreshNotificationBell = refresh;
+
+    bell.addEventListener('click', (e) => {
+        e.stopPropagation();
+        document.getElementById('user-menu-dropdown')?.classList.remove('open');
+        dropdown.classList.toggle('open');
+        if (dropdown.classList.contains('open')) refresh();
+    });
+    dropdown.addEventListener('click', (e) => e.stopPropagation());
+    document.addEventListener('click', () => dropdown.classList.remove('open'));
+
+    list.addEventListener('click', async (e) => {
+        const entry = e.target.closest('.notification-entry');
+        if (!entry || entry.dataset.unread !== '1') return;
+        await AuthManager.markNotificationRead(entry.dataset.id);
+        refresh();
+    });
+
+    wrapper.querySelector('#notification-mark-all').addEventListener('click', async () => {
+        const result = await AuthManager.markAllNotificationsRead();
+        if (result.success) {
+            await refresh();
+            if (typeof window.onNotificationsChanged === 'function') window.onNotificationsChanged();
+        }
+    });
+
+    refresh();
+    setInterval(refresh, 60000);
+}
+
+// ---------------------------------------------------------------------------
+// Responsive shell: device classes, mobile drawer / iPhone tab bar, table cards
+// ---------------------------------------------------------------------------
+function detectDeviceClasses() {
+    const ua = navigator.userAgent || '';
+    const touchMac = /Macintosh/.test(ua) && navigator.maxTouchPoints > 1;
+    const isIPhone = /iPhone|iPod/.test(ua);
+    const isIPad = /iPad/.test(ua) || touchMac;
+    const isAndroid = /Android/.test(ua);
+    const isAndroidTablet = isAndroid && !/Mobile/.test(ua);
+
+    const classes = [];
+    if (isIPhone) classes.push('device-iphone');
+    if (isIPad) classes.push('device-tablet', 'device-ipad');
+    if (isAndroid) classes.push('device-android');
+    if (isAndroidTablet) classes.push('device-tablet');
+    if (!isIPhone && !isIPad && !isAndroid) classes.push('device-desktop');
+    return classes;
+}
+
+function labelResponsiveTables() {
+    document.querySelectorAll('table.table').forEach(table => {
+        const headers = Array.from(table.querySelectorAll('thead th')).map(th => th.textContent.trim());
+        if (!headers.length) return;
+        table.querySelectorAll('tbody tr').forEach(row => {
+            Array.from(row.children).forEach((cell, index) => {
+                if (cell.tagName !== 'TD') return;
+                if (cell.colSpan > 1) {
+                    cell.classList.add('td-full');
+                } else if (!cell.hasAttribute('data-label') && headers[index]) {
+                    cell.setAttribute('data-label', headers[index]);
+                }
+            });
+        });
+    });
+}
+
+function buildMobileNavigation() {
+    const sidebar = document.querySelector('.sidebar');
+    const topbar = document.querySelector('.topbar');
+    if (!sidebar || !topbar || document.getElementById('mobile-nav-toggle')) return;
+
+    const toggle = document.createElement('button');
+    toggle.type = 'button';
+    toggle.id = 'mobile-nav-toggle';
+    toggle.className = 'mobile-nav-toggle';
+    toggle.setAttribute('aria-label', 'Open menu');
+    toggle.innerHTML = '<svg viewBox="0 0 24 24" width="24" height="24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M3 6h18M3 12h18M3 18h18"></path></svg>';
+    topbar.insertBefore(toggle, topbar.firstChild);
+
+    const backdrop = document.createElement('div');
+    backdrop.className = 'sidebar-backdrop';
+    document.body.appendChild(backdrop);
+
+    const setOpen = (open) => {
+        document.body.classList.toggle('nav-open', open);
+        toggle.setAttribute('aria-expanded', open ? 'true' : 'false');
+    };
+    toggle.addEventListener('click', () => setOpen(!document.body.classList.contains('nav-open')));
+    backdrop.addEventListener('click', () => setOpen(false));
+    sidebar.addEventListener('click', (e) => {
+        if (e.target.closest('a[href]')) setOpen(false);
+    });
+
+    // iPhone gets an iOS-style bottom tab bar built from the sidebar links
+    const tabBar = document.createElement('nav');
+    tabBar.className = 'iphone-tabbar';
+    tabBar.setAttribute('aria-label', 'Primary');
+    document.body.appendChild(tabBar);
+
+    const buildTabs = () => {
+        const here = window.location.pathname.replace(/\/+$/, '') || '/';
+        tabBar.innerHTML = Array.from(sidebar.querySelectorAll('a[href]'))
+            .filter(a => a.getAttribute('href').startsWith('/') && !a.classList.contains('sidebar-brand'))
+            .map(a => {
+                const href = a.getAttribute('href');
+                const active = href === here ? ' active' : '';
+                return `<a href="${escapeNotificationText(href)}" class="iphone-tab${active}">${escapeNotificationText(a.textContent.trim())}</a>`;
+            }).join('');
+    };
+    buildTabs();
+    new MutationObserver(buildTabs).observe(sidebar, { childList: true, subtree: true });
+}
+
+function initResponsiveShell() {
+    detectDeviceClasses().forEach(cls => document.documentElement.classList.add(cls));
+    buildMobileNavigation();
+    labelResponsiveTables();
+
+    let pending = null;
+    new MutationObserver(() => {
+        if (pending) return;
+        pending = requestAnimationFrame(() => {
+            pending = null;
+            labelResponsiveTables();
+        });
+    }).observe(document.body, { childList: true, subtree: true });
+}
+
+document.addEventListener('DOMContentLoaded', initResponsiveShell);

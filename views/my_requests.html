@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
     <title>My Leave Requests - LeaveSync</title>
     <link rel="stylesheet" href="/css/style.css">
 </head>
@@ -44,7 +44,7 @@
 
         <div class="card">
             <div class="card-body">
-                <div style="display: flex; gap: 1rem; margin-bottom: 1.5rem; flex-wrap: wrap;">
+                <div class="filter-bar" id="request-filter-bar">
                     <button class="btn btn-secondary" onclick="filterRequests('all')">All</button>
                     <button class="btn btn-secondary" onclick="filterRequests('pending')">Pending</button>
                     <button class="btn btn-secondary" onclick="filterRequests('approved')">Approved</button>
@@ -108,7 +108,7 @@
             initUserMenu(currentUser);
             initSidebarMenu();
             applyManagerSidebarLinks(currentUser?.role);
-            loadRequests();
+            filterRequests('all');
         })();
 
         // Load requests
@@ -170,6 +170,9 @@
 
         function filterRequests(status) {
             currentFilter = status;
+            document.querySelectorAll('#request-filter-bar .btn').forEach(btn => {
+                btn.classList.toggle('active', btn.getAttribute('onclick') === `filterRequests('${status}')`);
+            });
             loadRequests();
         }
 

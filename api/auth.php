@@ -253,15 +253,23 @@ try {
 
             $user = Auth::getCurrentUser();
             $db = Database::getInstance();
+            $limit = !empty($_GET['all']) ? 200 : 20;
             $rows = $db->getResults(
-                "SELECT * FROM notifications WHERE user_id = ? ORDER BY created_at DESC LIMIT 20",
+                "SELECT * FROM notifications WHERE user_id = ? ORDER BY created_at DESC LIMIT " . $limit,
                 [$user['id']]
             );
+            $unreadRow = $db->getRow(
+                "SELECT COUNT(*) AS unread FROM notifications WHERE user_id = ? AND is_read = 0",
+                [$user['id']]
+            );
+
+            $summary = EmployeeNotifications::summarize($rows);
+            $summary['unread'] = (int) ($unreadRow['unread'] ?? $summary['unread']);
 
             echo json_encode([
                 'success' => true,
                 'data' => array_map([EmployeeNotifications::class, 'formatNotification'], $rows),
-                'summary' => EmployeeNotifications::summarize($rows),
+                'summary' => $summary,
             ]);
             break;
 
@@ -283,6 +291,22 @@ try {
             );
 
             echo json_encode(['success' => true, 'message' => 'Notification marked as read']);
+            break;
+
+        case 'mark_all_notifications_read':
+            if (!Auth::isAuthenticated()) {
+                http_response_code(401);
+                throw new Exception('Unauthorized');
+            }
+
+            $user = Auth::getCurrentUser();
+            $db = Database::getInstance();
+            $db->execute(
+                "UPDATE notifications SET is_read = 1, read_at = NOW() WHERE user_id = ? AND is_read = 0",
+                [$user['id']]
+            );
+
+            echo json_encode(['success' => true, 'message' => 'All notifications marked as read']);
             break;
 
         case 'mfa_status':
