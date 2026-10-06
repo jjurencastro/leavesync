@@ -94,6 +94,7 @@ elseif (array_key_exists($request_uri, $viewRoutes)) {
             $approved = !empty($currentUser['is_active']);
             
             // Check if user is in password reset flow
+            $db = Database::getInstance();
             $isPasswordResetFlow = (bool) $db->getRow(
                 "SELECT id FROM audit_log WHERE user_id = ? AND action = 'password_reset_requested' LIMIT 1",
                 [$currentUser['id']]
