@@ -43,6 +43,9 @@ class DeviceChangeRequest {
         );
 
         AuditLogger::log($user['id'], 'device_change_requested', 'user', $user['id']);
+        
+        // Notify approvers
+        self::notifyApprovers($user);
     }
 
     /**
@@ -179,7 +182,75 @@ class DeviceChangeRequest {
         );
 
         AuditLogger::log($resolverUser['id'], "device_request_{$status}", 'device_change_request', $id);
+        
+        // Notify the user
+        self::notifyUser($request['user_id'], $status);
 
         return ['success' => true, 'message' => "Device request {$status}"];
+    }
+
+    /**
+     * Create a notification for the user and notify approvers
+     */
+    private static function notifyApprovers($user) {
+        $db = Database::getInstance();
+        
+        // Find who needs to approve
+        if ($user['role'] === 'admin' || $user['role'] === 'hr' || empty($user['supervisor_id'])) {
+            // Admin users and users with no supervisor need System Admin approval
+            $approvers = $db->getResults(
+                "SELECT id, email, full_name FROM users WHERE role = 'admin' AND is_active = 1"
+            );
+        } elseif ($user['role'] === 'manager') {
+            // Managers need Admin approval
+            $approvers = $db->getResults(
+                "SELECT id, email, full_name FROM users WHERE role = 'admin' AND is_active = 1"
+            );
+        } else {
+            // Employees: notify their supervisor first
+            $approvers = $db->getResults(
+                "SELECT id, email, full_name FROM users WHERE id = ? AND is_active = 1",
+                [$user['supervisor_id']]
+            );
+        }
+
+        // Create notifications
+        foreach ($approvers as $approver) {
+            self::createNotification(
+                $approver['id'],
+                'New Device Change Request',
+                "{$user['full_name']} is requesting approval to use a new device",
+                'device_change'
+            );
+        }
+    }
+
+    /**
+     * Notify the user their device request was approved/rejected
+     */
+    private static function notifyUser($user_id, $status) {
+        $db = Database::getInstance();
+        $user = $db->getRow("SELECT full_name FROM users WHERE id = ?", [$user_id]);
+        
+        if (!$user) return;
+
+        $title = $status === 'approved' ? 'Device Approved' : 'Device Request Rejected';
+        $message = $status === 'approved'
+            ? 'Your device change request has been approved. You will need to log in again.'
+            : 'Your device change request has been rejected.';
+
+        self::createNotification($user_id, $title, $message, 'device_change');
+    }
+
+    /**
+     * Create a notification in the database
+     */
+    private static function createNotification($user_id, $title, $message, $type) {
+        $db = Database::getInstance();
+        $db->execute(
+            "INSERT INTO notifications (user_id, title, message, notification_type, related_entity_type) 
+             VALUES (?, ?, ?, ?, ?)",
+            [$user_id, $title, $message, 'info', $type]
+        );
     }
 }
