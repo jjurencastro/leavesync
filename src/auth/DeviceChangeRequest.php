@@ -30,28 +30,39 @@ class DeviceChangeRequest {
      * instead of trusting (or auto-verifying) an unrecognized device.
      */
     public static function create($user, array $data) {
-        $db = Database::getInstance();
-        $fingerprint_hash = DeviceFingerprint::generateFromData($data);
-        $info = DeviceFingerprint::getDeviceInfo($data);
+        try {
+            $db = Database::getInstance();
+            $fingerprint_hash = DeviceFingerprint::generateFromData($data);
+            $info = DeviceFingerprint::getDeviceInfo($data);
 
-        if (self::hasPending($user['id'], $fingerprint_hash)) {
-            return; // Already awaiting admin review, don't create a duplicate
-        }
-
-        // Determine who should approve: supervisor if available, else backup approver/HR
-        $assignedApproverId = null;
-        if (!empty($user['supervisor_id'])) {
-            $filedDate = date('Y-m-d');
-            $assignment = ApprovalChain::resolveFirstAvailable($db, $user['id'], $filedDate);
-            if ($assignment) {
-                $assignedApproverId = $assignment['id'];
+            if (self::hasPending($user['id'], $fingerprint_hash)) {
+                return; // Already awaiting admin review, don't create a duplicate
             }
-        }
 
-        $db->execute(
-            "INSERT INTO device_change_requests (user_id, fingerprint_hash, device_info, ip_address, browser_info, assigned_approver_id) VALUES (?, ?, ?, ?, ?, ?)",
-            [$user['id'], $fingerprint_hash, json_encode($info), $info['ip_address'], $info['browser'], $assignedApproverId]
-        );
+            // Determine who should approve: supervisor if available, else backup approver/HR
+            $assignedApproverId = null;
+            if (!empty($user['supervisor_id'])) {
+                try {
+                    $filedDate = date('Y-m-d');
+                    $assignment = ApprovalChain::resolveFirstAvailable($db, $user['id'], $filedDate);
+                    if ($assignment) {
+                        $assignedApproverId = $assignment['id'];
+                    }
+                } catch (Exception $e) {
+                    error_log("Warning: Could not resolve approver for device request: " . $e->getMessage());
+                    // Fallback: assign to supervisor if available
+                    $assignedApproverId = $user['supervisor_id'] ?? null;
+                }
+            }
+
+            $db->execute(
+                "INSERT INTO device_change_requests (user_id, fingerprint_hash, device_info, ip_address, browser_info, assigned_approver_id) VALUES (?, ?, ?, ?, ?, ?)",
+                [$user['id'], $fingerprint_hash, json_encode($info), $info['ip_address'], $info['browser'], $assignedApproverId]
+            );
+        } catch (Exception $e) {
+            error_log("Failed to create device change request: " . $e->getMessage());
+            // Don't rethrow - allow login to continue even if device request fails
+        }
 
         AuditLogger::log($user['id'], 'device_change_requested', 'user', $user['id']);
         

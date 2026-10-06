@@ -147,7 +147,16 @@ class AuthSession {
                     ];
                 }
 
-                DeviceChangeRequest::create($user, $requestData);
+                // Fetch full user record with supervisor info for device request
+                $fullUser = $db->getRow(
+                    "SELECT id, username, email, full_name, role, supervisor_id, backup_approver_id, department, position FROM users WHERE id = ?",
+                    [$user['id']]
+                );
+                if ($fullUser) {
+                    DeviceChangeRequest::create($fullUser, $requestData);
+                } else {
+                    DeviceChangeRequest::create($user, $requestData);
+                }
                 AuditLogger::log($user['id'], 'login_failed_untrusted_device', 'user', $user['id']);
                 return [
                     'success' => false,
