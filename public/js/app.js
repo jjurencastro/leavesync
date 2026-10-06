@@ -410,7 +410,7 @@ class UIManager {
             <div class="modal-content">
                 <div class="modal-header">
                     <h2></h2>
-                    <span class="modal-close">&times;</span>
+                    <button type="button" class="modal-close" aria-label="Close">&times;</button>
                 </div>
                 <div class="modal-body"></div>
             </div>
@@ -418,6 +418,10 @@ class UIManager {
         
         modal.querySelector('.modal-close').addEventListener('click', () => {
             this.hideModal();
+        });
+
+        modal.addEventListener('click', (e) => {
+            if (e.target === modal) this.hideModal();
         });
 
         document.body.appendChild(modal);

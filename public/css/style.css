@@ -1459,3 +1459,529 @@ textarea {
     text-align: right;
     margin-bottom: 0.5rem;
 }
+
+/* ==========================================================================
+   Action buttons (View / Edit / Cancel ...) and popups
+   ========================================================================== */
+.table td .btn-small,
+.card-footer .btn-small {
+    padding: 0.4rem 0.85rem;
+    border-radius: 999px;
+    font-size: 0.82rem;
+    font-weight: 600;
+    border: 1px solid transparent;
+    transition: background-color 0.15s, color 0.15s, border-color 0.15s;
+}
+
+.table td .btn-small.btn-secondary {
+    background: #eef2f7;
+    color: var(--text-color);
+    border-color: var(--border-color);
+}
+
+.table td .btn-small.btn-secondary:hover {
+    background: #e1e8f0;
+}
+
+.table td .btn-small.btn-primary {
+    background: rgba(29, 95, 209, 0.1);
+    color: var(--primary-color);
+}
+
+.table td .btn-small.btn-warning {
+    background: rgba(194, 65, 12, 0.1);
+    color: var(--warning-color);
+}
+
+.table td .btn-small.btn-danger {
+    background: rgba(180, 35, 24, 0.1);
+    color: var(--danger-color);
+}
+
+.table td .btn-small.btn-success {
+    background: rgba(21, 128, 61, 0.12);
+    color: var(--success-color);
+}
+
+.table td .btn-small.btn-primary:hover,
+.table td .btn-small.btn-warning:hover,
+.table td .btn-small.btn-danger:hover,
+.table td .btn-small.btn-success:hover {
+    box-shadow: none;
+    transform: none;
+    filter: brightness(0.93);
+}
+
+.modal {
+    -webkit-backdrop-filter: blur(2px);
+    backdrop-filter: blur(2px);
+}
+
+.modal-content {
+    border-radius: 1rem;
+    padding: 0;
+    max-width: 560px;
+}
+
+.modal-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 1rem;
+    margin: 0;
+    padding: 1.1rem 1.5rem;
+}
+
+.modal-header h2 {
+    font-size: 1.15rem;
+}
+
+.modal-close {
+    float: none;
+    flex: 0 0 auto;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 2.25rem;
+    height: 2.25rem;
+    border: none;
+    border-radius: 50%;
+    background: var(--light-bg);
+    font-size: 1.4rem;
+    line-height: 1;
+    color: var(--text-light);
+    cursor: pointer;
+}
+
+.modal-close:hover {
+    background: var(--border-color);
+    color: var(--text-color);
+}
+
+.modal-body {
+    padding: 1.25rem 1.5rem 1.5rem;
+    padding-right: 1.5rem;
+}
+
+.modal-body label {
+    display: block;
+    margin-bottom: 0.4rem;
+    font-weight: 600;
+    font-size: 0.9rem;
+}
+
+.modal-body .flex-between {
+    gap: 0.75rem;
+    flex-wrap: wrap;
+}
+
+.modal-body .flex-between > .btn {
+    flex: 1 1 8rem;
+}
+
+/* Key/value detail tables (rows of <th> + <td>, no header row) */
+.modal-body .table:not(:has(thead)) {
+    border-collapse: collapse;
+}
+
+.modal-body .table:not(:has(thead)) tr:hover {
+    background: transparent;
+}
+
+.modal-body .table:not(:has(thead)) th {
+    width: 38%;
+    background: none;
+    border-bottom: 1px solid var(--border-color);
+    padding: 0.7rem 0.75rem 0.7rem 0;
+    font-size: 0.75rem;
+    letter-spacing: 0.03em;
+    text-transform: uppercase;
+    color: var(--text-light);
+    text-align: left;
+    vertical-align: top;
+    white-space: normal;
+}
+
+.modal-body .table:not(:has(thead)) td {
+    border-bottom: 1px solid var(--border-color);
+    padding: 0.7rem 0;
+    overflow-wrap: anywhere;
+}
+
+.modal-body .table:not(:has(thead)) tr:last-child th,
+.modal-body .table:not(:has(thead)) tr:last-child td {
+    border-bottom: none;
+}
+
+.modal-body textarea {
+    width: 100%;
+}
+
+/* Tablet: roomy centred dialog */
+.device-tablet .modal-content {
+    max-width: 620px;
+}
+
+@media (max-width: 767px) {
+    .modal.active {
+        align-items: flex-end;
+    }
+
+    .modal-content,
+    .notification-modal .modal-content {
+        width: 100%;
+        max-width: none;
+        max-height: 88vh;
+        border-radius: 1.25rem 1.25rem 0 0;
+        animation: sheet-up 0.25s ease-out;
+    }
+
+    .modal-body {
+        padding: 1rem 1.1rem calc(1.25rem + env(safe-area-inset-bottom));
+    }
+
+    .modal-header {
+        padding: 0.9rem 1.1rem;
+    }
+
+    .modal-body .table:not(:has(thead)),
+    .modal-body .table:not(:has(thead)) tbody {
+        display: block;
+        white-space: normal;
+    }
+
+    .modal-body .table:not(:has(thead)) tr {
+        display: block;
+        margin: 0;
+        padding: 0.6rem 0;
+        border: none;
+        border-bottom: 1px solid var(--border-color);
+        border-radius: 0;
+        box-shadow: none;
+        background: none;
+    }
+
+    .modal-body .table:not(:has(thead)) th,
+    .modal-body .table:not(:has(thead)) td {
+        display: block;
+        width: 100%;
+        padding: 0.1rem 0;
+        border: none;
+        text-align: left;
+    }
+
+    .modal-body .table:not(:has(thead)) td::before {
+        content: none;
+    }
+
+    .modal-body .flex-between > .btn {
+        flex-basis: 100%;
+    }
+
+    .modal-body .btn {
+        min-height: 46px;
+    }
+
+    .table td .btn-small {
+        min-height: 40px;
+        padding: 0.45rem 1rem;
+    }
+
+    .modal-body .table:has(thead) tr {
+        box-shadow: none;
+    }
+}
+
+/* iPhone: iOS-style sheet with grabber */
+@media (max-width: 767px) {
+    .device-iphone .modal-content {
+        position: relative;
+        padding-top: 0.6rem;
+    }
+
+    .device-iphone .modal-content::before {
+        content: "";
+        display: block;
+        width: 2.5rem;
+        height: 0.3rem;
+        margin: 0 auto 0.2rem;
+        border-radius: 999px;
+        background: #cbd5e1;
+    }
+
+    .device-iphone .modal-header {
+        border-bottom: none;
+    }
+
+    /* Android: full-height Material dialog */
+    .device-android .modal-content {
+        max-height: 94vh;
+        border-radius: 1rem 1rem 0 0;
+    }
+
+    .device-android .modal-header {
+        box-shadow: 0 1px 3px rgba(16, 42, 67, 0.15);
+        border-bottom: none;
+    }
+}
+
+@keyframes sheet-up {
+    from { transform: translateY(40px); opacity: 0; }
+    to { transform: translateY(0); opacity: 1; }
+}
+
+/* ==========================================================================
+   Global UI polish (all views)
+   ========================================================================== */
+body {
+    background: linear-gradient(180deg, #f6f8fc 0%, var(--light-bg) 100%);
+    background-attachment: fixed;
+    color: var(--text-color);
+    -webkit-font-smoothing: antialiased;
+}
+
+h1 {
+    letter-spacing: -0.01em;
+}
+
+.card {
+    transition: box-shadow 0.2s ease;
+}
+
+.card-header h2 {
+    font-weight: 700;
+}
+
+/* Inputs */
+input, textarea, select {
+    border-radius: 8px;
+    background-color: #fff;
+    transition: border-color 0.15s, box-shadow 0.15s;
+}
+
+input:hover, textarea:hover, select:hover {
+    border-color: #b6c4d6;
+}
+
+input:focus, textarea:focus, select:focus {
+    border-color: var(--primary-color);
+    box-shadow: 0 0 0 3px rgba(29, 95, 209, 0.18);
+}
+
+input[type="checkbox"],
+input[type="radio"] {
+    width: 1.1rem;
+    height: 1.1rem;
+    padding: 0;
+    flex: 0 0 auto;
+    accent-color: var(--primary-color);
+    vertical-align: middle;
+}
+
+label:has(> input[type="checkbox"]),
+label:has(> input[type="radio"]),
+.form-group:has(> input[type="checkbox"]) {
+    display: flex;
+    align-items: flex-start;
+    gap: 0.6rem;
+    font-weight: 400;
+}
+
+label {
+    font-weight: 600;
+    font-size: 0.9rem;
+}
+
+/* Buttons */
+.btn {
+    border-radius: 8px;
+}
+
+.btn:focus-visible,
+.sidebar-link:focus-visible,
+.sidebar-sublink:focus-visible,
+.notification-bell:focus-visible,
+.user-menu-toggle:focus-visible {
+    outline: 3px solid rgba(29, 95, 209, 0.45);
+    outline-offset: 2px;
+}
+
+.btn:active {
+    transform: scale(0.98);
+}
+
+/* Tables */
+.table {
+    border-radius: 10px;
+}
+
+.table th {
+    font-size: 0.78rem;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+    color: var(--text-light);
+}
+
+.table tbody tr:nth-child(even) {
+    background: rgba(243, 246, 250, 0.55);
+}
+
+.table tbody tr:hover {
+    background: rgba(29, 95, 209, 0.05);
+}
+
+/* Stat cards */
+.stat-card {
+    transition: transform 0.15s, box-shadow 0.15s;
+}
+
+.stat-card-link:hover .stat-card {
+    transform: translateY(-2px);
+    box-shadow: var(--shadow-md);
+}
+
+/* Sidebar */
+.sidebar-brand {
+    color: #fff;
+}
+
+.sidebar-link,
+.sidebar-sublink {
+    border-radius: 0 8px 8px 0;
+    margin-right: 0.5rem;
+}
+
+/* Standalone auth pages (activate, pending approval, device confirm) */
+.auth-container .card {
+    border-radius: 1rem;
+    box-shadow: var(--shadow-md);
+    padding: 2rem;
+}
+
+.auth-container .card:not(:has(.login-logos))::before {
+    content: "LeaveSync";
+    display: block;
+    margin-bottom: 1rem;
+    text-align: center;
+    font-size: 1.1rem;
+    font-weight: 800;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: var(--primary-color);
+}
+
+/* Alerts */
+.alert {
+    border-radius: 10px;
+}
+
+.badge {
+    font-weight: 600;
+}
+
+@media (prefers-reduced-motion: reduce) {
+    * {
+        animation: none !important;
+        transition: none !important;
+    }
+}
+
+/* Key/value tables (no header row, e.g. My Info) stay as plain rows on small screens */
+@media (max-width: 900px) {
+    .table:not(:has(thead)) tbody tr {
+        padding: 0;
+        margin: 0;
+        border: none;
+        border-bottom: 1px solid var(--border-color);
+        border-radius: 0;
+        box-shadow: none;
+        background: none;
+    }
+
+    .table:not(:has(thead)) th,
+    .table:not(:has(thead)) td {
+        display: block;
+        width: 100%;
+        padding: 0.35rem 0;
+        border: none;
+        text-align: left;
+    }
+
+    .table:not(:has(thead)) th {
+        padding-top: 0.7rem;
+        font-size: 0.72rem;
+    }
+
+    .table:not(:has(thead)) td {
+        padding-bottom: 0.7rem;
+    }
+
+    .table:not(:has(thead)) td::before {
+        content: none;
+    }
+}
+
+@media (max-width: 767px) {
+    .dashboard-grid {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        gap: 0.75rem;
+    }
+
+    .stat-card {
+        padding: 0.9rem;
+    }
+
+    .stat-card .stat-value {
+        font-size: 1.6rem;
+    }
+
+    .card-header {
+        display: flex;
+        flex-wrap: wrap;
+        align-items: center;
+        gap: 0.5rem;
+    }
+
+    .card-header .btn,
+    .card-header .btn-small {
+        width: auto;
+        flex: 0 0 auto;
+    }
+
+    .card-footer .btn {
+        width: 100%;
+    }
+
+    .auth-container {
+        margin-top: 1rem;
+        margin-bottom: 1rem;
+        padding-left: 0.75rem;
+        padding-right: 0.75rem;
+    }
+
+    .auth-container .card {
+        padding: 1.25rem;
+    }
+
+    .page-container > h1 {
+        margin-bottom: 0.9rem;
+    }
+
+    /* Filters: compact two-column grid for short fields */
+    .card-body > div[style*="flex-wrap"] {
+        gap: 0.6rem !important;
+    }
+}
+
+/* Tablet: stat cards in comfortable grid, 44px touch targets on inputs */
+.device-tablet input,
+.device-tablet select {
+    min-height: 44px;
+}
+
+.device-iphone input:not([type="checkbox"]):not([type="radio"]),
+.device-iphone select,
+.device-android input:not([type="checkbox"]):not([type="radio"]),
+.device-android select {
+    min-height: 44px;
+}
