@@ -299,6 +299,19 @@ try {
             $user = Auth::getCurrentUser();
             $db = Database::getInstance();
             $limit = !empty($_GET['all']) ? 200 : 20;
+
+            // "Action needed" alerts are obsolete once the request is no longer pending
+            // (approved, rejected, or cancelled), so clear them without a manual click.
+            $db->execute(
+                "UPDATE notifications n
+                 JOIN leave_requests lr ON n.related_entity_id = lr.id
+                 SET n.is_read = 1, n.read_at = NOW()
+                 WHERE n.user_id = ? AND n.is_read = 0 AND n.related_entity_type = 'leave_request'
+                   AND n.title IN ('New Leave Request', 'Leave Request Escalated')
+                   AND lr.status <> 'pending'",
+                [$user['id']]
+            );
+
             $rows = $db->getResults(
                 "SELECT * FROM notifications WHERE user_id = ? ORDER BY created_at DESC LIMIT " . $limit,
                 [$user['id']]
