@@ -91,6 +91,7 @@
 
         let allUsersData = [];
         let departmentPositionsData = { departments: [], department_positions: {} };
+        let allowedEmailDomain = '';
         const OTHER_POSITION_VALUE = '__other__';
 
         async function loadDepartmentPositions() {
@@ -98,6 +99,7 @@
                 const result = await APIClient.get('admin.php?action=department_positions');
                 if (result.success) {
                     departmentPositionsData = result.data || { departments: [], department_positions: {} };
+                    allowedEmailDomain = (departmentPositionsData.allowed_email_domain || '').toLowerCase();
                 }
             } catch (err) {
                 console.error('Failed to load department positions', err);
@@ -340,7 +342,8 @@
                 else if (existingUsernames.has(username.toLowerCase()) || seenBatchUsernames.has(username.toLowerCase())) errors.push('Duplicate username');
 
                 if (!email) errors.push('Email required');
-                else if (!email.includes('@')) errors.push('Invalid email format');
+                else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) errors.push('Invalid email format');
+                else if (allowedEmailDomain && email.slice(email.lastIndexOf('@') + 1) !== allowedEmailDomain) errors.push(`Email must be a valid @${allowedEmailDomain} address`);
                 else if (existingEmails.has(email) || seenBatchEmails.has(email)) errors.push('Duplicate email');
 
                 if (!fullName) errors.push('Full name required');

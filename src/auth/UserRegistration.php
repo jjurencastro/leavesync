@@ -470,6 +470,7 @@ class UserRegistration {
             'departments' => self::ALLOWED_DEPARTMENTS,
             'department_positions' => self::DEPARTMENT_POSITIONS,
             'position_role_map' => self::POSITION_ROLE_MAP,
+            'allowed_email_domain' => defined('ALLOWED_EMAIL_DOMAIN') ? ALLOWED_EMAIL_DOMAIN : '',
         ];
     }
 
