@@ -138,12 +138,26 @@ class UserRegistration {
                 [$deviceId, hash('sha256', $_COOKIE['auth_token']), $user_id]
             );
         }
+        // Same signal getActivationInfo uses to tell a password reset from a first activation
+        $isReset = (bool) $db->getRow(
+            "SELECT id FROM audit_log WHERE user_id = ? AND action = 'password_reset_requested' LIMIT 1",
+            [$user_id]
+        );
         $db->execute(
             "INSERT INTO notifications (user_id, title, message, notification_type, related_entity_type, related_entity_id) VALUES (?, ?, ?, ?, ?, ?)",
-            [$user_id, 'Account activated', 'Your password was set and this device was registered as a trusted device.', 'success', 'user', $user_id]
+            [
+                $user_id,
+                $isReset ? 'Password reset' : 'Account activated',
+                $isReset
+                    ? 'Your password was reset and this device was registered as a trusted device.'
+                    : 'Your password was set and this device was registered as a trusted device.',
+                'success', 'user', $user_id
+            ]
         );
 
-        return ['success' => true, 'message' => 'Password set successfully. This device is now trusted.'];
+        return ['success' => true, 'message' => $isReset
+            ? 'Password reset successfully. This device is now trusted.'
+            : 'Password set successfully. This device is now trusted.'];
     }
 
     /**
