@@ -966,6 +966,7 @@ function renderAttachmentRow(req, owner = false) {
         <div class="attachment-item">
             <a href="${API_BASE}/leave_requests.php?action=download_attachment&id=${Number(a.id)}">${attachmentEscape(a.original_name)}</a>
             <span class="attachment-size">${formatFileSize(a.file_size)}</span>
+            <button type="button" class="btn btn-small btn-secondary" onclick="viewLeaveAttachment(${Number(a.id)}, this.dataset.name, this.dataset.type)" data-name="${attachmentEscape(a.original_name).replace(/"/g, '&quot;')}" data-type="${attachmentEscape(a.mime_type || '')}">View</button>
             ${owner && req.status === 'pending' ? `<button type="button" class="btn btn-small btn-danger" onclick="removeLeaveAttachment(${Number(a.id)}, ${Number(req.id)})">Remove</button>` : ''}
         </div>`).join('');
     let empty = '';
@@ -981,6 +982,45 @@ function renderAttachmentRow(req, owner = false) {
             <button type="button" class="btn btn-small btn-primary" onclick="addLeaveAttachment(${Number(req.id)})">Upload</button>
         </div>` : '';
     return `<tr><th>Documents</th><td>${items}${empty}${add}</td></tr>`;
+}
+
+// Previews a document in an overlay without downloading it.
+function viewLeaveAttachment(id, name, mimeType) {
+    const src = `${API_BASE}/leave_requests.php?action=download_attachment&inline=1&id=${Number(id)}`;
+    const overlay = document.createElement('div');
+    overlay.className = 'modal dialog-modal active';
+    overlay.setAttribute('role', 'dialog');
+    overlay.setAttribute('aria-modal', 'true');
+    overlay.innerHTML = `
+        <div class="modal-content attachment-viewer">
+            <div class="modal-header">
+                <h2 class="attachment-viewer-title"></h2>
+                <button type="button" class="modal-close" aria-label="Close">&times;</button>
+            </div>
+            <div class="modal-body attachment-viewer-body"></div>
+        </div>`;
+    overlay.querySelector('.attachment-viewer-title').textContent = name || 'Document';
+    const body = overlay.querySelector('.attachment-viewer-body');
+    if (mimeType && mimeType.startsWith('image/')) {
+        const img = document.createElement('img');
+        img.src = src;
+        img.alt = name || 'Document';
+        body.appendChild(img);
+    } else {
+        const frame = document.createElement('iframe');
+        frame.src = src;
+        frame.title = name || 'Document';
+        body.appendChild(frame);
+    }
+    const close = () => {
+        document.removeEventListener('keydown', onKey);
+        overlay.remove();
+    };
+    const onKey = (e) => { if (e.key === 'Escape') close(); };
+    overlay.addEventListener('click', (e) => { if (e.target === overlay) close(); });
+    overlay.querySelector('.modal-close').addEventListener('click', close);
+    document.addEventListener('keydown', onKey);
+    document.body.appendChild(overlay);
 }
 
 async function addLeaveAttachment(requestId) {

@@ -2326,6 +2326,10 @@ label {
 
 /* Dialogs, approval badge and leave preview */
 .dialog-modal { z-index: 2100; }
+.attachment-viewer { width: min(900px, calc(100% - 2rem)); max-width: 900px; }
+.attachment-viewer-body { padding: 0; text-align: center; }
+.attachment-viewer-body iframe { width: 100%; height: 75vh; border: 0; }
+.attachment-viewer-body img { max-width: 100%; max-height: 75vh; object-fit: contain; }
 .dialog-content { max-width: 420px; width: calc(100% - 2rem); }
 .dialog-message { margin: 0 0 .75rem; line-height: 1.45; }
 .dialog-input { width: 100%; margin-bottom: .75rem; }

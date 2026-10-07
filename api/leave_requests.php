@@ -32,11 +32,16 @@ if (($_GET['action'] ?? '') === 'download_attachment') {
     $__viewer = Auth::getCurrentUser();
     try {
         $__att = LeaveAttachment::getForDownload((int) ($_GET['id'] ?? 0), $__viewer);
-        AuditLogger::log($__viewer['id'], 'download_document', 'leave_request', (int) $__att['leave_request_id'], [
+        $__inline = !empty($_GET['inline']) && in_array($__att['mime_type'], ['application/pdf', 'image/jpeg', 'image/png'], true);
+        AuditLogger::log($__viewer['id'], $__inline ? 'view_document' : 'download_document', 'leave_request', (int) $__att['leave_request_id'], [
             'attachment_id' => (int) $__att['id'],
         ]);
         header('Content-Type: ' . $__att['mime_type']);
-        header('Content-Disposition: attachment; filename="' . preg_replace('/[^A-Za-z0-9._-]/', '_', $__att['original_name']) . '"');
+        header('Content-Disposition: ' . ($__inline ? 'inline' : 'attachment') . '; filename="' . preg_replace('/[^A-Za-z0-9._-]/', '_', $__att['original_name']) . '"');
+        if ($__inline) {
+            // The in-page viewer embeds this response in a same-origin iframe
+            header('X-Frame-Options: SAMEORIGIN');
+        }
         header('Content-Length: ' . $__att['file_size']);
         header('X-Content-Type-Options: nosniff');
         echo $__att['file_data'];
