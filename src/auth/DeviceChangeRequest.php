@@ -257,7 +257,13 @@ class DeviceChangeRequest {
             $db = Database::getInstance();
             
             // Find who needs to approve
-            if ($user['role'] === 'admin' || $user['role'] === 'hr' || empty($user['supervisor_id'])) {
+            if (!empty($assignedApproverId)) {
+                // Notify whoever the request was actually assigned to (supervisor, HR, or backup)
+                $approvers = $db->getResults(
+                    "SELECT id, email, full_name FROM users WHERE id = ? AND is_active = 1",
+                    [$assignedApproverId]
+                );
+            } elseif ($user['role'] === 'admin' || $user['role'] === 'hr' || empty($user['supervisor_id'])) {
                 // Admin users and users with no supervisor need System Admin approval
                 $approvers = $db->getResults(
                     "SELECT id, email, full_name FROM users WHERE role = 'admin' AND is_active = 1"
@@ -266,12 +272,6 @@ class DeviceChangeRequest {
                 // Managers need Admin approval
                 $approvers = $db->getResults(
                     "SELECT id, email, full_name FROM users WHERE role = 'admin' AND is_active = 1"
-                );
-            } elseif (!empty($assignedApproverId)) {
-                // Assigned approver (the supervisor, or a backup/HR when the supervisor is unavailable)
-                $approvers = $db->getResults(
-                    "SELECT id, email, full_name FROM users WHERE id = ? AND is_active = 1",
-                    [$assignedApproverId]
                 );
             } else {
                 // Employees: notify their supervisor first
