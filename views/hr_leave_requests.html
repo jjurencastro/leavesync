@@ -93,6 +93,16 @@
 
     <script src="/js/app.js"></script>
     <script>
+        function escapeAttr(str) {
+            if (str === null || str === undefined) return '';
+            return String(str)
+                .replace(/&/g, '&amp;')
+                .replace(/"/g, '&quot;')
+                .replace(/'/g, '&#39;')
+                .replace(/</g, '&lt;')
+                .replace(/>/g, '&gt;');
+        }
+
         // Check authentication and verify hr role
         async function initHR() {
             const user = await checkAuth();
@@ -168,6 +178,7 @@
                     <td>${req.number_of_days}</td>
                     <td>${UIManager.getApprovalStageBadges(req)}</td>
                     <td>
+                        <button class="btn btn-small btn-secondary" onclick="viewLeaveRequest(${req.id})">View</button>
                         ${canApprove ? `
                             <button class="btn btn-small btn-success" onclick="approveLeaveRequestHR(${req.id})">Approve</button>
                             <button class="btn btn-small btn-danger" onclick="rejectLeaveRequestHR(${req.id})">Reject</button>
@@ -176,6 +187,30 @@
                 `;
                 tbody.appendChild(row);
             });
+        }
+
+        async function viewLeaveRequest(id) {
+            const listed = allLeaveRequests.find(r => Number(r.id) === Number(id));
+            if (!listed) return;
+            const detail = await LeaveRequestManager.getRequest(id);
+            const req = detail.success ? { ...listed, ...detail.data } : listed;
+
+            const content = `
+                <table class="table" style="width: 100%;">
+                    <tr><th>Employee</th><td>${escapeAttr(req.full_name || '')}</td></tr>
+                    <tr><th>Leave Type</th><td>${escapeAttr(req.leave_type_name || '')}</td></tr>
+                    <tr><th>Immediate Supervisor</th><td>${escapeAttr(req.assigned_supervisor_name || req.requester_supervisor_name || req.supervisor_name || 'None assigned')}</td></tr>
+                    <tr><th>From Date</th><td>${UIManager.formatDate(req.start_date)}</td></tr>
+                    <tr><th>To Date</th><td>${UIManager.formatDate(req.end_date)}</td></tr>
+                    <tr><th>Number of Days</th><td>${req.number_of_days}</td></tr>
+                    <tr><th>Reason</th><td>${escapeAttr(req.reason || '')}</td></tr>
+                    <tr><th>Status</th><td>${UIManager.getApprovalStageBadges(req)}</td></tr>
+                    ${req.manager_comments ? `<tr><th>Supervisor Comments</th><td>${escapeAttr(req.manager_comments)}</td></tr>` : ''}
+                    ${req.hr_comments ? `<tr><th>HR Comments</th><td>${escapeAttr(req.hr_comments)}</td></tr>` : ''}
+                    ${renderAttachmentRow(req)}
+                </table>
+            `;
+            UIManager.showModal(content, 'Leave Request Details');
         }
 
         async function approveLeaveRequestHR(id) {
