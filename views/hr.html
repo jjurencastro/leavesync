@@ -85,6 +85,9 @@
         }
 
         initHR();
+
+        // Reload this page's data whenever a new notification arrives
+        document.addEventListener('leavesync:notifications', () => loadHRStatistics());
     </script>
 </body>
 </html>

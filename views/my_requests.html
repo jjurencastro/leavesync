@@ -336,6 +336,9 @@
                 UIManager.showAlert(result.message || 'Failed to cancel leave request', 'danger');
             }
         }
+
+        // Reload this page's data whenever a new notification arrives
+        document.addEventListener('leavesync:notifications', () => loadRequests());
     </script>
 </body>
 </html>

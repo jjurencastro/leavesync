@@ -253,6 +253,11 @@
         }
 
         initDashboard();
+
+        // Reload this page's data whenever a new notification arrives
+        document.addEventListener('leavesync:notifications', () => {
+            if (!document.querySelector('.modal.active')) window.location.reload();
+        });
     </script>
 </body>
 </html>

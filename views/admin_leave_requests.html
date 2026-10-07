@@ -141,8 +141,10 @@
             // Populate the leave-type filter from the loaded requests
             const typeSelect = document.getElementById('lr-filter-type');
             const types = [...new Set(allLeaveRequests.map(r => r.leave_type_name).filter(Boolean))].sort();
+            const selectedType = typeSelect.value;
             typeSelect.innerHTML = '<option value="">All types</option>' +
                 types.map(t => `<option value="${t}">${t}</option>`).join('');
+            if (types.includes(selectedType)) typeSelect.value = selectedType;
 
             renderLeaveRequests();
         }
@@ -262,6 +264,9 @@
         }
 
         initAdmin();
+
+        // Reload this page's data whenever a new notification arrives
+        document.addEventListener('leavesync:notifications', () => loadLeaveRequests());
     </script>
 </body>
 </html>
