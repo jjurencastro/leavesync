@@ -18,7 +18,9 @@ $user = ['id' => 42, 'role' => 'employee'];
 
 assertTrue(EmployeeLeaveLifecycle::canCancelRequest($request, $user), 'Employees should be able to cancel their own pending leave requests');
 assertTrue(!EmployeeLeaveLifecycle::canCancelRequest(['id' => 102, 'user_id' => 99, 'status' => 'pending'], $user), 'Employees should not cancel other users\' requests');
-assertTrue(!EmployeeLeaveLifecycle::canCancelRequest(['id' => 103, 'user_id' => 42, 'status' => 'approved'], $user), 'Approved leave requests should not be cancelable');
+assertTrue(EmployeeLeaveLifecycle::canCancelRequest(['id' => 103, 'user_id' => 42, 'status' => 'approved', 'end_date' => date('Y-m-d', strtotime('+3 days'))], $user), 'Approved leave that has not ended should be cancelable');
+assertTrue(!EmployeeLeaveLifecycle::canCancelRequest(['id' => 104, 'user_id' => 42, 'status' => 'approved', 'end_date' => date('Y-m-d', strtotime('-3 days'))], $user), 'Approved leave that already ended should not be cancelable');
+assertTrue(!EmployeeLeaveLifecycle::canCancelRequest(['id' => 105, 'user_id' => 42, 'status' => 'rejected'], $user), 'Rejected requests should not be cancelable');
 
 $cancelled = EmployeeLeaveLifecycle::getRequestSummary($request);
 assertTrue(($cancelled['status'] ?? '') === 'pending', 'Pending request summary should reflect the active state');

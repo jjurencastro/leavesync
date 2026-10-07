@@ -570,22 +570,45 @@ function cancelLeaveRequest($data, $user) {
         throw new Exception('You can only cancel your own leave requests');
     }
 
-    if ($request['status'] !== 'pending') {
-        throw new Exception('Only pending leave requests can be cancelled');
+    $wasApproved = $request['status'] === 'approved';
+    if (!in_array($request['status'], ['pending', 'approved'], true)) {
+        throw new Exception('Only pending or approved leave requests can be cancelled');
+    }
+    if ($wasApproved && $request['end_date'] < date('Y-m-d')) {
+        throw new Exception('Leave that has already ended can no longer be cancelled');
     }
 
-    $db->execute(
-        "UPDATE leave_requests SET status = 'cancelled', supervisor_status = 'not_required', hr_status = 'pending' WHERE id = ?",
-        [$id]
-    );
+    if ($wasApproved) {
+        // Keep the approval trail; only the overall status changes
+        $db->execute("UPDATE leave_requests SET status = 'cancelled' WHERE id = ?", [$id]);
+    } else {
+        $db->execute(
+            "UPDATE leave_requests SET status = 'cancelled', supervisor_status = 'not_required', hr_status = 'pending' WHERE id = ?",
+            [$id]
+        );
+    }
 
     if (!empty($request['number_of_days'])) {
+        // Approved days were already moved from pending to used
+        $column = $wasApproved ? 'used_days' : 'pending_days';
         $db->execute(
             "UPDATE leave_balances
-             SET pending_days = pending_days - ?, balance = balance + ?
+             SET {$column} = {$column} - ?, balance = balance + ?
              WHERE user_id = ? AND leave_type_id = ?",
             [$request['number_of_days'], $request['number_of_days'], $request['user_id'], $request['leave_type_id']]
         );
+    }
+
+    if ($wasApproved) {
+        foreach (array_unique(array_filter([$request['manager_id'] ?? null, $request['hr_id'] ?? null])) as $approverId) {
+            createNotification(
+                $approverId,
+                'Approved Leave Cancelled',
+                "{$user['full_name']} cancelled their approved leave from {$request['start_date']} to {$request['end_date']}.",
+                'leave_request',
+                $id
+            );
+        }
     }
 
     createNotification(

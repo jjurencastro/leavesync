@@ -160,7 +160,7 @@
                         <td>
                             <button class="btn btn-small btn-secondary" onclick="viewRequest(${req.id})">View</button>
                             ${req.status === 'pending' ? `<button class="btn btn-small btn-warning" onclick="editRequest(${req.id})">Edit</button>` : ''}
-                            ${req.status === 'pending' ? `<button class="btn btn-small btn-danger" onclick="cancelRequest(${req.id})">Cancel</button>` : ''}
+                            ${(req.status === 'pending' || (req.status === 'approved' && String(req.end_date).substring(0, 10) >= new Date().toLocaleDateString('en-CA'))) ? `<button class="btn btn-small btn-danger" onclick="cancelRequest(${req.id}, '${req.status}')">Cancel</button>` : ''}
                         </td>
                     `;
                     tbody.appendChild(row);
@@ -320,8 +320,11 @@
             }
         }
 
-        async function cancelRequest(id) {
-            if (!(await confirmDialog('Cancel this leave request? This will restore the leave balance and stop the pending approval flow.', { title: 'Cancel leave request', confirmText: 'Cancel request', danger: true }))) {
+        async function cancelRequest(id, status) {
+            const message = status === 'approved'
+                ? 'Cancel this approved leave request? The leave days will be restored to your balance and your approvers will be notified.'
+                : 'Cancel this leave request? This will restore the leave balance and stop the pending approval flow.';
+            if (!(await confirmDialog(message, { title: 'Cancel leave request', confirmText: 'Cancel request', danger: true }))) {
                 return;
             }
 

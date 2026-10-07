@@ -2,8 +2,8 @@
 
 class EmployeeLeaveLifecycle {
     /**
-     * Employees may cancel their own leave requests only while the request is
-     * still pending and before any final approval has been recorded.
+     * Employees may cancel their own pending requests, or approved requests
+     * whose leave period has not ended yet.
      */
     public static function canCancelRequest(array $request, array $user): bool {
         if (($user['role'] ?? '') !== 'employee') {
@@ -14,7 +14,12 @@ class EmployeeLeaveLifecycle {
             return false;
         }
 
-        return ($request['status'] ?? null) === 'pending';
+        $status = $request['status'] ?? null;
+        if ($status === 'approved') {
+            return empty($request['end_date']) || $request['end_date'] >= date('Y-m-d');
+        }
+
+        return $status === 'pending';
     }
 
     /**
