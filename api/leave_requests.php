@@ -12,6 +12,7 @@ require_once __DIR__ . '/../src/security/WebAuthnService.php';
 require_once __DIR__ . '/../src/leave/LeaveTypeOrder.php';
 require_once __DIR__ . '/../src/leave/LeaveRequestAccess.php';
 require_once __DIR__ . '/../src/leave/ApprovalChain.php';
+require_once __DIR__ . '/../src/leave/ApprovalQueue.php';
 require_once __DIR__ . '/../src/leave/EmployeeLeaveFilters.php';
 require_once __DIR__ . '/../src/leave/EmployeeBalanceSummary.php';
 require_once __DIR__ . '/../src/leave/EmployeeDelegation.php';
@@ -1053,23 +1054,15 @@ function pendingApprovalSummary($user) {
         return ['success' => true, 'data' => ['count' => 0, 'overdue' => 0]];
     }
 
+    [$waitingSql, $waitingParams] = ApprovalQueue::waitingOnCondition($user);
     $waiting = $db->getResults(
         "SELECT lr.id, lr.created_at, u.full_name
-         FROM leave_requests lr JOIN users u ON lr.user_id = u.id
-         WHERE lr.status = 'pending' AND lr.supervisor_status = 'pending' AND lr.assigned_supervisor_id = ?",
-        [$user['id']]
+         FROM leave_requests lr
+         JOIN users u ON lr.user_id = u.id
+         JOIN users req ON req.id = lr.user_id
+         WHERE {$waitingSql}",
+        $waitingParams
     );
-    if (in_array($role, ['hr', 'admin'], true)) {
-        $hrQueue = $db->getResults(
-            "SELECT lr.id, lr.created_at, u.full_name
-             FROM leave_requests lr JOIN users u ON lr.user_id = u.id
-             WHERE lr.status = 'pending' AND lr.supervisor_status IN ('approved', 'not_required') AND lr.hr_status = 'pending'"
-        );
-        $seen = array_column($waiting, 'id');
-        foreach ($hrQueue as $row) {
-            if (!in_array($row['id'], $seen)) $waiting[] = $row;
-        }
-    }
 
     $threshold = time() - 2 * 86400;
     $overdue = 0;

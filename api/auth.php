@@ -9,6 +9,7 @@ require_once __DIR__ . '/../src/auth/Auth.php';
 require_once __DIR__ . '/../src/auth/MFA.php';
 require_once __DIR__ . '/../src/security/DeviceFingerprint.php';
 require_once __DIR__ . '/../src/leave/EmployeeNotifications.php';
+require_once __DIR__ . '/../src/leave/ApprovalQueue.php';
 require_once __DIR__ . '/../src/leave/EmployeeProfile.php';
 require_once __DIR__ . '/../src/mail/Mailer.php';
 
@@ -300,15 +301,27 @@ try {
             $db = Database::getInstance();
             $limit = !empty($_GET['all']) ? 200 : 20;
 
-            // "Action needed" alerts are obsolete once the request is no longer pending
-            // (approved, rejected, or cancelled), so clear them without a manual click.
+            // Keep the bell aligned with the sidebar approval badge: an "action needed"
+            // alert clears as soon as the request is no longer waiting on this user
+            // (they approved/rejected it, or it was resolved/cancelled).
+            [$waitingSql, $waitingParams] = ApprovalQueue::waitingOnCondition($user);
+            $db->execute(
+                "UPDATE notifications n
+                 JOIN leave_requests lr ON n.related_entity_id = lr.id
+                 JOIN users req ON req.id = lr.user_id
+                 SET n.is_read = 1, n.read_at = NOW()
+                 WHERE n.user_id = ? AND n.is_read = 0 AND n.related_entity_type = 'leave_request'
+                   AND n.title IN ('New Leave Request', 'Approval Reminder')
+                   AND NOT {$waitingSql}",
+                array_merge([$user['id']], $waitingParams)
+            );
+            // Informational escalation notices only clear once the request is resolved
             $db->execute(
                 "UPDATE notifications n
                  JOIN leave_requests lr ON n.related_entity_id = lr.id
                  SET n.is_read = 1, n.read_at = NOW()
                  WHERE n.user_id = ? AND n.is_read = 0 AND n.related_entity_type = 'leave_request'
-                   AND n.title IN ('New Leave Request', 'Leave Request Escalated')
-                   AND lr.status <> 'pending'",
+                   AND n.title = 'Leave Request Escalated' AND lr.status <> 'pending'",
                 [$user['id']]
             );
 
