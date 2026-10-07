@@ -104,8 +104,9 @@ class UserRegistration {
      * @return array ['success' => bool, 'message' => string]
      */
     public static function setPassword($user_id, $password, array $data = []) {
-        if (empty($password) || strlen($password) < 8) {
-            return ['success' => false, 'message' => 'Password must be at least 8 characters'];
+        $passwordError = self::passwordValidationError($password);
+        if ($passwordError !== null) {
+            return ['success' => false, 'message' => $passwordError];
         }
 
         $db = Database::getInstance();
@@ -150,8 +151,9 @@ class UserRegistration {
      * password first. Used from the account settings page.
      */
     public static function changePassword($user_id, $currentPassword, $newPassword) {
-        if (empty($newPassword) || strlen($newPassword) < 8) {
-            return ['success' => false, 'message' => 'New password must be at least 8 characters'];
+        $passwordError = self::passwordValidationError($newPassword);
+        if ($passwordError !== null) {
+            return ['success' => false, 'message' => 'New ' . lcfirst($passwordError)];
         }
 
         $db = Database::getInstance();
@@ -535,8 +537,9 @@ class UserRegistration {
             }
         }
 
-        if (empty($data['password']) || strlen($data['password']) < 8) {
-            $errors[] = 'Password must be at least 8 characters';
+        $passwordError = self::passwordValidationError($data['password'] ?? '');
+        if ($passwordError !== null) {
+            $errors[] = $passwordError;
         }
 
         if (empty($data['full_name'])) {
@@ -544,5 +547,18 @@ class UserRegistration {
         }
 
         return $errors;
+    }
+
+    private static function passwordValidationError($password) {
+        $password = (string) $password;
+        if (strlen($password) < 8
+            || !preg_match('/[a-z]/', $password)
+            || !preg_match('/[A-Z]/', $password)
+            || !preg_match('/[0-9]/', $password)
+            || !preg_match('/[^A-Za-z0-9\s]/', $password)) {
+            return 'Password must be at least 8 characters and include an uppercase letter, a lowercase letter, a number, and a special character';
+        }
+
+        return null;
     }
 }

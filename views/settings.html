@@ -53,7 +53,8 @@
                 </div>
                 <div class="form-group">
                     <label for="new-password">New Password</label>
-                    <input type="password" id="new-password" autocomplete="new-password">
+                    <input type="password" id="new-password" autocomplete="new-password" minlength="8" pattern="(?=.*[a-z])(?=.*[A-Z])(?=.*[0-9])(?=.*[^A-Za-z0-9\s]).{8,}" title="Use at least 8 characters, including uppercase and lowercase letters, a number, and a special character.">
+                    <small>At least 8 characters, including uppercase and lowercase letters, a number, and a special character.</small>
                 </div>
                 <div class="form-group">
                     <label for="confirm-password">Confirm New Password</label>
@@ -350,6 +351,10 @@
 
             if (!currentPassword || !newPassword) {
                 UIManager.showAlert('Please fill in all password fields', 'danger');
+                return;
+            }
+            if (!/^(?=.*[a-z])(?=.*[A-Z])(?=.*[0-9])(?=.*[^A-Za-z0-9\s]).{8,}$/.test(newPassword)) {
+                UIManager.showAlert('Password must be at least 8 characters and include an uppercase letter, a lowercase letter, a number, and a special character', 'danger');
                 return;
             }
             if (newPassword !== confirmPassword) {
