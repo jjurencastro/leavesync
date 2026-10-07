@@ -266,7 +266,7 @@
         initAdmin();
 
         // Reload this page's data whenever a new notification arrives
-        document.addEventListener('leavesync:notifications', () => loadLeaveRequests());
+        enableAutoRefresh(loadLeaveRequests);
     </script>
 </body>
 </html>

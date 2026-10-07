@@ -253,24 +253,36 @@ class LeaveRequestManager {
     }
 
     static async cancelRequest(id) {
-        return APIClient.post('leave_requests.php?action=cancel', { id: id });
+        const result = await APIClient.post('leave_requests.php?action=cancel', { id: id });
+        LeaveRequestManager.refreshIndicators();
+        return result;
+    }
+
+    // Updates the sidebar approval badge and bell right after a request changes state
+    static refreshIndicators() {
+        if (typeof initApprovalBadge.refreshNow === 'function') initApprovalBadge.refreshNow();
+        if (typeof window.refreshNotificationBell === 'function') window.refreshNotificationBell();
     }
 
     static async approveRequest(id, comments = '', webauthnResponse = null) {
         const fingerprint = await DeviceFingerprintManager.getFingerprint();
-        return APIClient.post('leave_requests.php?action=approve', {
+        const result = await APIClient.post('leave_requests.php?action=approve', {
             id: id,
             comments: comments,
             webauthn_response: webauthnResponse,
             ...fingerprint
         });
+        LeaveRequestManager.refreshIndicators();
+        return result;
     }
 
     static async rejectRequest(id, comments = '') {
-        return APIClient.post('leave_requests.php?action=reject', {
+        const result = await APIClient.post('leave_requests.php?action=reject', {
             id: id,
             comments: comments
         });
+        LeaveRequestManager.refreshIndicators();
+        return result;
     }
 
     static async getLeaveBalance() {
@@ -1153,7 +1165,25 @@ async function initApprovalBadge(user) {
     };
     refresh();
     initApprovalBadge.refreshNow = refresh;
-    setInterval(refresh, 120000);
+    setInterval(() => { if (!document.hidden) refresh(); }, 15000);
+    document.addEventListener('visibilitychange', () => { if (!document.hidden) refresh(); });
+}
+
+// Keeps a page's data current without a manual reload: runs `loader` on new
+// notifications, when the tab regains focus, and every few seconds. Skipped
+// while a popup is open so it never disturbs what the user is reading.
+function enableAutoRefresh(loader, intervalMs = 10000) {
+    let running = false;
+    const run = async () => {
+        if (running || document.hidden) return;
+        if (document.querySelector('.modal.active, .dialog-modal')) return;
+        running = true;
+        try { await loader(); } catch (e) { console.error('Auto-refresh failed', e); }
+        running = false;
+    };
+    setInterval(run, intervalMs);
+    document.addEventListener('visibilitychange', run);
+    document.addEventListener('leavesync:notifications', run);
 }
 
 

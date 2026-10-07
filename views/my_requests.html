@@ -338,7 +338,7 @@
         }
 
         // Reload this page's data whenever a new notification arrives
-        document.addEventListener('leavesync:notifications', () => loadRequests());
+        enableAutoRefresh(loadRequests);
     </script>
 </body>
 </html>

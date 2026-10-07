@@ -281,7 +281,7 @@
         initTeamRequests();
 
         // Reload this page's data whenever a new notification arrives
-        document.addEventListener('leavesync:notifications', () => { loadTeamRequests(); loadTeamAnalytics(); });
+        enableAutoRefresh(async () => { await loadTeamRequests(); await loadTeamAnalytics(); });
     </script>
 </body>
 </html>
