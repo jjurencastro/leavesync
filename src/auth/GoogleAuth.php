@@ -98,7 +98,7 @@ class GoogleAuth {
         // Allow a brand-new account through once so it can set up its password;
         // after that, block sign-in until an admin approves (is_active = 1)
         if (!$user['is_active'] && !$needs_password_setup) {
-            throw new Exception('Your account activation is pending supervisor approval.');
+            throw new Exception(AuthSession::inactiveAccountMessage($user['id']));
         }
 
         $profilePictureUrl = $userinfo['picture'] ?? null;

@@ -8,8 +8,25 @@ require_once __DIR__ . '/../security/DeviceFingerprint.php';
 require_once __DIR__ . '/MFA.php';
 require_once __DIR__ . '/DeviceChangeRequest.php';
 require_once __DIR__ . '/AuditLogger.php';
+require_once __DIR__ . '/../database/SchemaSupport.php';
 
 class AuthSession {
+
+    /**
+     * Message for a user who cannot sign in because is_active = 0. An account an
+     * administrator deactivated (deleted_at set) is told to contact someone; an
+     * account that has never been approved is told it is awaiting approval.
+     */
+    public static function inactiveAccountMessage($userId) {
+        $db = Database::getInstance();
+        if (SchemaSupport::hasColumn($db, 'users', 'deleted_at')) {
+            $row = $db->getRow("SELECT deleted_at FROM users WHERE id = ?", [$userId]);
+            if (!empty($row['deleted_at'])) {
+                return 'Your account has been deactivated. Please contact your supervisor or administrator.';
+            }
+        }
+        return 'Your account activation is pending supervisor approval.';
+    }
 
     private static $current_user = null;
 
@@ -93,7 +110,7 @@ class AuthSession {
             }
 
             if (!$user['is_active']) {
-                return ['success' => false, 'message' => 'Your account activation is pending supervisor approval.'];
+                return ['success' => false, 'message' => self::inactiveAccountMessage($user['id'])];
             }
 
             if (!password_verify($password, $user['password_hash'])) {
