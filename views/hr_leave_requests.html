@@ -178,11 +178,13 @@
                     <td>${req.number_of_days}</td>
                     <td>${UIManager.getApprovalStageBadges(req)}</td>
                     <td>
-                        <button class="btn btn-small btn-secondary" onclick="viewLeaveRequest(${req.id})">View</button>
-                        ${canApprove ? `
-                            <button class="btn btn-small btn-success" onclick="approveLeaveRequestHR(${req.id})">Approve</button>
-                            <button class="btn btn-small btn-danger" onclick="rejectLeaveRequestHR(${req.id})">Reject</button>
-                        ` : ''}
+                        <div class="action-group">
+                            <button class="btn btn-small btn-secondary" onclick="viewLeaveRequest(${req.id})">View</button>
+                            ${canApprove ? `
+                                <button class="btn btn-small btn-success" onclick="approveLeaveRequestHR(${req.id})">Approve</button>
+                                <button class="btn btn-small btn-danger" onclick="rejectLeaveRequestHR(${req.id})">Reject</button>
+                            ` : ''}
+                        </div>
                     </td>
                 `;
                 tbody.appendChild(row);

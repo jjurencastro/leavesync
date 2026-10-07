@@ -2339,3 +2339,17 @@ label {
 .approval-badge { display: inline-block; min-width: 18px; padding: 0 6px; margin-left: .5rem; border-radius: 999px; background: #dc2626; color: #fff; font-size: .7rem; font-weight: 700; line-height: 18px; text-align: center; vertical-align: middle; }
 .leave-preview { margin-top: .4rem; padding: .45rem .65rem; border-radius: 8px; background: #eff6ff; color: #1e3a8a; font-size: .85rem; line-height: 1.4; }
 .leave-preview-warn { background: #fef2f2; color: #991b1b; }
+
+/* Keeps row action buttons (View / Approve / Reject) side by side on one line */
+.table td .action-group {
+    display: flex;
+    flex-wrap: nowrap;
+    align-items: center;
+    gap: 0.25rem;
+}
+.table td .action-group .btn,
+.table td .action-group .btn-small {
+    width: auto;
+    margin: 0;
+    white-space: nowrap;
+}
