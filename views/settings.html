@@ -268,51 +268,35 @@
             const btnEl = document.getElementById('mfa-btn');
             statusEl.textContent = '';
             btnEl.textContent = 'Enable 2FA';
+            btnEl.disabled = true;
 
             const result = await AuthManager.getMFAStatus();
             if (!result.success || !result.data) {
+                statusEl.textContent = result.message || 'Could not load 2FA status.';
                 return;
             }
 
             if (result.data.enabled) {
                 statusEl.textContent = '2FA is enabled for this account.';
                 btnEl.textContent = 'Disable 2FA';
+                btnEl.onclick = disableMFA;
             } else {
-                statusEl.textContent = '';
-                btnEl.textContent = 'Enable 2FA';
+                btnEl.onclick = setupMFA;
             }
+            btnEl.disabled = false;
         }
 
         async function setupMFA() {
             const result = await AuthManager.setupMFA();
             if (result.success) {
                 document.getElementById('mfa-secret').textContent = result.secret;
+                document.getElementById('mfa-code').value = '';
 
                 const qrContainer = document.getElementById('qr-container');
                 qrContainer.innerHTML = '';
-                new QRCode(qrContainer, {
-                    text: result.qr_url,
-                    width: 220,
-                    height: 220,
-                    colorDark: '#000000',
-                    colorLight: '#ffffff',
-                    correctLevel: QRCode.CorrectLevel.H
-                });
-
-                document.getElementById('mfa-modal').classList.add('active');
-            } else {
-                UIManager.showAlert(result.message || 'Failed to setup MFA', 'danger');
-            }
-        }
-
-        async function verifyMFA() {
-            const code = document.getElementById('mfa-code').value;
-            if (!code || code.length !== 6) {
-                UIManager.showAlert('Please enter a valid 6-digit code', 'danger');
-
-                const qrContainer = document.getElementById('qr-container');
-                qrContainer.innerHTML = '';
-                if (window.QRCode) {
+                if (typeof QRCode === 'undefined') {
+                    qrContainer.textContent = 'QR code unavailable. Enter the code manually.';
+                } else {
                     new QRCode(qrContainer, {
                         text: result.qr_url,
                         width: 220,
@@ -321,14 +305,40 @@
                         colorLight: '#ffffff',
                         correctLevel: QRCode.CorrectLevel.H
                     });
-                } else {
-                    qrContainer.textContent = 'QR code library failed to load';
                 }
+
+                document.getElementById('mfa-modal').classList.add('active');
+            } else {
+                UIManager.showAlert(result.message || 'Failed to setup MFA', 'danger');
+            }
+        }
+
+        async function verifyMFA() {
+            const code = document.getElementById('mfa-code').value.trim();
+            if (!/^\d{6}$/.test(code)) {
+                UIManager.showAlert('Please enter a valid 6-digit code', 'danger');
+                return;
+            }
+
+            const result = await AuthManager.enableMFA(code);
+            if (result.success) {
                 document.getElementById('mfa-modal').classList.remove('active');
+                document.getElementById('mfa-code').value = '';
+                UIManager.showAlert('2FA enabled successfully', 'success');
                 await loadMFAStatus();
-                loadSettings();
             } else {
                 UIManager.showAlert(result.message || 'Invalid code', 'danger');
+            }
+        }
+
+        async function disableMFA() {
+            if (!(await confirmDialog('Are you sure you want to disable two-factor authentication?', { title: 'Disable 2FA', confirmText: 'Disable', danger: true }))) return;
+            const result = await AuthManager.disableMFA();
+            if (result.success) {
+                UIManager.showAlert('2FA disabled', 'success');
+                await loadMFAStatus();
+            } else {
+                UIManager.showAlert(result.message || 'Failed to disable 2FA', 'danger');
             }
         }
 
