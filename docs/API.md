@@ -5,6 +5,7 @@ All API endpoints are prefixed with `/api/`
 
 ## Authentication
 All endpoints (except `/api/auth.php?action=register` and `?action=login`) require a valid session token in cookies.
+The read-only HRIS integration below uses a separate bearer token instead.
 
 ## Response Format
 All responses are in JSON format:
@@ -15,6 +16,93 @@ All responses are in JSON format:
     "data": {}
 }
 ```
+
+## HRIS integration
+
+The HRIS API is disabled until configured. It is a read-only server-to-server
+integration; it does not use a LeaveSync user's login, session, or MFA.
+
+### LeaveSync administrator setup
+
+1. Apply `src/database/migration_hris_api.sql` to the LeaveSync MySQL database.
+   The table is also included in the schema for new installations.
+2. Generate a dedicated token on a trusted machine, for example:
+
+   ```sh
+   php -r '$token = bin2hex(random_bytes(32)); echo "Token: ", $token, PHP_EOL, "SHA-256: ", hash("sha256", $token), PHP_EOL;'
+   ```
+
+3. Set Railway's `HRIS_API_KEY_SHA256` variable to the **SHA-256 hash**, not
+   the token. Deploy this version of LeaveSync and apply the variable change.
+   Never commit either value or paste the token into chat, tickets, or logs.
+4. Give the HRIS administrator the token through an approved secure channel.
+   HRIS must store it in its server-side secret manager. Do not put it in
+   browser code, URLs, source control, or logs.
+
+To revoke access, remove the variable. To rotate the token, generate a new
+token and hash, update the variable, and securely deliver the new token to
+HRIS. Changing or removing the variable takes effect when the service
+receives the new environment; the previous token then stops working. A
+rotation requires coordination because only one token is accepted at a time.
+
+### HRIS administrator: access
+
+- Base URL: `https://<leavesync-host>/api/hris.php`
+- Method: `GET`
+- Header: `Authorization: Bearer <64-character-token>`
+- Actions: `employees`, `leave_requests`, `leave_balances`, `leave_types`.
+- Example URL: `/api/hris.php?action=employees&limit=100`
+- Authentication is required even for an empty result. Never send the token
+  as a query parameter.
+
+Successful responses have this shape:
+
+```json
+{
+  "success": true,
+  "data": [{"id": 12, "email": "employee@example.org", "full_name": "Example Employee", "department": "CCS", "position": "Instructor", "role": "employee", "is_active": 1, "created_at": "2026-01-01 00:00:00", "updated_at": "2026-01-01 00:00:00"}],
+  "next_cursor": "12"
+}
+```
+
+Records are ordered by numeric LeaveSync `id`. Start with no `cursor`, then
+send the returned `next_cursor` as `cursor` until it is `null`. `limit` is an
+integer from 1 to 100 and defaults to 100. IDs and numeric database fields
+may be represented as JSON strings; decimal quantities must be interpreted
+as decimals, not binary floating point. Timestamps are in UTC.
+
+Fields exposed:
+
+| Action | Fields |
+|---|---|
+| `employees` | `id`, `email`, `full_name`, `department`, `position`, `role`, `is_active`, `created_at`, `updated_at` |
+| `leave_requests` | `id`, `user_id`, `leave_type_id`, `start_date`, `end_date`, `number_of_days`, `status`, `supervisor_status`, `hr_status`, `created_at`, `updated_at` |
+| `leave_balances` | `id`, `user_id`, `leave_type_id`, `total_days`, `used_days`, `pending_days`, `balance`, `fiscal_year`, `created_at`, `updated_at` |
+| `leave_types` | `id`, `name`, `days_per_year`, `is_paid`, `requires_documentation`, `created_at`, `updated_at` |
+
+Employees include all roles and active/inactive accounts. Match HRIS accounts
+initially by email, then retain the LeaveSync `id` to handle email changes.
+Use `user_id` and `leave_type_id` to associate records with employees and
+leave types. No password hashes, MFA secrets, leave reasons, comments, or
+attachments are exposed.
+
+Poll all pages of each action periodically. Only use a **complete successful**
+scan for reconciliation. Scans are not transactional snapshots: records can
+change or disappear while pages are being read, and a changed record with an
+already-read ID will not appear again until the next scan. There are no
+deletion events or incremental `updated_since` feed. Before deleting or
+deactivating HRIS data because it is absent, confirm absence across multiple
+complete scans or use an administrator review. Never reconcile an incomplete
+or failed scan. LeaveSync user deletion can cascade to associated leave data.
+
+Errors use `{"success":false,"message":"..."}`. Status codes include 400
+(invalid parameters), 401 (invalid token), 405 (not GET), 429 (rate limit),
+500 (server/database failure), and 503 (integration not configured). The
+limit is 120 authenticated requests per fixed minute across all HRIS actions
+and service replicas; on 429 wait for `Retry-After` seconds. Failed
+authentication is logged but not included in this application-level limit;
+use an edge/WAF rate limit for unauthenticated traffic. Access is logged
+without tokens or response data.
 
 ## Authentication API (`/api/auth.php`)
 

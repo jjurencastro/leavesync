@@ -7,7 +7,7 @@ class Database {
     private static $instance = null;
     private $connection;
 
-    private function __construct() {
+    private function __construct($throwOnConnectionFailure = false) {
         try {
             $this->connection = new mysqli(
                 DB_HOST,
@@ -28,13 +28,16 @@ class Database {
             }
         } catch (Exception $e) {
             error_log("Database Connection Error: " . $e->getMessage());
+            if ($throwOnConnectionFailure) {
+                throw $e;
+            }
             die("Database connection failed");
         }
     }
 
-    public static function getInstance() {
+    public static function getInstance($throwOnConnectionFailure = false) {
         if (self::$instance === null) {
-            self::$instance = new self();
+            self::$instance = new self($throwOnConnectionFailure);
         }
         return self::$instance;
     }

@@ -221,6 +221,13 @@ CREATE TABLE IF NOT EXISTS leave_balances (
     INDEX idx_fiscal_year (fiscal_year)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
+-- Shared fixed-window limit for the HRIS integration.
+CREATE TABLE IF NOT EXISTS hris_api_rate_limit (
+    id TINYINT PRIMARY KEY,
+    window_start BIGINT NOT NULL,
+    request_count INT UNSIGNED NOT NULL
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
 -- Notifications
 CREATE TABLE IF NOT EXISTS notifications (
     id INT PRIMARY KEY AUTO_INCREMENT,

@@ -62,6 +62,7 @@ $envKeys = [
     'MAIL_HOST', 'MAIL_PORT', 'MAIL_USER', 'MAIL_PASSWORD',
     'MAIL_FROM', 'MAIL_FROM_NAME', 'MAIL_SECURE',
     'MAIL_TRANSPORT', 'BREVO_API_KEY',
+    'HRIS_API_KEY_SHA256',
 ];
 
 $env = $fileEnv;
@@ -110,6 +111,9 @@ define('MFA_WINDOW', (int)($env['MFA_WINDOW'] ?? 30));
 // API Rate Limiting
 define('RATE_LIMIT_REQUESTS', (int)($env['RATE_LIMIT_REQUESTS'] ?? 100));
 define('RATE_LIMIT_WINDOW', (int)($env['RATE_LIMIT_WINDOW'] ?? 3600));
+
+// SHA-256 hash of the dedicated HRIS bearer token; blank disables the integration.
+define('HRIS_API_KEY_SHA256', $env['HRIS_API_KEY_SHA256'] ?? '');
 
 // Email Configuration. Two transports:
 //   MAIL_TRANSPORT=api  -> Brevo HTTP API over HTTPS/443 (use on hosts like Railway
